@@ -151,9 +151,37 @@ export default function AdminLayout({
             {adminMenuItems.map((item) => {
               const hasSubItems = item.subItems && item.subItems.length > 0;
               const isExpanded = expandedMenus.has(item.id);
-              const isActive = item.path 
-                ? (pathname === item.path || pathname?.startsWith(`${item.path}/`))
-                : item.subItems?.some(subItem => pathname === subItem.path || pathname?.startsWith(`${subItem.path}/`));
+              
+              // 서브 메뉴가 있는 경우: 서브 메뉴 중 하나가 활성화되어 있으면 메인 메뉴도 활성화
+              // 서브 메뉴가 없는 경우: 메인 메뉴 경로가 활성화되어 있으면 활성화
+              const isMainActive = hasSubItems
+                ? item.subItems?.some(subItem => {
+                    const subPath = subItem.path;
+                    if (!subPath || !pathname) return false;
+                    // 정확한 경로 일치를 먼저 확인
+                    if (pathname === subPath) return true;
+                    // /admin/production의 경우, 다른 서브 경로가 아닐 때만 활성화
+                    if (subPath === '/admin/production') {
+                      const otherSubPaths = item.subItems
+                        ?.filter(s => s.path !== subPath)
+                        .map(s => s.path) || [];
+                      const isOtherSubPath = otherSubPaths.some(otherPath => 
+                        pathname === otherPath || pathname.startsWith(`${otherPath}/`)
+                      );
+                      if (pathname.startsWith(`${subPath}/`) && !isOtherSubPath) {
+                        return true;
+                      }
+                    } else {
+                      // 다른 서브 메뉴는 하위 경로일 때만 활성화
+                      if (pathname.startsWith(`${subPath}/`)) {
+                        return true;
+                      }
+                    }
+                    return false;
+                  })
+                : item.path 
+                  ? (pathname === item.path || (item.path && pathname?.startsWith(`${item.path}/`)))
+                  : false;
 
               return (
                 <div key={item.id} className="mb-1">
@@ -172,7 +200,7 @@ export default function AdminLayout({
                           });
                         }}
                         className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg transition-colors ${
-                          isActive
+                          isMainActive
                             ? 'bg-blue-50 text-blue-600 font-semibold'
                             : 'text-gray-700 hover:bg-gray-50'
                         }`}
@@ -193,7 +221,31 @@ export default function AdminLayout({
                       {isExpanded && item.subItems && (
                         <div className="ml-4 mt-1 space-y-1">
                           {item.subItems.map((subItem) => {
-                            const isSubActive = pathname === subItem.path || pathname?.startsWith(`${subItem.path}/`);
+                            // 정확한 경로 일치 확인
+                            let isSubActive = false;
+                            if (subItem.path && pathname) {
+                              // 정확히 일치하는 경우
+                              if (pathname === subItem.path) {
+                                isSubActive = true;
+                              } else if (subItem.path === '/admin/production') {
+                                // /admin/production의 경우, 정확히 일치하거나 /admin/production/으로 시작하되
+                                // 다른 서브 메뉴 경로(/admin/production/request, /admin/production/calendar)가 아닐 때만 활성화
+                                const otherSubPaths = item.subItems
+                                  ?.filter(s => s.path !== subItem.path)
+                                  .map(s => s.path) || [];
+                                const isOtherSubPath = otherSubPaths.some(otherPath => 
+                                  pathname === otherPath || pathname.startsWith(`${otherPath}/`)
+                                );
+                                if (pathname.startsWith(`${subItem.path}/`) && !isOtherSubPath) {
+                                  isSubActive = true;
+                                }
+                              } else {
+                                // 다른 서브 메뉴는 정확히 일치하거나 하위 경로일 때만 활성화
+                                if (pathname.startsWith(`${subItem.path}/`)) {
+                                  isSubActive = true;
+                                }
+                              }
+                            }
                             return (
                               <Link
                                 key={subItem.id}
@@ -215,7 +267,7 @@ export default function AdminLayout({
                     <Link
                       href={item.path || '#'}
                       className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
-                        isActive
+                        isMainActive
                           ? 'bg-blue-50 text-blue-600 font-semibold'
                           : 'text-gray-700 hover:bg-gray-50'
                       }`}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { collection, addDoc, Timestamp, getDocs, query, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -31,7 +31,7 @@ const checkAdminAuth = (): boolean => {
   }
 };
 
-export default function AdminProductionRequestPage() {
+function AdminProductionRequestContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestId = searchParams.get('id');
@@ -509,5 +509,20 @@ export default function AdminProductionRequestPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function AdminProductionRequestPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    }>
+      <AdminProductionRequestContent />
+    </Suspense>
   );
 }

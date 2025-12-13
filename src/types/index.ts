@@ -39,3 +39,62 @@ export interface Inquiry {
   repliedAt?: Date;
   replyMessage?: string;
 }
+
+// 생산요청 관련 타입
+export type ProductionRequestStatus = 'pending_review' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
+export type ProductionReason = 'order' | 'inventory'; // 주문 / 재고
+
+export interface ProductionRequest {
+  id: string;
+  userId: string; // 판매 담당자 ID
+  userName: string;
+  userEmail: string;
+  userCompany?: string;
+  
+  // 기본 정보
+  productName: string; // 제품명 (자유 입력, 임시 정보)
+  quantity: number; // 수량
+  requestDate: Date; // 생산요청일
+  requestedCompletionDate: Date; // 완료요청일
+  productionReason: ProductionReason; // 생산이유
+  customerName?: string; // 고객사명 (생산이유가 주문인 경우)
+  
+  // 상태 및 관리
+  status: ProductionRequestStatus; // 검토 대기 / 확정 / 진행중 / 완료 / 취소
+  itemCode?: string; // 품목코드 (확정 시 자동 생성)
+  itemName?: string; // 정식 품목명 (확정 시)
+  
+  // 생산 계획 정보 (라인 등록 후)
+  productionLine?: string; // 라인
+  plannedStartDate?: Date; // 실제 생산개시예정일
+  plannedCompletionDate?: Date; // 생산완료예정일
+  
+  // 실제 생산 정보
+  actualStartDate?: Date; // 실제 생산개시일
+  actualCompletionDate?: Date; // 실제 생산완료일
+  
+  // 우선순위 및 메모
+  priority?: number; // 우선순위
+  memo?: string; // 메모
+  
+  // 이력 관리
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string; // 생성자 ID
+  updatedBy?: string; // 수정자 ID
+  history?: ProductionRequestHistory[]; // 변경 이력
+}
+
+export interface ProductionRequestHistory {
+  id: string;
+  changedAt: Date;
+  changedBy: string;
+  changedByUserName: string;
+  changeType: 'created' | 'updated' | 'confirmed' | 'line_assigned' | 'started' | 'completed' | 'cancelled';
+  changes: {
+    field: string;
+    oldValue?: any;
+    newValue?: any;
+  }[];
+  memo?: string;
+}

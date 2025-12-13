@@ -13,9 +13,22 @@ const firebaseConfig = {
 };
 
 // Firebase 설정 검증
-if (!firebaseConfig.apiKey || firebaseConfig.apiKey === 'your_api_key_here') {
+const isConfigValid = firebaseConfig.apiKey && 
+  firebaseConfig.apiKey !== 'your_api_key_here' &&
+  firebaseConfig.authDomain &&
+  firebaseConfig.projectId &&
+  firebaseConfig.storageBucket &&
+  firebaseConfig.messagingSenderId &&
+  firebaseConfig.appId;
+
+if (!isConfigValid) {
   console.error('Firebase 설정이 필요합니다. .env.local 파일에 Firebase 설정을 추가해주세요.');
   console.error('Firebase Console: https://console.firebase.google.com');
+  console.error('현재 설정 상태:', {
+    apiKey: firebaseConfig.apiKey ? '설정됨' : '설정되지 않음',
+    authDomain: firebaseConfig.authDomain || '설정되지 않음',
+    projectId: firebaseConfig.projectId || '설정되지 않음',
+  });
 }
 
 // Firebase 초기화

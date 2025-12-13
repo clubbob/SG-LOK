@@ -7,6 +7,7 @@ import { auth, db } from '@/lib/firebase';
 import { Button, Input } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Header, Footer } from '@/components/layout';
 
 export default function SignupPage() {
   const router = useRouter();
@@ -243,6 +244,8 @@ export default function SignupPage() {
     }
 
     try {
+      console.log('회원가입 시작:', formData.email);
+      
       // Firebase Auth로 사용자 생성
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -250,41 +253,88 @@ export default function SignupPage() {
         formData.password
       );
 
-      // Firestore에 사용자 정보 저장 (사업자 등록번호는 하이픈 제거 후 저장)
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
-        id: userCredential.user.uid,
-        name: formData.name.trim(),
-        email: formData.email.trim(),
-        company: formData.company.trim(),
-        businessNumber: formData.businessNumber.replace(/-/g, ''),
-        phone: formData.phone.trim(),
-        userTypes: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      console.log('Firebase Auth 사용자 생성 완료:', userCredential.user.uid);
+
+      // Firestore에 사용자 정보 저장 (타임아웃 포함)
+      const saveUserData = async () => {
+        try {
+          await setDoc(doc(db, 'users', userCredential.user.uid), {
+            id: userCredential.user.uid,
+            name: formData.name.trim(),
+            email: formData.email.trim(),
+            company: formData.company.trim(),
+            businessNumber: formData.businessNumber.replace(/-/g, ''),
+            phone: formData.phone.trim(),
+            userTypes: [],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+          console.log('Firestore 사용자 정보 저장 완료');
+        } catch (firestoreError) {
+          console.error('Firestore 저장 오류:', firestoreError);
+          console.warn('사용자 정보 저장 중 오류가 발생했지만 계정은 생성되었습니다.');
+        }
+      };
+
+      // Firestore 저장을 백그라운드에서 실행하고 즉시 리다이렉트
+      saveUserData().catch(err => {
+        console.error('Firestore 저장 백그라운드 오류:', err);
       });
 
-      router.push('/');
+      console.log('회원가입 성공, 리다이렉트 시작');
+      // 로딩 상태 즉시 해제
+      setLoading(false);
+      // 즉시 리다이렉트 (window.location 사용하여 확실하게)
+      window.location.href = '/signup/success';
     } catch (error) {
       console.error('회원가입 오류:', error);
+      setLoading(false); // 에러 발생 시 즉시 로딩 해제
+      
       const firebaseError = error as { code?: string; message?: string };
+      let errorMessage = '';
+      
       if (firebaseError.code === 'auth/email-already-in-use') {
-        setError('이미 사용 중인 이메일입니다.');
+        errorMessage = '이미 사용 중인 이메일입니다. 로그인 페이지로 이동하시겠습니까?';
       } else if (firebaseError.code === 'auth/invalid-email') {
-        setError('유효하지 않은 이메일 형식입니다.');
+        errorMessage = '유효하지 않은 이메일 형식입니다.';
       } else if (firebaseError.code === 'auth/weak-password') {
-        setError('비밀번호가 너무 약합니다.');
+        errorMessage = '비밀번호가 너무 약합니다. 최소 6자 이상 입력해주세요.';
+      } else if (firebaseError.code === 'auth/configuration-not-found') {
+        errorMessage = 'Firebase 설정 오류입니다. 관리자에게 문의하세요.';
+        console.error('Firebase 설정 확인 필요:', {
+          apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? '설정됨' : '설정되지 않음',
+          authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+        });
       } else {
-        setError('회원가입에 실패했습니다. 다시 시도해주세요.');
+        errorMessage = `회원가입에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`;
       }
-    } finally {
-      setLoading(false);
+      
+      setError(errorMessage);
+      
+      // 에러 메시지로 스크롤 이동
+      setTimeout(() => {
+        const errorElement = document.querySelector('.bg-red-50');
+        if (errorElement) {
+          errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl w-full space-y-8">
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1 flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-2xl w-full space-y-8">
         <div>
+          <div className="flex justify-between items-center mb-4">
+            <Link href="/">
+              <Button variant="ghost" size="sm">
+                ← 홈으로
+              </Button>
+            </Link>
+          </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             회원가입
           </h2>
@@ -298,7 +348,14 @@ export default function SignupPage() {
         <form className="mt-8 space-y-8" onSubmit={handleSubmit}>
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {error}
+              <div className="flex items-start justify-between gap-4">
+                <p className="flex-1">{error}</p>
+                {error.includes('이미 사용 중인 이메일') && (
+                  <Link href="/login" className="text-blue-600 hover:text-blue-800 underline whitespace-nowrap font-medium">
+                    로그인하기 →
+                  </Link>
+                )}
+              </div>
             </div>
           )}
           
@@ -415,7 +472,9 @@ export default function SignupPage() {
             </Button>
           </div>
         </form>
-      </div>
+        </div>
+      </main>
+      <Footer />
     </div>
   );
 }

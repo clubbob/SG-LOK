@@ -7,10 +7,11 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
   helperText?: string;
+  warning?: boolean; // helperText를 빨간색으로 표시
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, label, error, helperText, id, ...props }, ref) => {
+  ({ className, type, label, error, helperText, warning, id, ...props }, ref) => {
     const generatedId = useId();
     const inputId = id || generatedId;
     
@@ -39,7 +40,10 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <p className="mt-1 text-sm text-red-600">{error}</p>
         )}
         {helperText && !error && (
-          <p className="mt-1 text-sm text-gray-500">{helperText}</p>
+          <p className={cn(
+            "mt-1 text-sm",
+            warning ? "text-red-600" : "text-gray-500"
+          )}>{helperText}</p>
         )}
       </div>
     );

@@ -93,8 +93,8 @@ export interface ProductionRequestHistory {
   changeType: 'created' | 'updated' | 'confirmed' | 'line_assigned' | 'started' | 'completed' | 'cancelled';
   changes: {
     field: string;
-    oldValue?: any;
-    newValue?: any;
+    oldValue?: string | number | Date | boolean | null;
+    newValue?: string | number | Date | boolean | null;
   }[];
   memo?: string;
 }

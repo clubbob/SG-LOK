@@ -3,11 +3,9 @@
 import React from 'react';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
-import { useRouter } from 'next/navigation';
 
 export default function ProductionPage() {
-  const { isAuthenticated, loading } = useAuth();
-  const router = useRouter();
+  const { loading } = useAuth();
 
   if (loading) {
     return (

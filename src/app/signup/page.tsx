@@ -64,13 +64,14 @@ export default function SignupPage() {
       });
 
       router.push('/');
-    } catch (error: any) {
+    } catch (error) {
       console.error('회원가입 오류:', error);
-      if (error.code === 'auth/email-already-in-use') {
+      const firebaseError = error as { code?: string; message?: string };
+      if (firebaseError.code === 'auth/email-already-in-use') {
         setError('이미 사용 중인 이메일입니다.');
-      } else if (error.code === 'auth/invalid-email') {
+      } else if (firebaseError.code === 'auth/invalid-email') {
         setError('유효하지 않은 이메일 형식입니다.');
-      } else if (error.code === 'auth/weak-password') {
+      } else if (firebaseError.code === 'auth/weak-password') {
         setError('비밀번호가 너무 약합니다.');
       } else {
         setError('회원가입에 실패했습니다. 다시 시도해주세요.');

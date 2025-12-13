@@ -32,13 +32,14 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, formData.email, formData.password);
       router.push('/');
-    } catch (error: any) {
+    } catch (error) {
       console.error('로그인 오류:', error);
-      if (error.code === 'auth/user-not-found') {
+      const firebaseError = error as { code?: string; message?: string };
+      if (firebaseError.code === 'auth/user-not-found') {
         setError('등록되지 않은 이메일입니다.');
-      } else if (error.code === 'auth/wrong-password') {
+      } else if (firebaseError.code === 'auth/wrong-password') {
         setError('비밀번호가 올바르지 않습니다.');
-      } else if (error.code === 'auth/invalid-email') {
+      } else if (firebaseError.code === 'auth/invalid-email') {
         setError('유효하지 않은 이메일 형식입니다.');
       } else {
         setError('로그인에 실패했습니다. 다시 시도해주세요.');

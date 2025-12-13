@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* 프린트 스타일 - 프린트 및 프린트 미리보기에서 숨김 */
+@media print {
+  .no-print,
+  .no-print * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  
+  /* 프린트 시 텍스트 잘림 방지 */
+  .print\:truncate-none {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: normal !important;
+  }
+  
+  .print\:whitespace-normal {
+    white-space: normal !important;
+  }
+  
+  .print\:text-sm {
+    font-size: 0.875rem !important;
+    line-height: 1.25rem !important;
+  }
+  
+  .print\:flex-wrap {
+    flex-wrap: wrap !important;
+  }
+  
+  .print\:overflow-visible {
+    overflow: visible !important;
+  }
+  
+  .print\:flex-shrink {
+    flex-shrink: 1 !important;
+  }
+  
+  .print\:break-all {
+    word-break: break-all !important;
+  }
+  
+  .print\:min-h-auto {
+    min-height: auto !important;
+  }
+}
+

@@ -1,0 +1,37 @@
+{
+  "name": "sglok",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build --turbopack",
+    "start": "next start",
+    "lint": "eslint",
+    "export": "next build",
+    "deploy": "npm run export && firebase deploy --only hosting"
+  },
+  "dependencies": {
+    "@types/nodemailer": "^7.0.4",
+    "clsx": "^2.1.1",
+    "firebase": "^12.1.0",
+    "firebase-admin": "^13.4.0",
+    "next": "15.5.7",
+    "nodemailer": "^7.0.11",
+    "react": "19.1.2",
+    "react-dom": "19.1.2",
+    "tailwind-merge": "^3.3.1",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.7",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+

@@ -42,6 +42,11 @@ NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
 NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=123456789
 NEXT_PUBLIC_FIREBASE_APP_ID=1:123456789:web:abc123
+
+# 관리자 계정 정보 (선택사항, 기본값 사용 가능)
+NEXT_PUBLIC_ADMIN_ID=sglok
+NEXT_PUBLIC_ADMIN_PASSWORD=ssgg3660
+NEXT_PUBLIC_ADMIN_EMAIL=admin@sglok.com
 ```
 
 ## 5. Firebase Authentication 설정
@@ -61,7 +66,62 @@ NEXT_PUBLIC_FIREBASE_APP_ID=1:123456789:web:abc123
 4. 위치 선택 (asia-northeast3 - 서울 권장)
 5. "사용 설정" 클릭
 
-## 7. 개발 서버 재시작
+## 7. Firestore 보안 규칙 설정
+
+**중요**: "Missing or insufficient permissions" 오류가 발생하면 보안 규칙을 설정해야 합니다.
+
+1. Firebase Console > Firestore Database > **"규칙"** 탭 클릭
+2. 다음 보안 규칙을 복사하여 붙여넣고 **"게시"** 클릭:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // users 컬렉션: 회원 관리
+    match /users/{userId} {
+      // 모든 사용자가 회원 정보를 읽을 수 있음 (관리자 페이지 접근을 위해)
+      // 프로덕션에서는 더 엄격한 규칙 적용 권장
+      allow read: if true;
+      
+      // 인증된 사용자는 자신의 문서만 쓸 수 있음
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // inquiries 컬렉션: 문의 관리
+    match /inquiries/{inquiryId} {
+      // 모든 사용자가 문의를 읽을 수 있음 (관리자 페이지 접근을 위해)
+      // 프로덕션에서는 더 엄격한 규칙 적용 권장
+      allow read: if true;
+      
+      // 인증된 사용자는 새 문의를 작성할 수 있음
+      allow create: if request.auth != null && 
+                       request.resource.data.userId == request.auth.uid;
+      
+      // 모든 사용자가 문의를 업데이트할 수 있음 (관리자 답변을 위해)
+      // 프로덕션에서는 관리자 권한 체크 추가 권장
+      allow update: if true;
+    }
+  }
+}
+```
+
+**개발 환경용 간단한 규칙** (테스트용, 프로덕션에서는 사용하지 마세요):
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```
+
+자세한 내용은 `FIRESTORE_SECURITY_RULES.md` 파일을 참고하세요.
+
+## 8. 개발 서버 재시작
 
 환경 변수를 변경한 후에는 개발 서버를 재시작해야 합니다:
 

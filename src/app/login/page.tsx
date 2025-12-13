@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Button, Input } from '@/components/ui';
@@ -8,14 +8,27 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 
+const SAVED_EMAIL_KEY = 'sglok_saved_email';
+
 export default function LoginPage() {
   const router = useRouter();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+
+  // 페이지 로드 시 저장된 이메일 불러오기
+  useEffect(() => {
+    const savedEmail = localStorage.getItem(SAVED_EMAIL_KEY);
+    if (savedEmail) {
+      setFormData(prev => ({ ...prev, email: savedEmail }));
+      setRememberEmail(true);
+    }
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -23,6 +36,13 @@ export default function LoginPage() {
       [e.target.name]: e.target.value
     });
     if (error) setError('');
+    // 필드별 에러 초기화
+    if (fieldErrors[e.target.name as keyof typeof fieldErrors]) {
+      setFieldErrors({
+        ...fieldErrors,
+        [e.target.name]: undefined
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -32,21 +52,67 @@ export default function LoginPage() {
 
     try {
       await signInWithEmailAndPassword(auth, formData.email, formData.password);
+      
+      // 이메일 저장 옵션이 체크되어 있으면 localStorage에 저장
+      if (rememberEmail) {
+        localStorage.setItem(SAVED_EMAIL_KEY, formData.email);
+      } else {
+        // 체크 해제 시 저장된 이메일 삭제
+        localStorage.removeItem(SAVED_EMAIL_KEY);
+      }
+      
       router.push('/');
     } catch (error) {
-      console.error('로그인 오류:', error);
+      // 콘솔 에러 출력하지 않음 (사용자에게만 친화적인 메시지 표시)
+      setLoading(false); // 에러 발생 시 즉시 로딩 해제
+      
       const firebaseError = error as { code?: string; message?: string };
-      if (firebaseError.code === 'auth/user-not-found') {
-        setError('등록되지 않은 이메일입니다.');
+      let errorMessage = '';
+      
+      let passwordError = false;
+      
+      if (firebaseError.code === 'auth/invalid-credential') {
+        errorMessage = '이메일 또는 비밀번호가 올바르지 않습니다. 다시 확인해주세요.';
+        setFieldErrors({ password: '비밀번호가 올바르지 않습니다.' });
+        passwordError = true;
+      } else if (firebaseError.code === 'auth/user-not-found') {
+        errorMessage = '등록되지 않은 이메일입니다. 회원가입을 먼저 진행해주세요.';
+        setFieldErrors({ email: '등록되지 않은 이메일입니다.' });
       } else if (firebaseError.code === 'auth/wrong-password') {
-        setError('비밀번호가 올바르지 않습니다.');
+        errorMessage = '비밀번호가 올바르지 않습니다.';
+        setFieldErrors({ password: '비밀번호가 올바르지 않습니다.' });
+        passwordError = true;
       } else if (firebaseError.code === 'auth/invalid-email') {
-        setError('유효하지 않은 이메일 형식입니다.');
+        errorMessage = '유효하지 않은 이메일 형식입니다.';
+        setFieldErrors({ email: '유효하지 않은 이메일 형식입니다.' });
+      } else if (firebaseError.code === 'auth/user-disabled') {
+        errorMessage = '비활성화된 계정입니다. 관리자에게 문의하세요.';
+        setFieldErrors({});
+      } else if (firebaseError.code === 'auth/too-many-requests') {
+        errorMessage = '너무 많은 로그인 시도가 있었습니다. 잠시 후 다시 시도해주세요.';
+        setFieldErrors({});
       } else {
-        setError('로그인에 실패했습니다. 다시 시도해주세요.');
+        errorMessage = `로그인에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`;
+        setFieldErrors({});
       }
-    } finally {
-      setLoading(false);
+      
+      setError(errorMessage);
+      
+      // 에러 메시지로 스크롤 이동 및 포커스
+      setTimeout(() => {
+        const errorElement = document.querySelector('.bg-red-50');
+        if (errorElement) {
+          errorElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // 비밀번호 필드에 포커스 (에러가 있는 경우)
+          if (passwordError) {
+            const passwordInput = document.getElementById('password') as HTMLInputElement;
+            if (passwordInput) {
+              passwordInput.focus();
+              passwordInput.select();
+            }
+          }
+        }
+      }, 100);
     }
   };
 
@@ -75,8 +141,13 @@ export default function LoginPage() {
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {error}
+            <div className="bg-red-50 border-2 border-red-400 text-red-800 px-6 py-4 rounded-lg shadow-md animate-pulse">
+              <div className="flex items-center gap-3">
+                <svg className="w-6 h-6 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="flex-1 font-semibold text-base">{error}</p>
+              </div>
             </div>
           )}
           <div className="space-y-4">
@@ -89,6 +160,7 @@ export default function LoginPage() {
               value={formData.email}
               onChange={handleChange}
               placeholder="이메일을 입력하세요"
+              error={fieldErrors.email}
             />
             <Input
               id="password"
@@ -99,7 +171,21 @@ export default function LoginPage() {
               value={formData.password}
               onChange={handleChange}
               placeholder="비밀번호를 입력하세요"
+              error={fieldErrors.password}
             />
+          </div>
+          <div className="flex items-center">
+            <input
+              id="remember-email"
+              name="remember-email"
+              type="checkbox"
+              checked={rememberEmail}
+              onChange={(e) => setRememberEmail(e.target.checked)}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label htmlFor="remember-email" className="ml-2 block text-sm text-gray-900">
+              이메일 저장
+            </label>
           </div>
           <div>
             <Button

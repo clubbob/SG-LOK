@@ -23,3 +23,19 @@ export interface FirebaseError {
   code: string;
   message: string;
 }
+
+export interface Inquiry {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  userCompany?: string;
+  type?: string; // 문의 유형
+  subject: string;
+  message: string;
+  status: 'pending' | 'read' | 'replied';
+  createdAt: Date;
+  updatedAt: Date;
+  repliedAt?: Date;
+  replyMessage?: string;
+}

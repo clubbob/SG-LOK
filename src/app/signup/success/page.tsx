@@ -166,11 +166,6 @@ export default function SignupSuccessPage() {
                 생산관리 시작하기
               </Button>
             </Link>
-            <Link href="/dashboard">
-              <Button variant="outline" size="lg" className="w-full sm:w-auto">
-                대시보드로 이동
-              </Button>
-            </Link>
             <Link href="/">
               <Button variant="ghost" size="lg" className="w-full sm:w-auto">
                 홈으로 이동

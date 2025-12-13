@@ -46,6 +46,21 @@ service cloud.firestore {
       // 프로덕션에서는 관리자 권한 체크 추가 권장
       allow update: if true;
     }
+    
+    // productionRequests 컬렉션: 생산요청 관리
+    match /productionRequests/{requestId} {
+      // 모든 사용자가 생산요청을 읽을 수 있음 (관리자 페이지 접근 및 자동완성 등)
+      // 프로덕션에서는 더 엄격한 규칙 적용 권장
+      allow read: if true;
+      
+      // 인증된 사용자는 새 생산요청을 작성할 수 있음
+      allow create: if request.auth != null && 
+                       request.resource.data.userId == request.auth.uid;
+      
+      // 모든 사용자가 생산요청을 업데이트할 수 있음 (관리자 접근을 위해)
+      // 프로덕션에서는 관리자 권한 체크 추가 권장
+      allow update: if true;
+    }
   }
 }
 ```

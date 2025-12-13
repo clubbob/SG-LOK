@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button, Input } from '@/components/ui';
-import { collection, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionRequest, ProductionReason } from '@/types';
 
@@ -22,9 +22,14 @@ export default function ProductionRequestPage() {
     requestedCompletionDate: '',
     productionReason: 'order' as ProductionReason,
     customerName: '',
+    memo: '',
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [productNameSuggestions, setProductNameSuggestions] = useState<string[]>([]);
+  const [showProductSuggestions, setShowProductSuggestions] = useState(false);
+  const [customerNameSuggestions, setCustomerNameSuggestions] = useState<string[]>([]);
+  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
 
   // 인증 확인
   React.useEffect(() => {
@@ -32,6 +37,40 @@ export default function ProductionRequestPage() {
       router.push('/login');
     }
   }, [loading, isAuthenticated, router]);
+
+  // 이전에 등록된 제품명 및 고객사명 목록 불러오기
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      try {
+        const productionRequestsRef = collection(db, 'productionRequests');
+        const q = query(productionRequestsRef, limit(500)); // 인덱스 없이 사용, 최대 500개
+        const querySnapshot = await getDocs(q);
+        
+        const productNames = new Set<string>();
+        const customerNames = new Set<string>();
+        
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.productName && typeof data.productName === 'string') {
+            productNames.add(data.productName);
+          }
+          if (data.customerName && typeof data.customerName === 'string') {
+            customerNames.add(data.customerName);
+          }
+        });
+        
+        // 클라이언트 측에서 정렬
+        setProductNameSuggestions(Array.from(productNames).sort());
+        setCustomerNameSuggestions(Array.from(customerNames).sort());
+      } catch (error) {
+        console.error('제품명/고객사명 목록 로드 오류:', error);
+      }
+    };
+
+    if (isAuthenticated) {
+      loadSuggestions();
+    }
+  }, [isAuthenticated]);
 
   if (loading) {
     return (
@@ -55,6 +94,16 @@ export default function ProductionRequestPage() {
       [name]: value
     });
     
+    // 제품명 입력 시 자동완성 표시
+    if (name === 'productName') {
+      setShowProductSuggestions(value.length > 0);
+    }
+    
+    // 고객사명 입력 시 자동완성 표시
+    if (name === 'customerName') {
+      setShowCustomerSuggestions(value.length > 0);
+    }
+    
     // 필드별 에러 초기화
     if (fieldErrors[name]) {
       setFieldErrors({
@@ -65,6 +114,32 @@ export default function ProductionRequestPage() {
     if (error) setError('');
     if (success) setSuccess('');
   };
+
+  const handleProductNameSelect = (productName: string) => {
+    setFormData({
+      ...formData,
+      productName: productName
+    });
+    setShowProductSuggestions(false);
+  };
+
+  const handleCustomerNameSelect = (customerName: string) => {
+    setFormData({
+      ...formData,
+      customerName: customerName
+    });
+    setShowCustomerSuggestions(false);
+  };
+
+  // 필터링된 제품명 제안 목록
+  const filteredProductSuggestions = productNameSuggestions.filter(name =>
+    name.toLowerCase().includes(formData.productName.toLowerCase())
+  ).slice(0, 10); // 최대 10개만 표시
+
+  // 필터링된 고객사명 제안 목록
+  const filteredCustomerSuggestions = customerNameSuggestions.filter(name =>
+    name.toLowerCase().includes(formData.customerName.toLowerCase())
+  ).slice(0, 10); // 최대 10개만 표시
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -125,6 +200,7 @@ export default function ProductionRequestPage() {
         requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
         productionReason: formData.productionReason,
         customerName: formData.productionReason === 'order' ? formData.customerName.trim() : undefined,
+        memo: formData.memo.trim() || undefined,
         status: 'pending_review',
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
@@ -142,6 +218,7 @@ export default function ProductionRequestPage() {
         requestedCompletionDate: '',
         productionReason: 'order',
         customerName: '',
+        memo: '',
       });
 
       // 2초 후 목록 페이지로 이동 (또는 현재 페이지 유지)
@@ -190,7 +267,7 @@ export default function ProductionRequestPage() {
           )}
 
           <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-6 space-y-6">
-            <div>
+            <div className="relative">
               <Input
                 id="productName"
                 name="productName"
@@ -198,10 +275,34 @@ export default function ProductionRequestPage() {
                 label="제품명 *"
                 value={formData.productName}
                 onChange={handleChange}
-                placeholder="제품명을 입력하세요"
+                onFocus={() => setShowProductSuggestions(formData.productName.length > 0)}
+                onBlur={() => setTimeout(() => setShowProductSuggestions(false), 200)}
+                placeholder="제품명을 입력하거나 선택하세요"
                 error={fieldErrors.productName}
                 required
+                list="productNameList"
               />
+              <datalist id="productNameList">
+                {productNameSuggestions.map((name, index) => (
+                  <option key={index} value={name} />
+                ))}
+              </datalist>
+              
+              {/* 커스텀 자동완성 드롭다운 (datalist가 브라우저마다 다르게 동작할 수 있어서) */}
+              {showProductSuggestions && filteredProductSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                  {filteredProductSuggestions.map((name: string, index: number) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handleProductNameSelect(name)}
+                      className="w-full text-left px-4 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -253,7 +354,7 @@ export default function ProductionRequestPage() {
               </div>
 
               {formData.productionReason === 'order' && (
-                <div>
+                <div className="relative">
                   <Input
                     id="customerName"
                     name="customerName"
@@ -261,12 +362,51 @@ export default function ProductionRequestPage() {
                     label="고객사명 *"
                     value={formData.customerName}
                     onChange={handleChange}
-                    placeholder="고객사명을 입력하세요"
+                    onFocus={() => setShowCustomerSuggestions(formData.customerName.length > 0)}
+                    onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
+                    placeholder="고객사명을 입력하거나 선택하세요"
                     error={fieldErrors.customerName}
                     required
+                    list="customerNameList"
                   />
+                  <datalist id="customerNameList">
+                    {customerNameSuggestions.map((name, index) => (
+                      <option key={index} value={name} />
+                    ))}
+                  </datalist>
+                  
+                  {/* 커스텀 자동완성 드롭다운 */}
+                  {showCustomerSuggestions && filteredCustomerSuggestions.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                      {filteredCustomerSuggestions.map((name, index) => (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => handleCustomerNameSelect(name)}
+                          className="w-full text-left px-4 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
+            </div>
+
+            <div>
+              <label htmlFor="memo" className="block text-sm font-medium text-gray-700 mb-2">
+                비고
+              </label>
+              <textarea
+                id="memo"
+                name="memo"
+                value={formData.memo}
+                onChange={handleChange}
+                rows={4}
+                placeholder="비고를 입력하세요"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 resize-none"
+              />
             </div>
 
             <div className="flex justify-end gap-3 pt-4">

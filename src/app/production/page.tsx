@@ -59,19 +59,21 @@ export default function ProductionPage() {
               </div>
             </Link>
 
-            <div className="bg-white rounded-lg shadow-sm p-6 border-2 border-gray-200">
-              <div className="flex items-center gap-4">
-                <div className="bg-gray-100 rounded-lg p-3">
-                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">생산요청 목록</h2>
-                  <p className="text-sm text-gray-400">준비 중</p>
+            <Link href="/production/list">
+              <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer border-2 border-transparent hover:border-blue-500">
+                <div className="flex items-center gap-4">
+                  <div className="bg-blue-100 rounded-lg p-3">
+                    <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">생산요청 목록</h2>
+                    <p className="text-sm text-gray-600">등록한 생산요청을 확인합니다</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            </Link>
 
             <div className="bg-white rounded-lg shadow-sm p-6 border-2 border-gray-200">
               <div className="flex items-center gap-4">

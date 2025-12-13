@@ -83,7 +83,7 @@ export default function ProductionPage() {
                   </svg>
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">생산 일정 캘린더</h2>
+                  <h2 className="text-lg font-semibold text-gray-900">생산일정 캘린더</h2>
                   <p className="text-sm text-gray-400">준비 중</p>
                 </div>
               </div>
@@ -98,7 +98,7 @@ export default function ProductionPage() {
             <ul className="list-disc list-inside space-y-2 text-gray-600">
               <li>생산요청 등록 및 관리</li>
               <li>생산계획 수립 및 조정</li>
-              <li>생산 일정 캘린더 확인</li>
+              <li>생산일정 캘린더 확인</li>
               <li>생산 현황 추적</li>
             </ul>
           </div>

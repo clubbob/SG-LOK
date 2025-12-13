@@ -1,17 +1,21 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button, Input } from '@/components/ui';
-import { collection, addDoc, Timestamp, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, getDocs, query, orderBy, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionRequest, ProductionReason } from '@/types';
 
 export default function ProductionRequestPage() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestId = searchParams.get('id');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [loadingRequest, setLoadingRequest] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -37,6 +41,49 @@ export default function ProductionRequestPage() {
       router.push('/login');
     }
   }, [loading, isAuthenticated, router]);
+
+  // 수정 모드: 기존 데이터 불러오기
+  useEffect(() => {
+    const loadRequestData = async () => {
+      if (!requestId || !isAuthenticated || !userProfile) return;
+
+      setLoadingRequest(true);
+      try {
+        const requestDoc = await getDoc(doc(db, 'productionRequests', requestId));
+        if (requestDoc.exists()) {
+          const data = requestDoc.data();
+          // 본인이 작성한 요청만 수정 가능
+          if (data.userId !== userProfile.id) {
+            setError('본인이 작성한 생산요청만 수정할 수 있습니다.');
+            router.push('/production/list');
+            return;
+          }
+          
+          setIsEditMode(true);
+          setFormData({
+            productName: data.productName || '',
+            quantity: data.quantity?.toString() || '',
+            requestedCompletionDate: data.requestedCompletionDate?.toDate().toISOString().split('T')[0] || '',
+            productionReason: data.productionReason || 'order',
+            customerName: data.customerName || '',
+            memo: data.memo || '',
+          });
+        } else {
+          setError('생산요청을 찾을 수 없습니다.');
+          router.push('/production/list');
+        }
+      } catch (error) {
+        console.error('생산요청 로드 오류:', error);
+        setError('생산요청을 불러오는데 실패했습니다.');
+      } finally {
+        setLoadingRequest(false);
+      }
+    };
+
+    if (requestId && isAuthenticated && userProfile) {
+      loadRequestData();
+    }
+  }, [requestId, isAuthenticated, userProfile, router]);
 
   // 이전에 등록된 제품명 및 고객사명 목록 불러오기
   useEffect(() => {
@@ -72,7 +119,7 @@ export default function ProductionRequestPage() {
     }
   }, [isAuthenticated]);
 
-  if (loading) {
+  if (loading || loadingRequest) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -188,28 +235,49 @@ export default function ProductionRequestPage() {
     }
 
     try {
-      // Firestore에 저장할 데이터 (Timestamp 사용)
-      const productionRequestData = {
-        userId: userProfile.id,
-        userName: userProfile.name,
-        userEmail: userProfile.email,
-        userCompany: userProfile.company,
-        productName: formData.productName.trim(),
-        quantity: parseInt(formData.quantity, 10),
-        requestDate: Timestamp.now(), // 시스템에서 자동으로 현재 날짜 기록
-        requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
-        productionReason: formData.productionReason,
-        customerName: formData.productionReason === 'order' ? formData.customerName.trim() : undefined,
-        memo: formData.memo.trim() || undefined,
-        status: 'pending_review',
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        createdBy: userProfile.id,
-      };
+      if (isEditMode && requestId) {
+        // 수정 모드
+        const productionRequestData = {
+          productName: formData.productName.trim(),
+          quantity: parseInt(formData.quantity, 10),
+          requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
+          productionReason: formData.productionReason,
+          customerName: formData.productionReason === 'order' ? formData.customerName.trim() : undefined,
+          memo: formData.memo.trim() || undefined,
+          updatedAt: Timestamp.now(),
+        };
 
-      await addDoc(collection(db, 'productionRequests'), productionRequestData);
+        await updateDoc(doc(db, 'productionRequests', requestId), productionRequestData);
+        setSuccess('생산요청이 성공적으로 수정되었습니다.');
+        
+        // 수정 후 목록 페이지로 이동
+        setTimeout(() => {
+          router.push('/production/list');
+        }, 1500);
+        return;
+      } else {
+        // 등록 모드
+        const productionRequestData = {
+          userId: userProfile.id,
+          userName: userProfile.name,
+          userEmail: userProfile.email,
+          userCompany: userProfile.company,
+          productName: formData.productName.trim(),
+          quantity: parseInt(formData.quantity, 10),
+          requestDate: Timestamp.now(), // 시스템에서 자동으로 현재 날짜 기록
+          requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
+          productionReason: formData.productionReason,
+          customerName: formData.productionReason === 'order' ? formData.customerName.trim() : undefined,
+          memo: formData.memo.trim() || undefined,
+          status: 'pending_review',
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          createdBy: userProfile.id,
+        };
 
-      setSuccess('생산요청이 성공적으로 등록되었습니다.');
+        await addDoc(collection(db, 'productionRequests'), productionRequestData);
+        setSuccess('생산요청이 성공적으로 등록되었습니다.');
+      }
       
       // 폼 초기화
       setFormData({
@@ -240,8 +308,12 @@ export default function ProductionRequestPage() {
       <main className="flex-1 bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">생산요청 등록</h1>
-            <p className="text-gray-600">신규 생산요청을 등록합니다.</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              {isEditMode ? '생산요청 수정' : '생산요청 등록'}
+            </h1>
+            <p className="text-gray-600">
+              {isEditMode ? '생산요청 정보를 수정합니다.' : '신규 생산요청을 등록합니다.'}
+            </p>
           </div>
 
           {error && (
@@ -424,7 +496,7 @@ export default function ProductionRequestPage() {
                 loading={submitting}
                 disabled={submitting}
               >
-                등록
+                {isEditMode ? '수정' : '등록'}
               </Button>
             </div>
           </form>

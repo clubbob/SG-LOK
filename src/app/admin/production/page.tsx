@@ -2,10 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, getDocs, Timestamp, onSnapshot, orderBy } from 'firebase/firestore';
+import Link from 'next/link';
+import { collection, query, getDocs, Timestamp, onSnapshot, orderBy, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionRequest, ProductionRequestStatus } from '@/types';
-import { formatDate, formatDateTime } from '@/lib/utils';
+import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 import { Button } from '@/components/ui';
 
 const ADMIN_SESSION_KEY = 'admin_session';
@@ -56,6 +57,8 @@ export default function AdminProductionPage() {
   const [displayedRequests, setDisplayedRequests] = useState<ProductionRequest[]>([]);
   const [itemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
 
   useEffect(() => {
     // 관리자 세션 확인
@@ -127,6 +130,28 @@ export default function AdminProductionPage() {
 
   const totalPages = Math.ceil(requests.length / itemsPerPage);
 
+  const handleEdit = (request: ProductionRequest) => {
+    router.push(`/production/request?id=${request.id}`);
+  };
+
+  const handleDelete = async (request: ProductionRequest) => {
+    if (!confirm(`정말로 "${request.productName}" 생산요청을 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    setDeletingId(request.id);
+    try {
+      await deleteDoc(doc(db, 'productionRequests', request.id));
+      // 실시간 업데이트로 자동 새로고침됨
+    } catch (error) {
+      console.error('생산요청 삭제 오류:', error);
+      const firebaseError = error as { code?: string; message?: string };
+      setError(`생산요청 삭제에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   if (loadingRequests) {
     return (
       <div className="p-8">
@@ -143,7 +168,7 @@ export default function AdminProductionPage() {
   return (
     <div className="p-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">생산요청 관리</h1>
+        <h1 className="text-2xl font-bold text-gray-900">생산요청 목록</h1>
         <p className="text-gray-600 mt-2">전체 생산요청을 확인하고 관리할 수 있습니다</p>
       </div>
 
@@ -185,7 +210,7 @@ export default function AdminProductionPage() {
                       고객사명
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      요청일
+                      등록일
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       완료요청일
@@ -200,7 +225,7 @@ export default function AdminProductionPage() {
                       상태
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      등록일
+                      관리
                     </th>
                   </tr>
                 </thead>
@@ -227,7 +252,7 @@ export default function AdminProductionPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{formatDate(request.requestDate)}</div>
+                        <div className="text-sm text-gray-900">{formatDateShort(request.requestDate)}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
@@ -236,7 +261,7 @@ export default function AdminProductionPage() {
                             const completionDate = new Date(request.requestedCompletionDate);
                             const diffTime = completionDate.getTime() - requestDate.getTime();
                             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                            return `${formatDate(request.requestedCompletionDate)} (+${diffDays}일)`;
+                            return `${formatDateShort(request.requestedCompletionDate)} (+${diffDays}일)`;
                           })()}
                         </div>
                       </td>
@@ -245,10 +270,15 @@ export default function AdminProductionPage() {
                           {request.userName}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900 max-w-xs">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">
                           {request.memo ? (
-                            <span className="line-clamp-2">{request.memo}</span>
+                            <button
+                              onClick={() => setSelectedMemo({ id: request.id, memo: request.memo || '' })}
+                              className="text-left hover:text-blue-600 transition-colors cursor-pointer whitespace-nowrap"
+                            >
+                              {request.memo.length > 5 ? `${request.memo.substring(0, 5)}...` : request.memo}
+                            </button>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
@@ -260,7 +290,23 @@ export default function AdminProductionPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500">{formatDateTime(request.createdAt)}</div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleEdit(request)}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            disabled={deletingId === request.id}
+                          >
+                            수정
+                          </button>
+                          <span className="text-gray-300">|</span>
+                          <button
+                            onClick={() => handleDelete(request)}
+                            className="text-red-600 hover:text-red-800 text-sm font-medium"
+                            disabled={deletingId === request.id}
+                          >
+                            {deletingId === request.id ? '삭제 중...' : '삭제'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -319,6 +365,36 @@ export default function AdminProductionPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* 비고 상세 모달 */}
+      {selectedMemo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30" onClick={() => setSelectedMemo(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h3 className="text-lg font-semibold text-gray-900">비고</h3>
+              <button
+                onClick={() => setSelectedMemo(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              <div className="text-sm text-gray-900 whitespace-pre-wrap break-words">{selectedMemo.memo}</div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
+              <Button
+                variant="primary"
+                onClick={() => setSelectedMemo(null)}
+              >
+                닫기
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

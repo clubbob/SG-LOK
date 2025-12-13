@@ -6,10 +6,10 @@ import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
-import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionRequest, ProductionRequestStatus } from '@/types';
-import { formatDate, formatDateTime } from '@/lib/utils';
+import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   pending_review: '검토 대기',
@@ -36,6 +36,8 @@ export default function ProductionRequestListPage() {
   const [displayedRequests, setDisplayedRequests] = useState<ProductionRequest[]>([]);
   const [itemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
 
   // 인증 확인
   useEffect(() => {
@@ -116,6 +118,29 @@ export default function ProductionRequestListPage() {
   }, [requests, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(requests.length / itemsPerPage);
+
+  const handleEdit = (request: ProductionRequest) => {
+    router.push(`/production/request?id=${request.id}`);
+  };
+
+  const handleDelete = async (request: ProductionRequest) => {
+    if (!confirm(`정말로 "${request.productName}" 생산요청을 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    setDeletingId(request.id);
+    try {
+      await deleteDoc(doc(db, 'productionRequests', request.id));
+      // 목록 새로고침
+      await loadRequests();
+    } catch (error) {
+      console.error('생산요청 삭제 오류:', error);
+      const firebaseError = error as { code?: string; message?: string };
+      setError(`생산요청 삭제에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   if (loading || loadingRequests) {
     return (
@@ -205,14 +230,14 @@ export default function ProductionRequestListPage() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           수량
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                           생산이유
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           고객사명
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          요청일
+                          등록일
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           완료요청일
@@ -225,6 +250,9 @@ export default function ProductionRequestListPage() {
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           상태
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          관리
                         </th>
                       </tr>
                     </thead>
@@ -251,7 +279,7 @@ export default function ProductionRequestListPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{formatDate(request.requestDate)}</div>
+                            <div className="text-sm text-gray-900">{formatDateShort(request.requestDate)}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
@@ -260,7 +288,7 @@ export default function ProductionRequestListPage() {
                                 const completionDate = new Date(request.requestedCompletionDate);
                                 const diffTime = completionDate.getTime() - requestDate.getTime();
                                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                return `${formatDate(request.requestedCompletionDate)} (+${diffDays}일)`;
+                                return `${formatDateShort(request.requestedCompletionDate)} (+${diffDays}일)`;
                               })()}
                             </div>
                           </td>
@@ -269,10 +297,15 @@ export default function ProductionRequestListPage() {
                               {request.userName}
                             </div>
                           </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-gray-900 max-w-xs">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
                               {request.memo ? (
-                                <span className="line-clamp-2">{request.memo}</span>
+                                <button
+                                  onClick={() => setSelectedMemo({ id: request.id, memo: request.memo || '' })}
+                                  className="text-left hover:text-blue-600 transition-colors cursor-pointer whitespace-nowrap"
+                                >
+                                  {request.memo.length > 5 ? `${request.memo.substring(0, 5)}...` : request.memo}
+                                </button>
                               ) : (
                                 <span className="text-gray-400">-</span>
                               )}
@@ -282,6 +315,25 @@ export default function ProductionRequestListPage() {
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[request.status]}`}>
                               {STATUS_LABELS[request.status]}
                             </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleEdit(request)}
+                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                disabled={deletingId === request.id}
+                              >
+                                수정
+                              </button>
+                              <span className="text-gray-300">|</span>
+                              <button
+                                onClick={() => handleDelete(request)}
+                                className="text-red-600 hover:text-red-800 text-sm font-medium"
+                                disabled={deletingId === request.id}
+                              >
+                                {deletingId === request.id ? '삭제 중...' : '삭제'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -344,6 +396,36 @@ export default function ProductionRequestListPage() {
         </div>
       </main>
       <Footer />
+
+      {/* 비고 상세 모달 */}
+      {selectedMemo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setSelectedMemo(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">비고</h3>
+              <button
+                onClick={() => setSelectedMemo(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              <div className="text-sm text-gray-900 whitespace-pre-wrap">{selectedMemo.memo}</div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+              <Button
+                variant="primary"
+                onClick={() => setSelectedMemo(null)}
+              >
+                닫기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

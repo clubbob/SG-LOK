@@ -29,7 +29,15 @@ const checkAdminAuth = (): boolean => {
   }
 };
 
-const adminMenuItems = [
+type MenuItem = {
+  id: string;
+  label: string;
+  path?: string;
+  icon: React.ReactNode;
+  subItems?: { id: string; label: string; path: string }[];
+};
+
+const adminMenuItems: MenuItem[] = [
   {
     id: 'users',
     label: '회원 관리',
@@ -53,12 +61,16 @@ const adminMenuItems = [
   {
     id: 'production',
     label: '생산관리',
-    path: '/admin/production',
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
       </svg>
     ),
+    subItems: [
+      { id: 'production-request', label: '생산요청 등록', path: '/admin/production/request' },
+      { id: 'production-list', label: '생산요청 목록', path: '/admin/production' },
+      { id: 'production-calendar', label: '생산일정 캘린더', path: '/admin/production/calendar' },
+    ],
   },
 ];
 
@@ -71,6 +83,7 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
 
   // 로그인 페이지는 레이아웃 적용 안 함
   const isLoginPage = pathname === '/admin/login' || pathname?.startsWith('/admin/login');
@@ -93,6 +106,11 @@ export default function AdminLayout({
     
     if (!isAdmin) {
       router.push('/admin/login');
+    }
+
+    // 생산관리 관련 페이지일 때 메뉴 자동 확장
+    if (pathname?.startsWith('/admin/production')) {
+      setExpandedMenus(prev => new Set(prev).add('production'));
     }
   }, [router, pathname]);
 
@@ -131,20 +149,82 @@ export default function AdminLayout({
           </div>
           <nav className="p-2 flex-1 overflow-y-auto">
             {adminMenuItems.map((item) => {
-              const isActive = pathname === item.path || pathname?.startsWith(`${item.path}/`);
+              const hasSubItems = item.subItems && item.subItems.length > 0;
+              const isExpanded = expandedMenus.has(item.id);
+              const isActive = item.path 
+                ? (pathname === item.path || pathname?.startsWith(`${item.path}/`))
+                : item.subItems?.some(subItem => pathname === subItem.path || pathname?.startsWith(`${subItem.path}/`));
+
               return (
-                <Link
-                  key={item.id}
-                  href={item.path}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
-                    isActive
-                      ? 'bg-blue-50 text-blue-600 font-semibold'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  {item.icon}
-                  <span>{item.label}</span>
-                </Link>
+                <div key={item.id} className="mb-1">
+                  {hasSubItems ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          setExpandedMenus(prev => {
+                            const newSet = new Set(prev);
+                            if (newSet.has(item.id)) {
+                              newSet.delete(item.id);
+                            } else {
+                              newSet.add(item.id);
+                            }
+                            return newSet;
+                          });
+                        }}
+                        className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg transition-colors ${
+                          isActive
+                            ? 'bg-blue-50 text-blue-600 font-semibold'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          {item.icon}
+                          <span>{item.label}</span>
+                        </div>
+                        <svg
+                          className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {isExpanded && item.subItems && (
+                        <div className="ml-4 mt-1 space-y-1">
+                          {item.subItems.map((subItem) => {
+                            const isSubActive = pathname === subItem.path || pathname?.startsWith(`${subItem.path}/`);
+                            return (
+                              <Link
+                                key={subItem.id}
+                                href={subItem.path}
+                                className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ${
+                                  isSubActive
+                                    ? 'bg-blue-50 text-blue-600 font-semibold'
+                                    : 'text-gray-600 hover:bg-gray-50'
+                                }`}
+                              >
+                                <span className="text-sm">{subItem.label}</span>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <Link
+                      href={item.path || '#'}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-600 font-semibold'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </Link>
+                  )}
+                </div>
               );
             })}
           </nav>

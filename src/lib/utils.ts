@@ -16,6 +16,15 @@ export function formatDate(date: Date | string): string {
   });
 }
 
+// 간단한 날짜 포맷팅 (YYYY/MM/DD)
+export function formatDateShort(date: Date | string): string {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}/${month}/${day}`;
+}
+
 export function formatDateTime(date: Date | string): string {
   const d = new Date(date);
   return d.toLocaleString('ko-KR', {

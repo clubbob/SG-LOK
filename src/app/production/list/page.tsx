@@ -6,16 +6,16 @@ import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
-import { collection, query, where, getDocs, Timestamp, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, Timestamp, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionRequest, ProductionRequestStatus } from '@/types';
 import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   pending_review: '검토 대기',
-  confirmed: '확정',
+  confirmed: '계획 확정',
   in_progress: '진행 중',
-  completed: '완료',
+  completed: '생산 완료',
   cancelled: '취소',
 };
 
@@ -38,6 +38,8 @@ export default function ProductionRequestListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredRequests, setFilteredRequests] = useState<ProductionRequest[]>([]);
 
   // 인증 확인
   useEffect(() => {
@@ -55,7 +57,7 @@ export default function ProductionRequestListPage() {
       setError('');
       
       const requestsRef = collection(db, 'productionRequests');
-      const q = query(requestsRef, where('userId', '==', userProfile.id));
+      const q = query(requestsRef, orderBy('createdAt', 'desc'));
       const querySnapshot = await getDocs(q);
       
       const requestsData: ProductionRequest[] = [];
@@ -91,7 +93,7 @@ export default function ProductionRequestListPage() {
         });
       });
       
-      // 생성일 기준 내림차순 정렬 (최신순)
+      // Firestore에서 이미 정렬되어 있지만, 안전을 위해 다시 정렬
       requestsData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       
       setRequests(requestsData);
@@ -110,14 +112,42 @@ export default function ProductionRequestListPage() {
     }
   }, [isAuthenticated, userProfile]);
 
+  // 검색 필터링
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredRequests(requests);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase().trim();
+    const filtered = requests.filter((request) => {
+      const productName = request.productName?.toLowerCase() || '';
+      const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
+      const customerName = request.customerName?.toLowerCase() || '';
+      const productionLine = request.productionLine?.toLowerCase() || '';
+      const userName = request.userName?.toLowerCase() || '';
+
+      return (
+        productName.includes(query) ||
+        productionReason.includes(query) ||
+        customerName.includes(query) ||
+        productionLine.includes(query) ||
+        userName.includes(query)
+      );
+    });
+
+    setFilteredRequests(filtered);
+    setCurrentPage(1); // 검색 시 첫 페이지로 리셋
+  }, [searchQuery, requests]);
+
   // 페이지네이션
   useEffect(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
-    setDisplayedRequests(requests.slice(startIndex, endIndex));
-  }, [requests, currentPage, itemsPerPage]);
+    setDisplayedRequests(filteredRequests.slice(startIndex, endIndex));
+  }, [filteredRequests, currentPage, itemsPerPage]);
 
-  const totalPages = Math.ceil(requests.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
 
   const handleEdit = (request: ProductionRequest) => {
     router.push(`/production/request?id=${request.id}`);
@@ -161,11 +191,11 @@ export default function ProductionRequestListPage() {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="w-full max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">생산요청 목록</h1>
-              <p className="text-gray-600 mt-2">등록한 생산요청을 확인할 수 있습니다</p>
+              <p className="text-gray-600 mt-2">모든 생산요청을 확인할 수 있습니다</p>
             </div>
             <div className="flex gap-3">
               <Button
@@ -187,6 +217,37 @@ export default function ProductionRequestListPage() {
                   새 생산요청 등록
                 </Button>
               </Link>
+            </div>
+          </div>
+          
+          {/* 검색 입력 필드 */}
+          <div className="mb-6">
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="제품명, 주문목적, 고객사명, 생산라인, 요청자로 검색..."
+                className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              />
+              <svg
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
 
@@ -221,7 +282,7 @@ export default function ProductionRequestListPage() {
             <>
               <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
+                  <table className="w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -230,9 +291,9 @@ export default function ProductionRequestListPage() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           수량
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                          생산이유
-                        </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                            주문목적
+                          </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           고객사명
                         </th>
@@ -241,6 +302,15 @@ export default function ProductionRequestListPage() {
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           완료요청일
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          완료예정일
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          생산완료일
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                          생산라인
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           요청자
@@ -266,11 +336,11 @@ export default function ProductionRequestListPage() {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{request.quantity.toLocaleString()}개</div>
+                            <div className="text-sm text-gray-900">{request.quantity.toLocaleString()}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              {request.productionReason === 'order' ? '주문' : '재고'}
+                              {request.productionReason === 'order' ? '고객 주문' : '재고 준비'}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -281,15 +351,63 @@ export default function ProductionRequestListPage() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">{formatDateShort(request.requestDate)}</div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-6 py-4">
                             <div className="text-sm text-gray-900">
                               {(() => {
                                 const requestDate = new Date(request.requestDate);
                                 const completionDate = new Date(request.requestedCompletionDate);
                                 const diffTime = completionDate.getTime() - requestDate.getTime();
                                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                return `${formatDateShort(request.requestedCompletionDate)} (+${diffDays}일)`;
+                                return (
+                                  <>
+                                    <div>{formatDateShort(request.requestedCompletionDate)}</div>
+                                    <div className="text-xs text-gray-500">(+{diffDays})</div>
+                                  </>
+                                );
                               })()}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-900">
+                              {request.plannedCompletionDate 
+                                ? (() => {
+                                    const requestDate = new Date(request.requestDate);
+                                    const plannedDate = new Date(request.plannedCompletionDate);
+                                    const diffTime = plannedDate.getTime() - requestDate.getTime();
+                                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                    return (
+                                      <>
+                                        <div>{formatDateShort(request.plannedCompletionDate)}</div>
+                                        <div className="text-xs text-gray-500">(+{diffDays})</div>
+                                      </>
+                                    );
+                                  })()
+                                : <span className="text-gray-400">-</span>
+                              }
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-900">
+                              {request.actualCompletionDate 
+                                ? (() => {
+                                    const requestDate = new Date(request.requestDate);
+                                    const actualDate = new Date(request.actualCompletionDate);
+                                    const diffTime = actualDate.getTime() - requestDate.getTime();
+                                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                    return (
+                                      <>
+                                        <div>{formatDateShort(request.actualCompletionDate)}</div>
+                                        <div className="text-xs text-gray-500">(+{diffDays})</div>
+                                      </>
+                                    );
+                                  })()
+                                : <span className="text-gray-400">-</span>
+                              }
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
+                              {request.productionLine || <span className="text-gray-400">-</span>}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -304,7 +422,7 @@ export default function ProductionRequestListPage() {
                                   onClick={() => setSelectedMemo({ id: request.id, memo: request.memo || '' })}
                                   className="text-left hover:text-blue-600 transition-colors cursor-pointer whitespace-nowrap"
                                 >
-                                  {request.memo.length > 5 ? `${request.memo.substring(0, 5)}...` : request.memo}
+                                  {request.memo.length > 2 ? `${request.memo.substring(0, 2)}...` : request.memo}
                                 </button>
                               ) : (
                                 <span className="text-gray-400">-</span>
@@ -317,23 +435,27 @@ export default function ProductionRequestListPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleEdit(request)}
-                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                                disabled={deletingId === request.id}
-                              >
-                                수정
-                              </button>
-                              <span className="text-gray-300">|</span>
-                              <button
-                                onClick={() => handleDelete(request)}
-                                className="text-red-600 hover:text-red-800 text-sm font-medium"
-                                disabled={deletingId === request.id}
-                              >
-                                {deletingId === request.id ? '삭제 중...' : '삭제'}
-                              </button>
-                            </div>
+                            {userProfile && request.userId === userProfile.id && request.status === 'pending_review' ? (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleEdit(request)}
+                                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                  disabled={deletingId === request.id}
+                                >
+                                  수정
+                                </button>
+                                <span className="text-gray-300">|</span>
+                                <button
+                                  onClick={() => handleDelete(request)}
+                                  className="text-red-600 hover:text-red-800 text-sm font-medium"
+                                  disabled={deletingId === request.id}
+                                >
+                                  {deletingId === request.id ? '삭제 중...' : '삭제'}
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-sm">-</span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -346,15 +468,31 @@ export default function ProductionRequestListPage() {
               {totalPages > 1 && (
                 <div className="mt-6 flex items-center justify-between">
                   <div className="text-sm text-gray-700">
-                    전체 <span className="font-medium">{requests.length}</span>건 중{' '}
-                    <span className="font-medium">
-                      {(currentPage - 1) * itemsPerPage + 1}
-                    </span>
-                    -
-                    <span className="font-medium">
-                      {Math.min(currentPage * itemsPerPage, requests.length)}
-                    </span>
-                    건 표시
+                    {searchQuery ? (
+                      <>
+                        검색 결과 <span className="font-medium">{filteredRequests.length}</span>건 중{' '}
+                        <span className="font-medium">
+                          {(currentPage - 1) * itemsPerPage + 1}
+                        </span>
+                        -
+                        <span className="font-medium">
+                          {Math.min(currentPage * itemsPerPage, filteredRequests.length)}
+                        </span>
+                        건 표시 (전체 {requests.length}건)
+                      </>
+                    ) : (
+                      <>
+                        전체 <span className="font-medium">{filteredRequests.length}</span>건 중{' '}
+                        <span className="font-medium">
+                          {(currentPage - 1) * itemsPerPage + 1}
+                        </span>
+                        -
+                        <span className="font-medium">
+                          {Math.min(currentPage * itemsPerPage, filteredRequests.length)}
+                        </span>
+                        건 표시
+                      </>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Button

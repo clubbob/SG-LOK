@@ -43,7 +43,7 @@ const adminMenuItems: MenuItem[] = [
     label: '회원 관리',
     path: '/admin/users',
     icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
       </svg>
     ),
@@ -53,7 +53,7 @@ const adminMenuItems: MenuItem[] = [
     label: '문의 관리',
     path: '/admin/inquiries',
     icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
       </svg>
     ),
@@ -62,7 +62,7 @@ const adminMenuItems: MenuItem[] = [
     id: 'production',
     label: '생산관리',
     icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
       </svg>
     ),
@@ -143,9 +143,9 @@ export default function AdminLayout({
     <div className="min-h-screen flex flex-col bg-gray-50">
       <div className="flex-1 flex overflow-hidden">
         {/* 좌측 메뉴 */}
-        <aside className="w-64 bg-white border-r border-gray-200 shadow-sm flex flex-col h-screen">
-          <div className="p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">관리자 메뉴</h2>
+        <aside className="w-48 bg-white border-r border-gray-200 shadow-sm flex flex-col h-screen">
+          <div className="p-3 border-b border-gray-200">
+            <h2 className="text-base font-semibold text-gray-900">관리자 메뉴</h2>
           </div>
           <nav className="p-2 flex-1 overflow-y-auto">
             {adminMenuItems.map((item) => {
@@ -199,15 +199,15 @@ export default function AdminLayout({
                             return newSet;
                           });
                         }}
-                        className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg transition-colors ${
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition-colors ${
                           isMainActive
                             ? 'bg-blue-50 text-blue-600 font-semibold'
                             : 'text-gray-700 hover:bg-gray-50'
                         }`}
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                           {item.icon}
-                          <span>{item.label}</span>
+                          <span className="text-sm">{item.label}</span>
                         </div>
                         <svg
                           className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
@@ -219,7 +219,7 @@ export default function AdminLayout({
                         </svg>
                       </button>
                       {isExpanded && item.subItems && (
-                        <div className="ml-4 mt-1 space-y-1">
+                        <div className="ml-3 mt-1 space-y-1">
                           {item.subItems.map((subItem) => {
                             // 정확한 경로 일치 확인
                             let isSubActive = false;
@@ -250,13 +250,13 @@ export default function AdminLayout({
                               <Link
                                 key={subItem.id}
                                 href={subItem.path}
-                                className={`flex items-center gap-3 px-4 py-2 rounded-lg transition-colors ${
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
                                   isSubActive
                                     ? 'bg-blue-50 text-blue-600 font-semibold'
                                     : 'text-gray-600 hover:bg-gray-50'
                                 }`}
                               >
-                                <span className="text-sm">{subItem.label}</span>
+                                <span className="text-xs">{subItem.label}</span>
                               </Link>
                             );
                           })}
@@ -266,40 +266,40 @@ export default function AdminLayout({
                   ) : (
                     <Link
                       href={item.path || '#'}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
                         isMainActive
                           ? 'bg-blue-50 text-blue-600 font-semibold'
                           : 'text-gray-700 hover:bg-gray-50'
                       }`}
                     >
                       {item.icon}
-                      <span>{item.label}</span>
+                      <span className="text-sm">{item.label}</span>
                     </Link>
                   )}
                 </div>
               );
             })}
           </nav>
-          <div className="p-4 border-t border-gray-200 flex-shrink-0 space-y-2">
+          <div className="p-3 border-t border-gray-200 flex-shrink-0 space-y-2">
             <a
               href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
-              <span>홈페이지</span>
+              <span className="text-sm">홈페이지</span>
             </a>
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
-              <span>로그아웃</span>
+              <span className="text-sm">로그아웃</span>
             </button>
           </div>
         </aside>

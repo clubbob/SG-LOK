@@ -237,15 +237,23 @@ function ProductionRequestContent() {
     try {
       if (isEditMode && requestId) {
         // 수정 모드
-        const productionRequestData = {
+        const productionRequestData: any = {
           productName: formData.productName.trim(),
           quantity: parseInt(formData.quantity, 10),
           requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
           productionReason: formData.productionReason,
-          customerName: formData.productionReason === 'order' ? formData.customerName.trim() : undefined,
-          memo: formData.memo.trim() || undefined,
           updatedAt: Timestamp.now(),
         };
+
+        // customerName은 주문인 경우에만 추가
+        if (formData.productionReason === 'order' && formData.customerName.trim()) {
+          productionRequestData.customerName = formData.customerName.trim();
+        }
+
+        // memo는 값이 있을 때만 추가
+        if (formData.memo.trim()) {
+          productionRequestData.memo = formData.memo.trim();
+        }
 
         await updateDoc(doc(db, 'productionRequests', requestId), productionRequestData);
         setSuccess('생산요청이 성공적으로 수정되었습니다.');
@@ -257,7 +265,7 @@ function ProductionRequestContent() {
         return;
       } else {
         // 등록 모드
-        const productionRequestData = {
+        const productionRequestData: any = {
           userId: userProfile.id,
           userName: userProfile.name,
           userEmail: userProfile.email,
@@ -267,16 +275,30 @@ function ProductionRequestContent() {
           requestDate: Timestamp.now(), // 시스템에서 자동으로 현재 날짜 기록
           requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
           productionReason: formData.productionReason,
-          customerName: formData.productionReason === 'order' ? formData.customerName.trim() : undefined,
-          memo: formData.memo.trim() || undefined,
           status: 'pending_review',
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
           createdBy: userProfile.id,
         };
 
+        // customerName은 주문인 경우에만 추가
+        if (formData.productionReason === 'order' && formData.customerName.trim()) {
+          productionRequestData.customerName = formData.customerName.trim();
+        }
+
+        // memo는 값이 있을 때만 추가
+        if (formData.memo.trim()) {
+          productionRequestData.memo = formData.memo.trim();
+        }
+
         await addDoc(collection(db, 'productionRequests'), productionRequestData);
         setSuccess('생산요청이 성공적으로 등록되었습니다.');
+        
+        // 등록 후 목록 페이지로 이동
+        setTimeout(() => {
+          router.push('/production/list');
+        }, 1500);
+        return;
       }
       
       // 폼 초기화
@@ -288,11 +310,6 @@ function ProductionRequestContent() {
         customerName: '',
         memo: '',
       });
-
-      // 2초 후 목록 페이지로 이동 (또는 현재 페이지 유지)
-      setTimeout(() => {
-        setSuccess('');
-      }, 3000);
     } catch (error) {
       console.error('생산요청 등록 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
@@ -411,7 +428,7 @@ function ProductionRequestContent() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label htmlFor="productionReason" className="block text-sm font-medium text-gray-700 mb-2">
-                  생산이유 *
+                  주문목적 *
                 </label>
                 <select
                   id="productionReason"
@@ -420,8 +437,8 @@ function ProductionRequestContent() {
                   onChange={handleChange}
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                 >
-                  <option value="order">주문</option>
-                  <option value="inventory">재고</option>
+                  <option value="order">고객 주문</option>
+                  <option value="inventory">재고 준비</option>
                 </select>
               </div>
 

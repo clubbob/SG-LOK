@@ -53,9 +53,11 @@ service cloud.firestore {
       // 프로덕션에서는 더 엄격한 규칙 적용 권장
       allow read: if true;
       
-      // 인증된 사용자는 새 생산요청을 작성할 수 있음
-      allow create: if request.auth != null && 
-                       request.resource.data.userId == request.auth.uid;
+      // 인증된 사용자는 자신의 userId로 생산요청을 작성할 수 있음
+      // 관리자(userId == 'admin')도 생산요청을 작성할 수 있음
+      allow create: if (request.auth != null && 
+                       request.resource.data.userId == request.auth.uid) ||
+                       request.resource.data.userId == 'admin';
       
       // 모든 사용자가 생산요청을 업데이트할 수 있음 (관리자 접근을 위해)
       // 프로덕션에서는 관리자 권한 체크 추가 권장

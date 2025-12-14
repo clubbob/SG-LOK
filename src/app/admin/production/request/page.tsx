@@ -48,7 +48,11 @@ function AdminProductionRequestContent() {
     productionReason: 'order' as ProductionReason,
     customerName: '',
     memo: '',
+    plannedCompletionDate: '',
+    productionLine: '',
+    actualCompletionDate: '',
   });
+  const [currentStatus, setCurrentStatus] = useState<string>('');
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [productNameSuggestions, setProductNameSuggestions] = useState<string[]>([]);
@@ -75,6 +79,7 @@ function AdminProductionRequestContent() {
           const data = requestDoc.data();
           
           setIsEditMode(true);
+          setCurrentStatus(data.status || 'pending_review');
           setFormData({
             productName: data.productName || '',
             quantity: data.quantity?.toString() || '',
@@ -82,6 +87,9 @@ function AdminProductionRequestContent() {
             productionReason: data.productionReason || 'order',
             customerName: data.customerName || '',
             memo: data.memo || '',
+            plannedCompletionDate: data.plannedCompletionDate?.toDate().toISOString().split('T')[0] || '',
+            productionLine: data.productionLine || '',
+            actualCompletionDate: data.actualCompletionDate?.toDate().toISOString().split('T')[0] || '',
           });
         } else {
           setError('생산요청을 찾을 수 없습니다.');
@@ -246,15 +254,38 @@ function AdminProductionRequestContent() {
     try {
       if (isEditMode && requestId) {
         // 수정 모드
-        const productionRequestData = {
+        const productionRequestData: any = {
           productName: formData.productName.trim(),
           quantity: parseInt(formData.quantity, 10),
           requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
           productionReason: formData.productionReason,
-          customerName: formData.productionReason === 'order' ? formData.customerName.trim() : undefined,
-          memo: formData.memo.trim() || undefined,
           updatedAt: Timestamp.now(),
         };
+
+        // customerName은 주문인 경우에만 추가
+        if (formData.productionReason === 'order' && formData.customerName.trim()) {
+          productionRequestData.customerName = formData.customerName.trim();
+        }
+
+        // memo는 값이 있을 때만 추가
+        if (formData.memo.trim()) {
+          productionRequestData.memo = formData.memo.trim();
+        }
+
+        // 확정된 경우 완료예정일과 생산라인도 업데이트
+        if (currentStatus === 'confirmed') {
+          if (formData.plannedCompletionDate) {
+            productionRequestData.plannedCompletionDate = Timestamp.fromDate(new Date(formData.plannedCompletionDate));
+          }
+          if (formData.productionLine) {
+            productionRequestData.productionLine = formData.productionLine.trim();
+          }
+          // 생산완료일이 입력되면 상태를 완료로 변경
+          if (formData.actualCompletionDate) {
+            productionRequestData.actualCompletionDate = Timestamp.fromDate(new Date(formData.actualCompletionDate));
+            productionRequestData.status = 'completed';
+          }
+        }
 
         await updateDoc(doc(db, 'productionRequests', requestId), productionRequestData);
         setSuccess('생산요청이 성공적으로 수정되었습니다.');
@@ -267,7 +298,7 @@ function AdminProductionRequestContent() {
       } else {
         // 등록 모드 - 관리자는 모든 사용자 대신 등록 가능하지만, 실제 사용자 정보는 필요
         // 여기서는 관리자 정보를 사용하거나, 기본값 사용
-        const productionRequestData = {
+        const productionRequestData: any = {
           userId: 'admin', // 관리자 ID
           userName: '관리자',
           userEmail: 'admin@sglok.com',
@@ -276,13 +307,21 @@ function AdminProductionRequestContent() {
           requestDate: Timestamp.now(),
           requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
           productionReason: formData.productionReason,
-          customerName: formData.productionReason === 'order' ? formData.customerName.trim() : undefined,
-          memo: formData.memo.trim() || undefined,
           status: 'pending_review',
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
           createdBy: 'admin',
         };
+
+        // customerName은 주문인 경우에만 추가
+        if (formData.productionReason === 'order' && formData.customerName.trim()) {
+          productionRequestData.customerName = formData.customerName.trim();
+        }
+
+        // memo는 값이 있을 때만 추가
+        if (formData.memo.trim()) {
+          productionRequestData.memo = formData.memo.trim();
+        }
 
         await addDoc(collection(db, 'productionRequests'), productionRequestData);
         setSuccess('생산요청이 성공적으로 등록되었습니다.');
@@ -296,6 +335,9 @@ function AdminProductionRequestContent() {
         productionReason: 'order',
         customerName: '',
         memo: '',
+        plannedCompletionDate: '',
+        productionLine: '',
+        actualCompletionDate: '',
       });
 
       // 2초 후 목록 페이지로 이동
@@ -418,7 +460,7 @@ function AdminProductionRequestContent() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
               <label htmlFor="productionReason" className="block text-sm font-medium text-gray-700 mb-2">
-                생산이유 *
+                주문목적 *
               </label>
               <select
                 id="productionReason"
@@ -427,8 +469,8 @@ function AdminProductionRequestContent() {
                 onChange={handleChange}
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               >
-                <option value="order">주문</option>
-                <option value="inventory">재고</option>
+                <option value="order">고객 주문</option>
+                <option value="inventory">재고 준비</option>
               </select>
             </div>
 
@@ -472,6 +514,53 @@ function AdminProductionRequestContent() {
               </div>
             )}
           </div>
+
+          {/* 확정된 경우 완료예정일, 생산라인, 생산완료일 수정 가능 */}
+          {isEditMode && currentStatus === 'confirmed' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
+                  완료예정일
+                </label>
+                <input
+                  type="date"
+                  id="plannedCompletionDate"
+                  name="plannedCompletionDate"
+                  value={formData.plannedCompletionDate}
+                  onChange={handleChange}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                />
+              </div>
+              <div>
+                <label htmlFor="productionLine" className="block text-sm font-medium text-gray-700 mb-2">
+                  생산라인
+                </label>
+                <input
+                  type="text"
+                  id="productionLine"
+                  name="productionLine"
+                  value={formData.productionLine}
+                  onChange={handleChange}
+                  placeholder="생산라인을 입력하세요 (예: 라인1, 라인2)"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                />
+              </div>
+              <div>
+                <label htmlFor="actualCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
+                  생산완료일
+                </label>
+                <input
+                  type="date"
+                  id="actualCompletionDate"
+                  name="actualCompletionDate"
+                  value={formData.actualCompletionDate}
+                  onChange={handleChange}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                />
+                <p className="mt-1 text-xs text-gray-500">생산완료일을 입력하면 상태가 완료로 변경됩니다.</p>
+              </div>
+            </div>
+          )}
 
           <div>
             <label htmlFor="memo" className="block text-sm font-medium text-gray-700 mb-2">

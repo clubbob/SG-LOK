@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { collection, query, getDocs, Timestamp, onSnapshot, orderBy, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, Timestamp, onSnapshot, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionRequest, ProductionRequestStatus } from '@/types';
 import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
@@ -35,9 +35,9 @@ const checkAdminAuth = (): boolean => {
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   pending_review: '검토 대기',
-  confirmed: '확정',
+  confirmed: '계획 확정',
   in_progress: '진행 중',
-  completed: '완료',
+  completed: '생산 완료',
   cancelled: '취소',
 };
 
@@ -59,6 +59,14 @@ export default function AdminProductionPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
+  const [approvingRequest, setApprovingRequest] = useState<ProductionRequest | null>(null);
+  const [approvalForm, setApprovalForm] = useState({
+    plannedCompletionDate: '',
+    productionLine: '',
+  });
+  const [approving, setApproving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredRequests, setFilteredRequests] = useState<ProductionRequest[]>([]);
 
   useEffect(() => {
     // 관리자 세션 확인
@@ -121,17 +129,96 @@ export default function AdminProductionPage() {
     return () => unsubscribeSnapshot();
   }, [router]);
 
+  // 검색 필터링
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredRequests(requests);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase().trim();
+    const filtered = requests.filter((request) => {
+      const productName = request.productName?.toLowerCase() || '';
+      const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
+      const customerName = request.customerName?.toLowerCase() || '';
+      const productionLine = request.productionLine?.toLowerCase() || '';
+      const userName = request.userName?.toLowerCase() || '';
+
+      return (
+        productName.includes(query) ||
+        productionReason.includes(query) ||
+        customerName.includes(query) ||
+        productionLine.includes(query) ||
+        userName.includes(query)
+      );
+    });
+
+    setFilteredRequests(filtered);
+    setCurrentPage(1); // 검색 시 첫 페이지로 리셋
+  }, [searchQuery, requests]);
+
   // 페이지네이션
   useEffect(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
-    setDisplayedRequests(requests.slice(startIndex, endIndex));
-  }, [requests, currentPage, itemsPerPage]);
+    setDisplayedRequests(filteredRequests.slice(startIndex, endIndex));
+  }, [filteredRequests, currentPage, itemsPerPage]);
 
-  const totalPages = Math.ceil(requests.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
 
   const handleEdit = (request: ProductionRequest) => {
-    router.push(`/production/request?id=${request.id}`);
+    router.push(`/admin/production/request?id=${request.id}`);
+  };
+
+  const handleApprove = (request: ProductionRequest) => {
+    setApprovingRequest(request);
+    // 기존 값이 있으면 설정
+    setApprovalForm({
+      plannedCompletionDate: request.plannedCompletionDate 
+        ? formatDateShort(request.plannedCompletionDate).replace(/\//g, '-')
+        : '',
+      productionLine: request.productionLine || '',
+    });
+  };
+
+  const handleApproveSubmit = async () => {
+    if (!approvingRequest) return;
+
+    if (!approvalForm.plannedCompletionDate.trim()) {
+      setError('완료예정일을 입력해주세요.');
+      return;
+    }
+
+    if (!approvalForm.productionLine.trim()) {
+      setError('생산라인을 입력해주세요.');
+      return;
+    }
+
+    setApproving(true);
+    setError('');
+
+    try {
+      const plannedCompletionDate = Timestamp.fromDate(new Date(approvalForm.plannedCompletionDate));
+      
+      await updateDoc(doc(db, 'productionRequests', approvingRequest.id), {
+        status: 'confirmed',
+        productionLine: approvalForm.productionLine.trim(),
+        plannedCompletionDate: plannedCompletionDate,
+        updatedAt: Timestamp.now(),
+        updatedBy: 'admin',
+      });
+
+      // 모달 닫기
+      setApprovingRequest(null);
+      setApprovalForm({ plannedCompletionDate: '', productionLine: '' });
+      // 실시간 업데이트로 자동 새로고침됨
+    } catch (error) {
+      console.error('생산요청 승인 오류:', error);
+      const firebaseError = error as { code?: string; message?: string };
+      setError(`생산요청 승인에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+    } finally {
+      setApproving(false);
+    }
   };
 
   const handleDelete = async (request: ProductionRequest) => {
@@ -165,11 +252,31 @@ export default function AdminProductionPage() {
     );
   }
 
+  const handleRefresh = () => {
+    setLoadingRequests(true);
+    setError('');
+    // 페이지 새로고침
+    window.location.reload();
+  };
+
   return (
     <div className="p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">생산요청 목록</h1>
-        <p className="text-gray-600 mt-2">전체 생산요청을 확인하고 관리할 수 있습니다</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 whitespace-nowrap">생산요청 목록</h1>
+          <p className="text-gray-600 mt-2">전체 생산요청을 확인하고 관리할 수 있습니다</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={loadingRequests}
+        >
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          새로고침
+        </Button>
       </div>
 
       {error && (
@@ -182,6 +289,37 @@ export default function AdminProductionPage() {
           </div>
         </div>
       )}
+
+      {/* 검색 입력 필드 */}
+      <div className="mb-6">
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="제품명, 주문목적, 고객사명, 생산라인, 요청자로 검색..."
+            className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+          />
+          <svg
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
 
       {requests.length === 0 ? (
         <div className="bg-white rounded-lg shadow-sm p-12 text-center">
@@ -200,11 +338,11 @@ export default function AdminProductionPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       제품명
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       수량
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      생산이유
+                      주문목적
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       고객사명
@@ -212,8 +350,17 @@ export default function AdminProductionPage() {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       등록일
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
                       완료요청일
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                      완료예정일
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                      생산완료일
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                      생산라인
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       요청자
@@ -239,11 +386,11 @@ export default function AdminProductionPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{request.quantity.toLocaleString()}개</div>
+                        <div className="text-sm text-gray-900 whitespace-nowrap">{request.quantity.toLocaleString()}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {request.productionReason === 'order' ? '주문' : '재고'}
+                          {request.productionReason === 'order' ? '고객 주문' : '재고 준비'}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -254,15 +401,63 @@ export default function AdminProductionPage() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{formatDateShort(request.requestDate)}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4">
                         <div className="text-sm text-gray-900">
                           {(() => {
                             const requestDate = new Date(request.requestDate);
                             const completionDate = new Date(request.requestedCompletionDate);
                             const diffTime = completionDate.getTime() - requestDate.getTime();
                             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                            return `${formatDateShort(request.requestedCompletionDate)} (+${diffDays}일)`;
+                            return (
+                              <>
+                                <div>{formatDateShort(request.requestedCompletionDate)}</div>
+                                <div className="text-xs text-gray-500">(+{diffDays})</div>
+                              </>
+                            );
                           })()}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900">
+                          {request.plannedCompletionDate 
+                            ? (() => {
+                                const requestDate = new Date(request.requestDate);
+                                const plannedDate = new Date(request.plannedCompletionDate);
+                                const diffTime = plannedDate.getTime() - requestDate.getTime();
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                return (
+                                  <>
+                                    <div>{formatDateShort(request.plannedCompletionDate)}</div>
+                                    <div className="text-xs text-gray-500">(+{diffDays})</div>
+                                  </>
+                                );
+                              })()
+                            : <span className="text-gray-400">-</span>
+                          }
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900">
+                          {request.actualCompletionDate 
+                            ? (() => {
+                                const requestDate = new Date(request.requestDate);
+                                const actualDate = new Date(request.actualCompletionDate);
+                                const diffTime = actualDate.getTime() - requestDate.getTime();
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                return (
+                                  <>
+                                    <div>{formatDateShort(request.actualCompletionDate)}</div>
+                                    <div className="text-xs text-gray-500">(+{diffDays})</div>
+                                  </>
+                                );
+                              })()
+                            : <span className="text-gray-400">-</span>
+                          }
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 whitespace-nowrap">
+                          {request.productionLine || <span className="text-gray-400">-</span>}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -277,7 +472,7 @@ export default function AdminProductionPage() {
                               onClick={() => setSelectedMemo({ id: request.id, memo: request.memo || '' })}
                               className="text-left hover:text-blue-600 transition-colors cursor-pointer whitespace-nowrap"
                             >
-                              {request.memo.length > 5 ? `${request.memo.substring(0, 5)}...` : request.memo}
+                              {request.memo.length > 2 ? `${request.memo.substring(0, 2)}...` : request.memo}
                             </button>
                           ) : (
                             <span className="text-gray-400">-</span>
@@ -291,10 +486,22 @@ export default function AdminProductionPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
+                          {request.status === 'pending_review' && (
+                            <>
+                              <button
+                                onClick={() => handleApprove(request)}
+                                className="text-green-600 hover:text-green-800 text-sm font-medium"
+                                disabled={deletingId === request.id || approving}
+                              >
+                                승인
+                              </button>
+                              <span className="text-gray-300">|</span>
+                            </>
+                          )}
                           <button
                             onClick={() => handleEdit(request)}
                             className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                            disabled={deletingId === request.id}
+                            disabled={deletingId === request.id || approving}
                           >
                             수정
                           </button>
@@ -302,7 +509,7 @@ export default function AdminProductionPage() {
                           <button
                             onClick={() => handleDelete(request)}
                             className="text-red-600 hover:text-red-800 text-sm font-medium"
-                            disabled={deletingId === request.id}
+                            disabled={deletingId === request.id || approving}
                           >
                             {deletingId === request.id ? '삭제 중...' : '삭제'}
                           </button>
@@ -319,15 +526,31 @@ export default function AdminProductionPage() {
           {totalPages > 1 && (
             <div className="mt-6 flex items-center justify-between">
               <div className="text-sm text-gray-700">
-                전체 <span className="font-medium">{requests.length}</span>건 중{' '}
-                <span className="font-medium">
-                  {(currentPage - 1) * itemsPerPage + 1}
-                </span>
-                -
-                <span className="font-medium">
-                  {Math.min(currentPage * itemsPerPage, requests.length)}
-                </span>
-                건 표시
+                {searchQuery ? (
+                  <>
+                    검색 결과 <span className="font-medium">{filteredRequests.length}</span>건 중{' '}
+                    <span className="font-medium">
+                      {(currentPage - 1) * itemsPerPage + 1}
+                    </span>
+                    -
+                    <span className="font-medium">
+                      {Math.min(currentPage * itemsPerPage, filteredRequests.length)}
+                    </span>
+                    건 표시 (전체 {requests.length}건)
+                  </>
+                ) : (
+                  <>
+                    전체 <span className="font-medium">{filteredRequests.length}</span>건 중{' '}
+                    <span className="font-medium">
+                      {(currentPage - 1) * itemsPerPage + 1}
+                    </span>
+                    -
+                    <span className="font-medium">
+                      {Math.min(currentPage * itemsPerPage, filteredRequests.length)}
+                    </span>
+                    건 표시
+                  </>
+                )}
               </div>
               <div className="flex gap-2">
                 <Button
@@ -365,6 +588,88 @@ export default function AdminProductionPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* 승인 모달 */}
+      {approvingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30" onClick={() => setApprovingRequest(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h3 className="text-lg font-semibold text-gray-900">생산요청 승인</h3>
+              <button
+                onClick={() => {
+                  setApprovingRequest(null);
+                  setApprovalForm({ plannedCompletionDate: '', productionLine: '' });
+                  setError('');
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={approving}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">제품명: <span className="font-medium text-gray-900">{approvingRequest.productName}</span></p>
+                  <p className="text-sm text-gray-600">수량: <span className="font-medium text-gray-900">{approvingRequest.quantity.toLocaleString()}</span></p>
+                </div>
+                <div>
+                  <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
+                    완료예정일 *
+                  </label>
+                  <input
+                    type="date"
+                    id="plannedCompletionDate"
+                    value={approvalForm.plannedCompletionDate}
+                    onChange={(e) => setApprovalForm({ ...approvalForm, plannedCompletionDate: e.target.value })}
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    disabled={approving}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="productionLine" className="block text-sm font-medium text-gray-700 mb-2">
+                    생산라인 *
+                  </label>
+                  <input
+                    type="text"
+                    id="productionLine"
+                    value={approvalForm.productionLine}
+                    onChange={(e) => setApprovalForm({ ...approvalForm, productionLine: e.target.value })}
+                    placeholder="생산라인을 입력하세요 (예: 라인1, 라인2)"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    disabled={approving}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 sticky bottom-0 bg-white">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setApprovingRequest(null);
+                  setApprovalForm({ plannedCompletionDate: '', productionLine: '' });
+                  setError('');
+                }}
+                disabled={approving}
+              >
+                취소
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleApproveSubmit}
+                disabled={approving}
+                loading={approving}
+              >
+                저장
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 비고 상세 모달 */}

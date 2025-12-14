@@ -454,9 +454,9 @@ function ProductionCalendarContent() {
           <div className="mb-4 bg-white rounded-lg shadow-sm p-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">상태 범례</h3>
             <div className="flex flex-wrap gap-4">
-              {Object.entries(STATUS_LABELS)
-                .filter(([status]) => status !== 'cancelled')
-                .map(([status, label]) => (
+          {Object.entries(STATUS_LABELS)
+            .filter(([status]) => status !== 'cancelled' && status !== 'in_progress')
+            .map(([status, label]) => (
                   <div key={status} className="flex items-center gap-2">
                     <div className={`w-4 h-4 rounded ${STATUS_COLORS[status as ProductionRequestStatus]}`}></div>
                     <span className="text-sm text-gray-700">{label}</span>

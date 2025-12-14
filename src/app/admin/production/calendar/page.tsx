@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, query, orderBy, onSnapshot, Timestamp as FirestoreTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionRequest, ProductionRequestStatus } from '@/types';
@@ -63,6 +63,7 @@ export default function AdminProductionCalendarPage() {
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date; end: Date }>(() => {
     const today = new Date();
     // 한국 시간 기준으로 날짜 생성
@@ -354,7 +355,21 @@ export default function AdminProductionCalendarPage() {
     return (taskDays / daysBetween) * containerWidth;
   };
 
-  const tasks = convertToGanttTasks(requests);
+  // 검색 필터링 (제품명, 요청자로 검색)
+  const filteredRequests = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return requests;
+    }
+
+    const query = searchQuery.toLowerCase().trim();
+    return requests.filter((request) => {
+      const productName = request.productName?.toLowerCase() || '';
+      const userName = request.userName?.toLowerCase() || '';
+      return productName.includes(query) || userName.includes(query);
+    });
+  }, [searchQuery, requests]);
+
+  const tasks = convertToGanttTasks(filteredRequests);
   const tasksByLine = groupByLine(tasks);
   const lines = Object.keys(tasksByLine).sort();
 
@@ -430,6 +445,37 @@ export default function AdminProductionCalendarPage() {
           {error}
         </div>
       )}
+
+      {/* 검색 입력 필드 */}
+      <div className="mb-4">
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="제품명, 요청자로 검색..."
+            className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+          />
+          <svg
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* 날짜 네비게이션 */}
       <div className="mb-4 flex items-center justify-between bg-white rounded-lg shadow-sm p-4">
@@ -588,14 +634,14 @@ export default function AdminProductionCalendarPage() {
                 const lineTasks = tasksByLine[line];
                 return (
                   <div key={line} className="border-b border-gray-200">
-                    <div className="flex relative" style={{ minHeight: `${Math.max(80, lineTasks.length * 80)}px` }}>
+                    <div className="flex relative" style={{ minHeight: `${Math.max(60, lineTasks.length * 50 + 16)}px` }}>
                       {/* 라인 이름 */}
                       <div className="w-24 border-r border-gray-200 px-3 py-2 bg-gray-50 flex items-center sticky left-0 z-20">
                         <span className="font-semibold text-sm text-gray-900 whitespace-nowrap">{line}</span>
                       </div>
 
                       {/* 태스크 바 영역 */}
-                      <div className="flex-1 relative" style={{ minHeight: `${Math.max(80, lineTasks.length * 80)}px` }}>
+                      <div className="flex-1 relative" style={{ minHeight: `${Math.max(60, lineTasks.length * 50 + 16)}px` }}>
                         {lineTasks.map((task, taskIdx) => {
                           // 한국 시간 기준으로 날짜 정규화
                           const taskStartDate = normalizeToKST(task.start);
@@ -606,8 +652,8 @@ export default function AdminProductionCalendarPage() {
                           const width = Math.max(getDateWidth(taskStartDate, taskEndDate), 50);
                           const isOverdue = task.end < new Date() && task.status !== 'completed';
 
-                          // 같은 라인에 여러 태스크가 있을 때 세로로 배치 (각 태스크마다 80px 간격)
-                          const topOffset = taskIdx * 80 + 2;
+                          // 같은 라인에 여러 태스크가 있을 때 세로로 배치 (각 태스크마다 50px 간격, 상단 여백 8px)
+                          const topOffset = taskIdx * 50 + 8;
 
                           // 디버깅: 태스크 정보 로그
                           console.log(`태스크 렌더링: ${task.productName}, 시작: ${formatDateShort(taskStartDate)}, 종료: ${formatDateShort(taskEndDate)}, x: ${x}, width: ${width}, top: ${topOffset}`);
@@ -624,7 +670,7 @@ export default function AdminProductionCalendarPage() {
                               }}
                             >
                               <div
-                                className={`${STATUS_COLORS[task.status]} text-white rounded px-2 py-1 text-xs shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
+                                className={`${STATUS_COLORS[task.status]} text-white rounded px-2 py-2 text-xs shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
                                   isOverdue ? 'ring-2 ring-red-500' : ''
                                 }`}
                                 title={`${task.productName} (${task.quantity.toLocaleString()}) - ${task.userName} - ${STATUS_LABELS[task.status]} - ${formatDateShort(task.start)} ~ ${formatDateShort(task.end)}`}

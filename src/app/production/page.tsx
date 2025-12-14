@@ -75,19 +75,21 @@ export default function ProductionPage() {
               </div>
             </Link>
 
-            <div className="bg-white rounded-lg shadow-sm p-6 border-2 border-gray-200">
-              <div className="flex items-center gap-4">
-                <div className="bg-gray-100 rounded-lg p-3">
-                  <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-gray-900">생산일정 캘린더</h2>
-                  <p className="text-sm text-gray-400">준비 중</p>
+            <Link href="/production/calendar">
+              <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer border-2 border-transparent hover:border-blue-500">
+                <div className="flex items-center gap-4">
+                  <div className="bg-blue-100 rounded-lg p-3">
+                    <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">생산일정 캘린더</h2>
+                    <p className="text-sm text-gray-600">생산 일정을 간트 차트 형식으로 확인합니다</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            </Link>
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">

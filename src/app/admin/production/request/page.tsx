@@ -272,8 +272,8 @@ function AdminProductionRequestContent() {
           productionRequestData.memo = formData.memo.trim();
         }
 
-        // 확정된 경우 완료예정일과 생산라인도 업데이트
-        if (currentStatus === 'confirmed') {
+        // 확정된 경우 또는 완료된 경우 완료예정일과 생산라인도 업데이트
+        if (currentStatus === 'confirmed' || currentStatus === 'completed') {
           if (formData.plannedCompletionDate) {
             productionRequestData.plannedCompletionDate = Timestamp.fromDate(new Date(formData.plannedCompletionDate));
           }
@@ -284,6 +284,9 @@ function AdminProductionRequestContent() {
           if (formData.actualCompletionDate) {
             productionRequestData.actualCompletionDate = Timestamp.fromDate(new Date(formData.actualCompletionDate));
             productionRequestData.status = 'completed';
+          } else if (currentStatus === 'completed' && !formData.actualCompletionDate) {
+            // 생산완료 상태인데 생산완료일이 삭제되면 상태를 확정으로 변경
+            productionRequestData.status = 'confirmed';
           }
         }
 
@@ -515,8 +518,8 @@ function AdminProductionRequestContent() {
             )}
           </div>
 
-          {/* 확정된 경우 완료예정일, 생산라인, 생산완료일 수정 가능 */}
-          {isEditMode && currentStatus === 'confirmed' && (
+          {/* 확정된 경우 또는 완료된 경우 완료예정일, 생산라인, 생산완료일 수정 가능 */}
+          {isEditMode && (currentStatus === 'confirmed' || currentStatus === 'completed') && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">

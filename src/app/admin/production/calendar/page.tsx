@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { collection, query, getDocs, orderBy, Timestamp, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, Timestamp as FirestoreTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionRequest, ProductionRequestStatus } from '@/types';
 import { formatDateShort } from '@/lib/utils';
@@ -89,7 +89,7 @@ export default function AdminProductionCalendarPage() {
         snapshot.forEach((doc) => {
           const data = doc.data();
           // Firestore Timestamp를 Date로 변환 (로컬 시간 사용)
-          const convertFirestoreDate = (timestamp: any): Date | undefined => {
+          const convertFirestoreDate = (timestamp: FirestoreTimestamp | null | undefined): Date | undefined => {
             if (!timestamp) return undefined;
             return timestamp.toDate();
           };
@@ -229,12 +229,6 @@ export default function AdminProductionCalendarPage() {
     return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
   };
 
-  // 날짜를 날짜만 비교하는 헬퍼 함수
-  const isSameDate = (date1: Date, date2: Date): boolean => {
-    return date1.getFullYear() === date2.getFullYear() &&
-           date1.getMonth() === date2.getMonth() &&
-           date1.getDate() === date2.getDate();
-  };
 
   // 날짜를 한국 시간 기준으로 정규화
   const normalizeToKST = (date: Date): Date => {
@@ -371,6 +365,7 @@ export default function AdminProductionCalendarPage() {
     currentTasks.forEach((task) => {
       console.log(`- ${task.productName}: ${formatDateShort(task.start)} ~ ${formatDateShort(task.end)}, 상태: ${task.status}, 라인: ${task.productionLine}`);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requests]);
 
   // 이전/다음 달 이동
@@ -589,7 +584,7 @@ export default function AdminProductionCalendarPage() {
               </div>
 
               {/* 라인별 태스크 */}
-              {lines.map((line, lineIdx) => {
+              {lines.map((line) => {
                 const lineTasks = tasksByLine[line];
                 return (
                   <div key={line} className="border-b border-gray-200">

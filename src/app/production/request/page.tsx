@@ -5,9 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button, Input } from '@/components/ui';
-import { collection, addDoc, Timestamp, getDocs, query, orderBy, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, getDocs, query, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { ProductionRequest, ProductionReason } from '@/types';
+import { ProductionReason } from '@/types';
 
 function ProductionRequestContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
@@ -237,7 +237,7 @@ function ProductionRequestContent() {
     try {
       if (isEditMode && requestId) {
         // 수정 모드
-        const productionRequestData: any = {
+        const productionRequestData: Record<string, unknown> = {
           productName: formData.productName.trim(),
           quantity: parseInt(formData.quantity, 10),
           requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
@@ -265,7 +265,7 @@ function ProductionRequestContent() {
         return;
       } else {
         // 등록 모드
-        const productionRequestData: any = {
+        const productionRequestData: Record<string, unknown> = {
           userId: userProfile.id,
           userName: userProfile.name,
           userEmail: userProfile.email,

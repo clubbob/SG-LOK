@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { collection, addDoc, Timestamp, getDocs, query, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { ProductionRequest, ProductionReason } from '@/types';
+import { ProductionReason } from '@/types';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -254,7 +254,7 @@ function AdminProductionRequestContent() {
     try {
       if (isEditMode && requestId) {
         // 수정 모드
-        const productionRequestData: any = {
+        const productionRequestData: Record<string, unknown> = {
           productName: formData.productName.trim(),
           quantity: parseInt(formData.quantity, 10),
           requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
@@ -298,7 +298,7 @@ function AdminProductionRequestContent() {
       } else {
         // 등록 모드 - 관리자는 모든 사용자 대신 등록 가능하지만, 실제 사용자 정보는 필요
         // 여기서는 관리자 정보를 사용하거나, 기본값 사용
-        const productionRequestData: any = {
+        const productionRequestData: Record<string, unknown> = {
           userId: 'admin', // 관리자 ID
           userName: '관리자',
           userEmail: 'admin@sglok.com',

@@ -54,6 +54,7 @@ export interface ProductionRequest {
   // 기본 정보
   productName: string; // 제품명 (자유 입력, 임시 정보)
   quantity: number; // 수량
+  orderQuantity?: number; // 수주수량 (생산목적이 주문인 경우)
   requestDate: Date; // 생산요청일
   requestedCompletionDate: Date; // 완료요청일
   productionReason: ProductionReason; // 생산이유

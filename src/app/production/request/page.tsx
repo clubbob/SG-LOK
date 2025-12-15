@@ -23,6 +23,7 @@ function ProductionRequestContent() {
   const [formData, setFormData] = useState({
     productName: '',
     quantity: '',
+    orderQuantity: '',
     requestedCompletionDate: '',
     productionReason: 'order' as ProductionReason,
     customerName: '',
@@ -63,6 +64,7 @@ function ProductionRequestContent() {
           setFormData({
             productName: data.productName || '',
             quantity: data.quantity?.toString() || '',
+          orderQuantity: data.orderQuantity?.toString() || '',
             requestedCompletionDate: data.requestedCompletionDate?.toDate().toISOString().split('T')[0] || '',
             productionReason: data.productionReason || 'order',
             customerName: data.customerName || '',
@@ -135,7 +137,13 @@ function ProductionRequestContent() {
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
+    const { name } = e.target;
+    let { value } = e.target;
+
+    // 제품명은 영문 입력 시 대문자로 변환
+    if (name === 'productName') {
+      value = value.toUpperCase();
+    }
     setFormData({
       ...formData,
       [name]: value
@@ -191,19 +199,37 @@ function ProductionRequestContent() {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
+    // 1) 제품명
     if (!formData.productName.trim()) {
       errors.productName = '제품명을 입력해주세요.';
     }
 
-    if (!formData.quantity.trim()) {
-      errors.quantity = '수량을 입력해주세요.';
-    } else {
-      const quantityNum = parseInt(formData.quantity, 10);
-      if (isNaN(quantityNum) || quantityNum <= 0) {
-        errors.quantity = '수량은 1 이상의 숫자여야 합니다.';
+    // 2) 생산목적이 주문인 경우 고객사명/수주량 필수
+    if (formData.productionReason === 'order') {
+      if (!formData.customerName.trim()) {
+        errors.customerName = '고객사명을 입력해주세요.';
+      }
+      if (!formData.orderQuantity.trim()) {
+        errors.orderQuantity = '수주수량을 입력해주세요.';
+      } else {
+        const orderQtyNum = parseInt(formData.orderQuantity, 10);
+        if (isNaN(orderQtyNum) || orderQtyNum <= 0) {
+          errors.orderQuantity = '수주수량은 1 이상의 숫자여야 합니다.';
+        }
       }
     }
 
+    // 3) 생산수량
+    if (!formData.quantity.trim()) {
+      errors.quantity = '생산수량을 입력해주세요.';
+    } else {
+      const quantityNum = parseInt(formData.quantity, 10);
+      if (isNaN(quantityNum) || quantityNum <= 0) {
+        errors.quantity = '생산수량은 1 이상의 숫자여야 합니다.';
+      }
+    }
+
+    // 4) 완료요청일
     if (!formData.requestedCompletionDate) {
       errors.requestedCompletionDate = '완료요청일을 선택해주세요.';
     } else {
@@ -240,6 +266,9 @@ function ProductionRequestContent() {
         const productionRequestData: Record<string, unknown> = {
           productName: formData.productName.trim(),
           quantity: parseInt(formData.quantity, 10),
+          orderQuantity: formData.productionReason === 'order' && formData.orderQuantity.trim()
+            ? parseInt(formData.orderQuantity, 10)
+            : null,
           requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
           productionReason: formData.productionReason,
           updatedAt: Timestamp.now(),
@@ -248,6 +277,12 @@ function ProductionRequestContent() {
         // customerName은 주문인 경우에만 추가
         if (formData.productionReason === 'order' && formData.customerName.trim()) {
           productionRequestData.customerName = formData.customerName.trim();
+        }
+        if (formData.productionReason === 'order' && formData.orderQuantity.trim()) {
+          productionRequestData.orderQuantity = parseInt(formData.orderQuantity, 10);
+        }
+        if (formData.productionReason === 'order' && formData.orderQuantity.trim()) {
+          productionRequestData.orderQuantity = parseInt(formData.orderQuantity, 10);
         }
 
         // memo는 값이 있을 때만 추가
@@ -272,6 +307,10 @@ function ProductionRequestContent() {
           userCompany: userProfile.company,
           productName: formData.productName.trim(),
           quantity: parseInt(formData.quantity, 10),
+          orderQuantity:
+            formData.productionReason === 'order' && formData.orderQuantity.trim()
+              ? parseInt(formData.orderQuantity, 10)
+              : null,
           requestDate: Timestamp.now(), // 시스템에서 자동으로 현재 날짜 기록
           requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
           productionReason: formData.productionReason,
@@ -305,6 +344,7 @@ function ProductionRequestContent() {
       setFormData({
         productName: '',
         quantity: '',
+        orderQuantity: '',
         requestedCompletionDate: '',
         productionReason: 'order',
         customerName: '',
@@ -394,41 +434,10 @@ function ProductionRequestContent() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <Input
-                  id="quantity"
-                  name="quantity"
-                  type="number"
-                  label="수량 *"
-                  value={formData.quantity}
-                  onChange={handleChange}
-                  placeholder="수량을 입력하세요"
-                  error={fieldErrors.quantity}
-                  min="1"
-                  required
-                />
-              </div>
-
-              <div>
-                <Input
-                  id="requestedCompletionDate"
-                  name="requestedCompletionDate"
-                  type="date"
-                  label="완료요청일 *"
-                  value={formData.requestedCompletionDate}
-                  onChange={handleChange}
-                  error={fieldErrors.requestedCompletionDate}
-                  min={new Date().toISOString().split('T')[0]}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="productionReason" className="block text-sm font-medium text-gray-700 mb-2">
-                  주문목적 *
+              <label htmlFor="productionReason" className="block text-sm font-medium text-gray-700 mb-2">
+                생산목적 *
                 </label>
                 <select
                   id="productionReason"
@@ -442,7 +451,7 @@ function ProductionRequestContent() {
                 </select>
               </div>
 
-              {formData.productionReason === 'order' && (
+            {formData.productionReason === 'order' && (
                 <div className="relative">
                   <Input
                     id="customerName"
@@ -481,6 +490,54 @@ function ProductionRequestContent() {
                   )}
                 </div>
               )}
+
+            {formData.productionReason === 'order' && (
+              <div>
+                <Input
+                  id="orderQuantity"
+                  name="orderQuantity"
+                  type="number"
+                  label="수주수량 *"
+                  value={formData.orderQuantity}
+                  onChange={handleChange}
+                  placeholder="수주수량을 입력하세요"
+                  error={fieldErrors.orderQuantity}
+                  min="1"
+                  required
+                />
+              </div>
+            )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <Input
+                  id="quantity"
+                  name="quantity"
+                  type="number"
+                label="생산수량 *"
+                  value={formData.quantity}
+                  onChange={handleChange}
+                placeholder="생산수량을 입력하세요"
+                  error={fieldErrors.quantity}
+                  min="1"
+                  required
+                />
+              </div>
+
+              <div>
+                <Input
+                  id="requestedCompletionDate"
+                  name="requestedCompletionDate"
+                  type="date"
+                  label="완료요청일 *"
+                  value={formData.requestedCompletionDate}
+                  onChange={handleChange}
+                  error={fieldErrors.requestedCompletionDate}
+                  min={new Date().toISOString().split('T')[0]}
+                  required
+                />
+              </div>
             </div>
 
             <div>

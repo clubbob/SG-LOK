@@ -156,9 +156,27 @@ function ProductionCalendarContent() {
           // 종료일을 한국 시간 기준으로 정규화
           endDate = normalizeToKST(requestedEnd);
           productionLine = '검토 대기';
+        } else if (req.status === 'confirmed' || req.status === 'in_progress') {
+          // 계획 확정/진행 중: 등록일 ~ 완료예정일
+          const requestStart = req.requestDate || req.createdAt || new Date();
+          startDate = normalizeToKST(requestStart);
+          const plannedEnd = req.plannedCompletionDate ||
+            req.requestedCompletionDate ||
+            (requestStart ? new Date(requestStart.getTime() + 30 * 24 * 60 * 60 * 1000) : new Date());
+          endDate = normalizeToKST(plannedEnd);
+          productionLine = req.productionLine || '미지정';
+        } else if (req.status === 'completed') {
+          // 생산완료: 등록일 ~ 생산완료일
+          const requestStart = req.requestDate || req.createdAt || new Date();
+          startDate = normalizeToKST(requestStart);
+          const actualEnd = req.actualCompletionDate ||
+            req.plannedCompletionDate ||
+            req.requestedCompletionDate ||
+            (requestStart ? new Date(requestStart.getTime() + 30 * 24 * 60 * 60 * 1000) : new Date());
+          endDate = normalizeToKST(actualEnd);
+          productionLine = req.productionLine || '미지정';
         } else {
-          // 확정된 요청: plannedStartDate가 있으면 사용, 없으면 plannedCompletionDate에서 7일 전
-          // plannedCompletionDate가 없으면 requestedCompletionDate 사용, 그것도 없으면 등록일 + 30일
+          // 그 외 상태: 기존 로직 유지
           const plannedEnd = req.plannedCompletionDate || 
             req.requestedCompletionDate || 
             (req.requestDate || req.createdAt 
@@ -310,7 +328,7 @@ function ProductionCalendarContent() {
     return (taskDays / daysBetween) * containerWidth;
   };
 
-  // 검색 필터링 (제품명, 요청자로 검색)
+  // 검색 필터링 (제품명, 요청자, 상태로 검색)
   const filteredRequests = useMemo(() => {
     if (!searchQuery.trim()) {
       return requests;
@@ -320,7 +338,12 @@ function ProductionCalendarContent() {
     return requests.filter((request) => {
       const productName = request.productName?.toLowerCase() || '';
       const userName = request.userName?.toLowerCase() || '';
-      return productName.includes(query) || userName.includes(query);
+      const statusLabel = STATUS_LABELS[request.status]?.toLowerCase() || request.status || '';
+      return (
+        productName.includes(query) ||
+        userName.includes(query) ||
+        statusLabel.includes(query)
+      );
     });
   }, [searchQuery, requests]);
 
@@ -407,7 +430,7 @@ function ProductionCalendarContent() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="제품명, 요청자로 검색..."
+                placeholder="제품명, 요청자, 상태로 검색..."
                 className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               />
               <svg

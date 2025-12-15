@@ -85,6 +85,13 @@ export default function AdminProductionPage() {
         const requestsData: ProductionRequest[] = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
+          const rawOrderQty = data.orderQuantity ?? data.orderqty ?? data.order_qty;
+          const parsedOrderQty =
+            typeof rawOrderQty === 'number'
+              ? rawOrderQty
+              : rawOrderQty
+              ? Number(rawOrderQty)
+              : undefined;
           requestsData.push({
             id: doc.id,
             userId: data.userId,
@@ -93,6 +100,7 @@ export default function AdminProductionPage() {
             userCompany: data.userCompany,
             productName: data.productName,
             quantity: data.quantity,
+            orderQuantity: parsedOrderQty,
             requestDate: data.requestDate?.toDate() || new Date(),
             requestedCompletionDate: data.requestedCompletionDate?.toDate() || new Date(),
             productionReason: data.productionReason,
@@ -143,13 +151,16 @@ export default function AdminProductionPage() {
       const customerName = request.customerName?.toLowerCase() || '';
       const productionLine = request.productionLine?.toLowerCase() || '';
       const userName = request.userName?.toLowerCase() || '';
+      const statusLabel = STATUS_LABELS[request.status]?.toLowerCase() || request.status || '';
 
       return (
         productName.includes(query) ||
         productionReason.includes(query) ||
         customerName.includes(query) ||
         productionLine.includes(query) ||
-        userName.includes(query)
+        userName.includes(query) ||
+        statusLabel.includes(query) ||
+        request.status.includes(query)
       );
     });
 
@@ -221,6 +232,79 @@ export default function AdminProductionPage() {
     }
   };
 
+  // 엑셀(CSV) 다운로드
+  const handleExportToExcel = () => {
+    if (filteredRequests.length === 0) {
+      return;
+    }
+
+    const escapeCSV = (value: string | number | null | undefined) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const headers = [
+      '번호',
+      '등록일',
+      '제품명',
+      '생산목적',
+      '고객사명',
+      '수주수량',
+      '생산수량',
+      '완료요청일',
+      '완료예정일',
+      '생산완료일',
+      '생산라인',
+      '요청자',
+      '비고',
+      '상태',
+    ];
+
+    const rows = filteredRequests.map((request, idx) => {
+      const rowNumber = filteredRequests.length - idx;
+      const productionReasonLabel = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
+      const statusLabel = STATUS_LABELS[request.status];
+
+      const requestedDateStr = request.requestedCompletionDate ? formatDateShort(request.requestedCompletionDate) : '';
+      const plannedDateStr = request.plannedCompletionDate ? formatDateShort(request.plannedCompletionDate) : '';
+      const actualDateStr = request.actualCompletionDate ? formatDateShort(request.actualCompletionDate) : '';
+      const requestDateStr = request.requestDate ? formatDateShort(request.requestDate) : '';
+
+      const cols = [
+        rowNumber,
+        requestDateStr,
+        request.productName,
+        productionReasonLabel,
+        request.customerName || '',
+        request.orderQuantity ?? '',
+        request.quantity,
+        requestedDateStr,
+        plannedDateStr,
+        actualDateStr,
+        request.productionLine || '',
+        request.userName || '',
+        request.memo || '',
+        statusLabel,
+      ];
+
+      return cols.map(escapeCSV).join(',');
+    });
+
+    const csvContent = [headers.map(escapeCSV).join(','), ...rows].join('\r\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    link.download = `admin_production_requests_${timestamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleDelete = async (request: ProductionRequest) => {
     if (!confirm(`정말로 "${request.productName}" 생산요청을 삭제하시겠습니까?`)) {
       return;
@@ -266,17 +350,30 @@ export default function AdminProductionPage() {
           <h1 className="text-2xl font-bold text-gray-900 whitespace-nowrap">생산요청 목록</h1>
           <p className="text-gray-600 mt-2">전체 생산요청을 확인하고 관리할 수 있습니다</p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRefresh}
-          disabled={loadingRequests}
-        >
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          새로고침
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={loadingRequests}
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            새로고침
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportToExcel}
+            disabled={loadingRequests || filteredRequests.length === 0}
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16v4H4m4 4h8m-8 4h5m-1 4l-3-3h6l-3 3z" />
+            </svg>
+            엑셀 다운로드
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -297,7 +394,7 @@ export default function AdminProductionPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="제품명, 주문목적, 고객사명, 생산라인, 요청자로 검색..."
+            placeholder="제품명, 생산목적, 고객사명, 생산라인, 요청자, 상태 검색..."
             className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
           />
           <svg
@@ -335,73 +432,60 @@ export default function AdminProductionPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      제품명
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      수량
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      주문목적
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      고객사명
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      등록일
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      완료요청일
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      완료예정일
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      생산완료일
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
-                      생산라인
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      요청자
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      비고
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      상태
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      관리
-                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품명</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산목적</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">고객사명</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수주수량</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산수량</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산완료일</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산라인</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">비고</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">상태</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">관리</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {displayedRequests.map((request) => (
+                  {displayedRequests.map((request, idx) => {
+                    const absoluteIndex = (currentPage - 1) * itemsPerPage + idx;
+                    const rowNumber = filteredRequests.length - absoluteIndex;
+                    return (
                     <tr key={request.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap text-center w-12">
+                        {rowNumber}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{formatDateShort(request.requestDate)}</div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{request.productName}</div>
-                        {request.itemName && (
-                          <div className="text-xs text-gray-500">({request.itemName})</div>
-                        )}
+                        {request.itemName && <div className="text-xs text-gray-500">({request.itemName})</div>}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 whitespace-nowrap">{request.quantity.toLocaleString()}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           {request.productionReason === 'order' ? '고객 주문' : '재고 준비'}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{request.customerName || '-'}</div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {request.customerName || '-'}
+                          {request.orderQuantity !== undefined && request.orderQuantity !== null
+                            ? request.orderQuantity.toLocaleString()
+                            : request.productionReason === 'order'
+                            ? request.quantity.toLocaleString()
+                            : '-'}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{formatDateShort(request.requestDate)}</div>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 whitespace-nowrap">{request.quantity.toLocaleString()}</div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 py-4">
                         <div className="text-sm text-gray-900">
                           {(() => {
                             const requestDate = new Date(request.requestDate);
@@ -417,55 +501,55 @@ export default function AdminProductionPage() {
                           })()}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 py-4">
                         <div className="text-sm text-gray-900">
-                          {request.plannedCompletionDate 
-                            ? (() => {
-                                const requestDate = new Date(request.requestDate);
-                                const plannedDate = new Date(request.plannedCompletionDate);
-                                const diffTime = plannedDate.getTime() - requestDate.getTime();
-                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                return (
-                                  <>
-                                    <div>{formatDateShort(request.plannedCompletionDate)}</div>
-                                    <div className="text-xs text-gray-500">(+{diffDays})</div>
-                                  </>
-                                );
-                              })()
-                            : <span className="text-gray-400">-</span>
-                          }
+                          {request.plannedCompletionDate ? (
+                            (() => {
+                              const requestDate = new Date(request.requestDate);
+                              const plannedDate = new Date(request.plannedCompletionDate);
+                              const diffTime = plannedDate.getTime() - requestDate.getTime();
+                              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                              return (
+                                <>
+                                  <div>{formatDateShort(request.plannedCompletionDate)}</div>
+                                  <div className="text-xs text-gray-500">(+{diffDays})</div>
+                                </>
+                              );
+                            })()
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 py-4">
                         <div className="text-sm text-gray-900">
-                          {request.actualCompletionDate 
-                            ? (() => {
-                                const requestDate = new Date(request.requestDate);
-                                const actualDate = new Date(request.actualCompletionDate);
-                                const diffTime = actualDate.getTime() - requestDate.getTime();
-                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                return (
-                                  <>
-                                    <div>{formatDateShort(request.actualCompletionDate)}</div>
-                                    <div className="text-xs text-gray-500">(+{diffDays})</div>
-                                  </>
-                                );
-                              })()
-                            : <span className="text-gray-400">-</span>
-                          }
+                          {request.actualCompletionDate ? (
+                            (() => {
+                              const requestDate = new Date(request.requestDate);
+                              const actualDate = new Date(request.actualCompletionDate);
+                              const diffTime = actualDate.getTime() - requestDate.getTime();
+                              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                              return (
+                                <>
+                                  <div>{formatDateShort(request.actualCompletionDate)}</div>
+                                  <div className="text-xs text-gray-500">(+{diffDays})</div>
+                                </>
+                              );
+                            })()
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900 whitespace-nowrap">
                           {request.productionLine || <span className="text-gray-400">-</span>}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {request.userName}
-                        </div>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{request.userName}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           {request.memo ? (
                             <button
@@ -479,12 +563,12 @@ export default function AdminProductionPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[request.status]}`}>
                           {STATUS_LABELS[request.status]}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           {request.status === 'pending_review' && (
                             <>
@@ -516,7 +600,8 @@ export default function AdminProductionPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -614,11 +699,11 @@ export default function AdminProductionPage() {
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-gray-600 mb-2">제품명: <span className="font-medium text-gray-900">{approvingRequest.productName}</span></p>
-                  <p className="text-sm text-gray-600">수량: <span className="font-medium text-gray-900">{approvingRequest.quantity.toLocaleString()}</span></p>
+                  <p className="text-sm text-gray-600">생산수량: <span className="font-medium text-gray-900">{approvingRequest.quantity.toLocaleString()}</span></p>
                 </div>
                 <div>
                   <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
-                    완료예정일 *
+                    완료예정일:
                   </label>
                   <input
                     type="date"
@@ -632,7 +717,7 @@ export default function AdminProductionPage() {
                 </div>
                 <div>
                   <label htmlFor="productionLine" className="block text-sm font-medium text-gray-700 mb-2">
-                    생산라인 *
+                    생산라인:
                   </label>
                   <input
                     type="text"

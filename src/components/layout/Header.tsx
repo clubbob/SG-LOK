@@ -11,6 +11,7 @@ export default function Header() {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isProdMenuOpen, setIsProdMenuOpen] = useState(false);
   
   // 로그인/회원가입 페이지에서는 메뉴를 완전히 숨김
   const isAuthPage = pathname === '/login' || pathname === '/signup';
@@ -58,17 +59,69 @@ export default function Header() {
 
           {/* 데스크톱 네비게이션 */}
           {!isAuthPage && (
-            <nav className="hidden md:flex items-center space-x-6">
-              <Link
-                href="/production"
-                className={`px-5 py-2.5 rounded-md text-base font-semibold transition-colors shadow-sm ${
-                  isActivePath('/production')
-                    ? 'bg-blue-700 text-white'
-                    : 'text-white hover:bg-blue-600 hover:text-white'
-                }`}
-              >
-                생산관리
-              </Link>
+            <nav className="hidden md:flex items-center space-x-4">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsProdMenuOpen((prev) => !prev)}
+                  className={`px-4 py-2.5 rounded-md text-base font-semibold transition-colors shadow-sm flex items-center gap-2 ${
+                    isActivePath('/production')
+                      ? 'bg-blue-700 text-white'
+                      : 'text-white hover:bg-blue-600 hover:text-white'
+                  }`}
+                >
+                  생산관리
+                  <svg
+                    className={`w-4 h-4 transition-transform ${isProdMenuOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {isProdMenuOpen && (
+                  <>
+                    {/* 배경 클릭 시 메뉴 닫기 */}
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setIsProdMenuOpen(false)}
+                    />
+                    <div className="absolute left-0 mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200 z-20">
+                      <div className="py-2">
+                        <Link
+                          href="/production"
+                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
+                          onClick={() => setIsProdMenuOpen(false)}
+                        >
+                          생산관리 메인
+                        </Link>
+                        <Link
+                          href="/production/request"
+                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
+                          onClick={() => setIsProdMenuOpen(false)}
+                        >
+                          생산요청 등록
+                        </Link>
+                        <Link
+                          href="/production/list"
+                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
+                          onClick={() => setIsProdMenuOpen(false)}
+                        >
+                          생산요청 목록
+                        </Link>
+                        <Link
+                          href="/production/calendar"
+                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
+                          onClick={() => setIsProdMenuOpen(false)}
+                        >
+                          생산일정 캘린더
+                        </Link>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </nav>
           )}
 
@@ -202,19 +255,63 @@ export default function Header() {
         {/* 모바일 메뉴 */}
         {isMobileMenuOpen && !isAuthPage && (
           <div className="md:hidden pb-4">
-            <nav className="flex flex-col space-y-2">
-              <Link
-                href="/production"
-                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
-                  isActivePath('/production')
-                    ? 'bg-blue-700 text-white'
-                    : 'text-white hover:bg-blue-600'
-                }`}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                생산관리
-              </Link>
-            </nav>
+          <nav className="flex flex-col space-y-2">
+            <Link
+              href="/production"
+              className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                isActivePath('/production')
+                  ? 'bg-blue-700 text-white'
+                  : 'text-white hover:bg-blue-600'
+              }`}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              생산관리 메인
+            </Link>
+            <Link
+              href="/production/request"
+              className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                isActivePath('/production/request')
+                  ? 'bg-blue-700 text-white'
+                  : 'text-white hover:bg-blue-600'
+              }`}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              생산요청 등록
+            </Link>
+            <Link
+              href="/production/list"
+              className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                isActivePath('/production/list')
+                  ? 'bg-blue-700 text-white'
+                  : 'text-white hover:bg-blue-600'
+              }`}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              생산요청 목록
+            </Link>
+            <Link
+              href="/production/calendar"
+              className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                isActivePath('/production/calendar')
+                  ? 'bg-blue-700 text-white'
+                  : 'text-white hover:bg-blue-600'
+              }`}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              생산일정 캘린더
+            </Link>
+            <Link
+              href="/production/request"
+              className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                isActivePath('/production/request')
+                  ? 'bg-blue-700 text-white'
+                  : 'text-white hover:bg-blue-600'
+              }`}
+              onClick={() => setIsMobileMenuOpen(false)}
+            >
+              생산요청 등록
+            </Link>
+          </nav>
           </div>
         )}
       </div>

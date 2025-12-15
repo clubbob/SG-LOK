@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 import { Button, Input } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -57,8 +58,27 @@ export default function LoginPage() {
     }
 
     try {
-      await signInWithEmailAndPassword(auth, formData.email, formData.password);
-      
+      const credential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
+
+      // 관리자 승인 여부 확인
+      try {
+        const userDoc = await getDoc(doc(db, 'users', credential.user.uid));
+        const data = userDoc.exists() ? userDoc.data() as { approved?: boolean } : null;
+
+        if (!data || data.approved === false) {
+          await auth.signOut();
+          setLoading(false);
+          setError('회원가입 신청이 접수되었습니다. 관리자가 승인을 완료한 후에 로그인할 수 있습니다.');
+          return;
+        }
+      } catch (profileError) {
+        console.error('승인 여부 확인 중 오류:', profileError);
+        await auth.signOut();
+        setLoading(false);
+        setError('로그인 중 오류가 발생했습니다. 잠시 후 다시 시도하거나 관리자에게 문의해주세요.');
+        return;
+      }
+
       // 이메일 저장 옵션이 체크되어 있으면 localStorage에 저장
       if (rememberEmail) {
         localStorage.setItem(SAVED_EMAIL_KEY, formData.email);

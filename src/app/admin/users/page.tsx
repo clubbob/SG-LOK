@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, orderBy, getDocs, onSnapshot, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, onSnapshot, Timestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { User } from '@/types';
 import { formatDateTime } from '@/lib/utils';
@@ -38,6 +38,7 @@ export default function AdminUsersPage() {
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const [displayedUsers, setDisplayedUsers] = useState<User[]>([]);
   const [itemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -57,10 +58,10 @@ export default function AdminUsersPage() {
       q,
       (querySnapshot) => {
         const usersData: User[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
+        querySnapshot.forEach((snapshotDoc) => {
+          const data = snapshotDoc.data();
           usersData.push({
-            id: doc.id,
+            id: snapshotDoc.id,
             name: data.name || '',
             email: data.email || '',
             company: data.company,
@@ -73,6 +74,7 @@ export default function AdminUsersPage() {
             currentRole: data.currentRole,
             createdAt: data.createdAt?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || new Date(),
+            approved: data.approved,
             deleted: data.deleted || false,
             deletedAt: data.deletedAt?.toDate(),
             deletedBy: data.deletedBy,
@@ -105,6 +107,48 @@ export default function AdminUsersPage() {
 
   const handleUserClick = (user: User) => {
     setSelectedUser(user);
+    setError('');
+    setSuccessMessage('');
+  };
+
+  const handleApproveUser = async () => {
+    if (!selectedUser) return;
+    try {
+      await updateDoc(doc(db, 'users', selectedUser.id), {
+        approved: true,
+        updatedAt: Timestamp.now(),
+      });
+      setSelectedUser({
+        ...selectedUser,
+        approved: true,
+        updatedAt: new Date(),
+      });
+      setUsers((prev) =>
+        prev.map((u) => (u.id === selectedUser.id ? { ...u, approved: true, updatedAt: new Date() } : u))
+      );
+      setError('');
+      setSuccessMessage('회원 승인이 완료되었습니다.');
+    } catch (err) {
+      console.error('회원 승인 오류:', err);
+      setSuccessMessage('');
+      setError('회원 승인 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+    if (!window.confirm(`정말로 "${selectedUser.name}" 회원을 삭제하시겠습니까?\n삭제 후에는 되돌릴 수 없습니다.`)) {
+      return;
+    }
+
+    try {
+      await deleteDoc(doc(db, 'users', selectedUser.id));
+      setUsers((prev) => prev.filter((u) => u.id !== selectedUser.id));
+      setSelectedUser(null);
+    } catch (err) {
+      console.error('회원 삭제 오류:', err);
+      setError('회원 삭제 중 오류가 발생했습니다.');
+    }
   };
 
   if (loadingUsers) {
@@ -126,6 +170,16 @@ export default function AdminUsersPage() {
             <h1 className="text-2xl font-bold text-gray-900">회원 관리</h1>
           </div>
 
+          {successMessage && (
+            <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-4">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <p className="text-sm font-medium">{successMessage}</p>
+              </div>
+            </div>
+          )}
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
               <div className="flex items-center gap-2">
@@ -165,9 +219,17 @@ export default function AdminUsersPage() {
                             <h3 className="font-semibold text-gray-900 text-sm truncate flex-1">
                               {user.name}
                             </h3>
-                            {user.deleted && (
+                            {user.deleted ? (
                               <span className="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded">
                                 삭제됨
+                              </span>
+                            ) : user.approved === false ? (
+                              <span className="text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded">
+                                승인 대기
+                              </span>
+                            ) : (
+                              <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
+                                승인 완료
                               </span>
                             )}
                           </div>
@@ -221,14 +283,26 @@ export default function AdminUsersPage() {
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 h-[calc(100vh-12rem)] overflow-y-auto">
                   <div className="mb-6">
                     <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-xl font-semibold text-gray-900">
-                        {selectedUser.name}
-                      </h2>
-                      {selectedUser.deleted && (
-                        <span className="text-sm text-red-600 bg-red-100 px-3 py-1 rounded">
-                          삭제된 회원
-                        </span>
-                      )}
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-xl font-semibold text-gray-900">
+                          {selectedUser.name}
+                        </h2>
+                        {selectedUser.approved === false && !selectedUser.deleted && (
+                          <span className="text-xs text-orange-700 bg-orange-100 px-2 py-0.5 rounded">
+                            승인 대기
+                          </span>
+                        )}
+                        {selectedUser.approved !== false && !selectedUser.deleted && (
+                          <span className="text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded">
+                            승인 완료
+                          </span>
+                        )}
+                        {selectedUser.deleted && (
+                          <span className="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded">
+                            삭제된 회원
+                          </span>
+                        )}
+                      </div>
                     </div>
                     
                     <div className="bg-gray-50 rounded-lg p-4 mb-4">
@@ -302,6 +376,22 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="flex justify-end gap-3">
+                    {selectedUser.approved === false && !selectedUser.deleted && (
+                      <Button
+                        variant="primary"
+                        size="md"
+                        onClick={handleApproveUser}
+                      >
+                        승인
+                      </Button>
+                    )}
+                    <Button
+                      variant="danger"
+                      size="md"
+                      onClick={handleDeleteUser}
+                    >
+                      삭제
+                    </Button>
                     <Button
                       variant="outline"
                       size="md"

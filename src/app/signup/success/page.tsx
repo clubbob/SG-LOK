@@ -100,6 +100,10 @@ export default function SignupSuccessPage() {
               <p className="text-lg text-gray-600 mb-6">
                 {userProfile?.name}님, SG-LOK Work Flow 에 오신 것을 환영합니다.
               </p>
+              <p className="text-sm text-gray-500">
+                회사 시스템의 특성상 관리자가 회원가입 정보를 확인한 후 승인을 완료해야 로그인하실 수 있습니다.
+                승인 완료 시까지는 로그인 시도 시에도 접속이 제한될 수 있습니다.
+              </p>
             </div>
           </div>
 

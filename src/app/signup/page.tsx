@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { Button, Input } from '@/components/ui';
@@ -266,6 +266,7 @@ export default function SignupPage() {
             businessNumber: formData.businessNumber.replace(/-/g, ''),
             phone: formData.phone.trim(),
             userTypes: [],
+            approved: false,
             createdAt: new Date(),
             updatedAt: new Date(),
           });
@@ -288,9 +289,50 @@ export default function SignupPage() {
       window.location.href = '/signup/success';
     } catch (error) {
       console.error('회원가입 오류:', error);
-      setLoading(false); // 에러 발생 시 즉시 로딩 해제
       
-      const firebaseError = error as { code?: string; message?: string };
+      let firebaseError = error as { code?: string; message?: string };
+
+      // 이미 존재하는 이메일인 경우: 삭제되었거나 기존 계정을 재사용하는 흐름 지원
+      if (firebaseError.code === 'auth/email-already-in-use') {
+        try {
+          // 동일 이메일과 비밀번호로 로그인 시도
+          const existingCredential = await signInWithEmailAndPassword(
+            auth,
+            formData.email.trim(),
+            formData.password
+          );
+
+          const existingUser = existingCredential.user;
+
+          // 기존/삭제된 계정을 재활성화하거나 정보 갱신
+          await setDoc(doc(db, 'users', existingUser.uid), {
+            id: existingUser.uid,
+            name: formData.name.trim(),
+            email: formData.email.trim(),
+            company: formData.company.trim(),
+            businessNumber: formData.businessNumber.replace(/-/g, ''),
+            phone: formData.phone.trim(),
+            userTypes: [],
+            approved: false,
+            deleted: false,
+            deletedAt: null,
+            deletedBy: null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }, { merge: true });
+
+          console.log('기존 계정 재가입/재활성화 완료');
+          setLoading(false);
+          window.location.href = '/signup/success';
+          return;
+        } catch (reactivateError) {
+          console.error('기존 계정 재가입 실패:', reactivateError);
+          firebaseError = reactivateError as { code?: string; message?: string };
+        }
+      }
+
+      setLoading(false); // 에러 발생 시 로딩 해제
+      
       let errorMessage = '';
       
       if (firebaseError.code === 'auth/email-already-in-use') {

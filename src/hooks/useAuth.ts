@@ -83,10 +83,12 @@ export function useAuth() {
     }
   };
 
+  const isAuthenticated = !!user && userProfile !== null && userProfile.approved !== false;
+
   return {
     user,
     userProfile,
-    isAuthenticated: !!user,
+    isAuthenticated,
     loading,
     signOut,
   };

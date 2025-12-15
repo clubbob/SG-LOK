@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -84,6 +86,7 @@ export default function AdminLayout({
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
+  const [pendingUserCount, setPendingUserCount] = useState<number>(0);
 
   // 로그인 페이지는 레이아웃 적용 안 함
   const isLoginPage = pathname === '/admin/login' || pathname?.startsWith('/admin/login');
@@ -113,6 +116,27 @@ export default function AdminLayout({
       setExpandedMenus(prev => new Set(prev).add('production'));
     }
   }, [router, pathname]);
+
+  // 승인 대기 회원 수 실시간 구독
+  useEffect(() => {
+    if (!isAdminAuthenticated) return;
+
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('approved', '==', false));
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        setPendingUserCount(snapshot.size);
+      },
+      (error) => {
+        console.error('승인 대기 회원 수 조회 오류:', error);
+        setPendingUserCount(0);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [isAdminAuthenticated]);
 
   const handleLogout = () => {
     localStorage.removeItem(ADMIN_SESSION_KEY);
@@ -207,7 +231,14 @@ export default function AdminLayout({
                       >
                         <div className="flex items-center gap-2">
                           {item.icon}
-                          <span className="text-sm">{item.label}</span>
+                          <span className="text-sm flex items-center gap-1">
+                            {item.label}
+                            {item.id === 'users' && pendingUserCount > 0 && (
+                              <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold">
+                                {pendingUserCount}
+                              </span>
+                            )}
+                          </span>
                         </div>
                         <svg
                           className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}

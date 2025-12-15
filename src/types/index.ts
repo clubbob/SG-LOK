@@ -12,6 +12,9 @@ export interface User {
   website?: string;
   userTypes: string[]; // 구매자/판매자 구분
   currentRole?: string; // 현재 선택된 역할
+  approved?: boolean; // 관리자 승인 여부 (기본 true, 신규 가입자는 false)
+  approvedAt?: Date;
+  approvedBy?: string;
   createdAt: Date;
   updatedAt: Date;
   deleted?: boolean;

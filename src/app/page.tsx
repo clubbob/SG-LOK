@@ -27,10 +27,10 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="text-center">
             <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              SG-LOK에 오신 것을 환영합니다
+              SG-LOK Work Flow 에 오신 것을 환영합니다.
             </h1>
             <p className="text-xl text-gray-600 mb-8">
-              효율적인 웹 서비스 플랫폼
+              작지만 강한 회사를 만들기 위한 효율적인 웹 서비스 플랫폼
             </p>
             {!isAuthenticated && (
               <div className="flex justify-center gap-4">

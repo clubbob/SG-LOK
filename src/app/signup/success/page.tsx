@@ -50,7 +50,7 @@ export default function SignupSuccessPage() {
                   회원가입이 완료되었습니다!
                 </h1>
                 <p className="text-lg text-gray-600 mb-6">
-                  SG-LOK에 오신 것을 환영합니다.
+                  SG-LOK Work Flow 에 오신 것을 환영합니다.
                 </p>
                 <p className="text-sm text-gray-500">
                   사용자 정보를 불러오는 중...
@@ -98,7 +98,7 @@ export default function SignupSuccessPage() {
                 회원가입이 완료되었습니다!
               </h1>
               <p className="text-lg text-gray-600 mb-6">
-                {userProfile?.name}님, SG-LOK에 오신 것을 환영합니다.
+                {userProfile?.name}님, SG-LOK Work Flow 에 오신 것을 환영합니다.
               </p>
             </div>
           </div>

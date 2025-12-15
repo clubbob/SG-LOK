@@ -92,17 +92,96 @@ export default function ProductionPage() {
             </Link>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">생산관리 시스템</h2>
-            <p className="text-gray-600 mb-4">
-              생산요청 등록부터 생산 완료까지 전체 프로세스를 관리할 수 있습니다.
+          {/* 기존 개요 섹션 */}
+          <div className="bg-white rounded-lg shadow p-6 mt-4">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">생산관리 시스템</h2>
+            <p className="text-lg text-gray-700 mb-6">
+              생산요청 등록부터 생산 완료까지 전체 프로세스를 한 화면에서 관리할 수 있습니다.
             </p>
             <ul className="list-disc list-inside space-y-2 text-gray-600">
-              <li>생산요청 등록 및 관리</li>
-              <li>생산계획 수립 및 조정</li>
-              <li>생산일정 캘린더 확인</li>
-              <li>생산 현황 추적</li>
+              <li>생산요청 등록 및 승인/반려 이력 관리</li>
+              <li>완료요청일·완료예정일·생산완료일을 기준으로 한 납기 관리</li>
+              <li>라인1·라인2 등 생산라인별 부하와 일정 파악</li>
+              <li>실시간 반영되는 생산요청 목록과 캘린더 연동</li>
             </ul>
+          </div>
+
+          {/* 장점 섹션 */}
+          <div className="bg-white rounded-xl shadow-md p-8 mt-10">
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">생산관리 시스템의 장점</h2>
+            <p className="text-lg text-gray-700 mb-8">
+              SG-LOK Work Flow는 작은 조직도 큰 회사처럼 움직일 수 있도록, 생산 업무를 하나의 흐름으로
+              묶어주는 도구입니다.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6">
+              <div className="flex items-start gap-4">
+                <div className="mt-1">
+                  <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 text-blue-600 text-sm font-semibold">
+                    1
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 mb-1">요청부터 완료까지 한 번에 관리</h3>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    카톡·엑셀에 흩어져 있던 생산요청을 한 곳에서 등록·승인·완료까지 연결해 관리합니다.
+                    누락되거나 중복되는 일을 줄여줍니다.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="mt-1">
+                  <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 text-blue-600 text-sm font-semibold">
+                    2
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 mb-1">간트 차트로 한눈에 보는 생산일정</h3>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    라인별 일정, 검토 대기·계획 확정·생산완료 상태를 캘린더에서 한 번에 볼 수 있어,
+                    병목 구간과 여유 구간을 쉽게 파악할 수 있습니다.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="mt-1">
+                  <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 text-blue-600 text-sm font-semibold">
+                    3
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 mb-1">팀 간 커뮤니케이션 비용 감소</h3>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    영업·생산·관리자가 같은 화면을 보면서 이야기할 수 있어, 추가 문의나 확인 전화 없이도
+                    현재 상태를 바로 공유할 수 있습니다.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="mt-1">
+                  <span className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-blue-100 text-blue-600 text-sm font-semibold">
+                    4
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-gray-900 mb-1">데이터 기반 의사결정</h3>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    생산이력과 납기 이행 여부가 자동으로 기록되기 때문에, 어느 고객·어떤 제품이
+                    실제로 수익과 부담을 주는지 데이터로 판단할 수 있습니다.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                지금 사용하는 방식(엑셀·카톡·구두 지시)을 SG-LOK Work Flow로 점차 대체 활용하면 정보가 자동으로 정리되고,
+                반복적인 확인 업무가 크게 줄어듭니다.
+              </p>
+            </div>
           </div>
         </div>
       </main>

@@ -122,6 +122,14 @@ export default function Header() {
                   </>
                 )}
               </div>
+
+              <button
+                type="button"
+                onClick={() => alert('성적서관리 서비스는 준비 중입니다.')}
+                className="px-4 py-2.5 rounded-md text-base font-semibold text-white hover:bg-blue-600 hover:text-white transition-colors shadow-sm"
+              >
+                성적서관리
+              </button>
             </nav>
           )}
 
@@ -255,63 +263,62 @@ export default function Header() {
         {/* 모바일 메뉴 */}
         {isMobileMenuOpen && !isAuthPage && (
           <div className="md:hidden pb-4">
-          <nav className="flex flex-col space-y-2">
-            <Link
-              href="/production"
-              className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
-                isActivePath('/production')
-                  ? 'bg-blue-700 text-white'
-                  : 'text-white hover:bg-blue-600'
-              }`}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              생산관리 메인
-            </Link>
-            <Link
-              href="/production/request"
-              className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
-                isActivePath('/production/request')
-                  ? 'bg-blue-700 text-white'
-                  : 'text-white hover:bg-blue-600'
-              }`}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              생산요청 등록
-            </Link>
-            <Link
-              href="/production/list"
-              className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
-                isActivePath('/production/list')
-                  ? 'bg-blue-700 text-white'
-                  : 'text-white hover:bg-blue-600'
-              }`}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              생산요청 목록
-            </Link>
-            <Link
-              href="/production/calendar"
-              className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
-                isActivePath('/production/calendar')
-                  ? 'bg-blue-700 text-white'
-                  : 'text-white hover:bg-blue-600'
-              }`}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              생산일정 캘린더
-            </Link>
-            <Link
-              href="/production/request"
-              className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
-                isActivePath('/production/request')
-                  ? 'bg-blue-700 text-white'
-                  : 'text-white hover:bg-blue-600'
-              }`}
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              생산요청 등록
-            </Link>
-          </nav>
+            <nav className="flex flex-col space-y-2">
+              <Link
+                href="/production"
+                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                  isActivePath('/production')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                생산관리 메인
+              </Link>
+              <Link
+                href="/production/request"
+                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                  isActivePath('/production/request')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                생산요청 등록
+              </Link>
+              <Link
+                href="/production/list"
+                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                  isActivePath('/production/list')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                생산요청 목록
+              </Link>
+              <Link
+                href="/production/calendar"
+                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                  isActivePath('/production/calendar')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                생산일정 캘린더
+              </Link>
+              <button
+                type="button"
+                onClick={() => {
+                  alert('성적서관리 서비스는 준비 중입니다.');
+                  setIsMobileMenuOpen(false);
+                }}
+                className="px-5 py-3 rounded-md text-base font-semibold text-left text-white hover:bg-blue-600"
+              >
+                성적서관리
+              </button>
+            </nav>
           </div>
         )}
       </div>

@@ -51,6 +51,7 @@ function AdminProductionRequestContent() {
     memo: '',
     plannedCompletionDate: '',
     productionLine: '',
+    productionStatus: '' as '' | 'production_waiting' | 'production_2nd' | 'production_3rd' | 'production_completed',
     actualCompletionDate: '',
   });
   const [currentStatus, setCurrentStatus] = useState<string>('');
@@ -91,6 +92,7 @@ function AdminProductionRequestContent() {
             memo: data.memo || '',
             plannedCompletionDate: data.plannedCompletionDate?.toDate().toISOString().split('T')[0] || '',
             productionLine: data.productionLine || '',
+            productionStatus: data.productionStatus || '',
             actualCompletionDate: data.actualCompletionDate?.toDate().toISOString().split('T')[0] || '',
           });
         } else {
@@ -303,7 +305,7 @@ function AdminProductionRequestContent() {
           productionRequestData.memo = formData.memo.trim();
         }
 
-        // 확정된 경우 또는 완료된 경우 완료예정일과 생산라인도 업데이트
+        // 확정된 경우 또는 완료된 경우 완료예정일, 생산라인, 생산현황 업데이트
         if (currentStatus === 'confirmed' || currentStatus === 'completed') {
           if (formData.plannedCompletionDate) {
             productionRequestData.plannedCompletionDate = Timestamp.fromDate(new Date(formData.plannedCompletionDate));
@@ -311,13 +313,28 @@ function AdminProductionRequestContent() {
           if (formData.productionLine) {
             productionRequestData.productionLine = formData.productionLine.trim();
           }
-          // 생산완료일이 입력되면 상태를 완료로 변경
-          if (formData.actualCompletionDate) {
+          if (formData.productionStatus) {
+            productionRequestData.productionStatus = formData.productionStatus;
+          }
+          
+          // 생산현황이 생산 완료이고 생산완료일이 입력되면 상태를 완료로 변경
+          if (formData.productionStatus === 'production_completed' && formData.actualCompletionDate) {
             productionRequestData.actualCompletionDate = Timestamp.fromDate(new Date(formData.actualCompletionDate));
             productionRequestData.status = 'completed';
-          } else if (currentStatus === 'completed' && !formData.actualCompletionDate) {
-            // 생산완료 상태인데 생산완료일이 삭제되면 상태를 확정으로 변경
+          } else if (formData.productionStatus === 'production_completed' && !formData.actualCompletionDate) {
+            // 생산 완료 선택했지만 생산완료일이 없으면 에러
+            setError('생산 완료를 선택한 경우 생산완료일을 입력해주세요.');
+            setSubmitting(false);
+            return;
+          } else if (currentStatus === 'completed' && formData.productionStatus !== 'production_completed') {
+            // 생산완료 상태인데 생산현황이 생산 완료가 아니면 상태를 확정으로 변경
             productionRequestData.status = 'confirmed';
+            if (formData.actualCompletionDate) {
+              productionRequestData.actualCompletionDate = Timestamp.fromDate(new Date(formData.actualCompletionDate));
+            } else {
+              // 생산완료일 제거
+              productionRequestData.actualCompletionDate = null;
+            }
           }
         }
 
@@ -376,6 +393,7 @@ function AdminProductionRequestContent() {
         memo: '',
         plannedCompletionDate: '',
         productionLine: '',
+        productionStatus: '',
         actualCompletionDate: '',
       });
 
@@ -571,49 +589,74 @@ function AdminProductionRequestContent() {
             </div>
           </div>
 
-          {/* 확정된 경우 또는 완료된 경우 완료예정일, 생산라인, 생산완료일 수정 가능 */}
+          {/* 확정된 경우 또는 완료된 경우 완료예정일, 생산라인, 생산현황, 생산완료일 수정 가능 */}
           {isEditMode && (currentStatus === 'confirmed' || currentStatus === 'completed') && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
+                    완료예정일
+                  </label>
+                  <input
+                    type="date"
+                    id="plannedCompletionDate"
+                    name="plannedCompletionDate"
+                    value={formData.plannedCompletionDate}
+                    onChange={handleChange}
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="productionLine" className="block text-sm font-medium text-gray-700 mb-2">
+                    생산라인
+                  </label>
+                  <input
+                    type="text"
+                    id="productionLine"
+                    name="productionLine"
+                    value={formData.productionLine}
+                    onChange={handleChange}
+                    placeholder="생산라인을 입력하세요 (예: 라인1, 라인2)"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                  />
+                </div>
+              </div>
+              
               <div>
-                <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
-                  완료예정일
+                <label htmlFor="productionStatus" className="block text-sm font-medium text-gray-700 mb-2">
+                  생산현황
                 </label>
-                <input
-                  type="date"
-                  id="plannedCompletionDate"
-                  name="plannedCompletionDate"
-                  value={formData.plannedCompletionDate}
+                <select
+                  id="productionStatus"
+                  name="productionStatus"
+                  value={formData.productionStatus}
                   onChange={handleChange}
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                />
+                >
+                  <option value="">-- 선택 --</option>
+                  <option value="production_waiting">생산 대기</option>
+                  <option value="production_2nd">2차 진행중</option>
+                  <option value="production_3rd">3차 진행중</option>
+                  <option value="production_completed">생산 완료</option>
+                </select>
               </div>
-              <div>
-                <label htmlFor="productionLine" className="block text-sm font-medium text-gray-700 mb-2">
-                  생산라인
-                </label>
-                <input
-                  type="text"
-                  id="productionLine"
-                  name="productionLine"
-                  value={formData.productionLine}
-                  onChange={handleChange}
-                  placeholder="생산라인을 입력하세요 (예: 라인1, 라인2)"
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                />
-              </div>
-              <div>
-                <label htmlFor="actualCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
-                  생산완료일
-                </label>
-                <input
-                  type="date"
-                  id="actualCompletionDate"
-                  name="actualCompletionDate"
-                  value={formData.actualCompletionDate}
-                  onChange={handleChange}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                />
-              </div>
+              
+              {formData.productionStatus === 'production_completed' && (
+                <div>
+                  <label htmlFor="actualCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
+                    생산완료일 *
+                  </label>
+                  <input
+                    type="date"
+                    id="actualCompletionDate"
+                    name="actualCompletionDate"
+                    value={formData.actualCompletionDate}
+                    onChange={handleChange}
+                    required
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                  />
+                </div>
+              )}
             </div>
           )}
 

@@ -27,6 +27,20 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
   cancelled: 'bg-red-100 text-red-800',
 };
 
+const PRODUCTION_STATUS_LABELS: Record<string, string> = {
+  production_waiting: '생산 대기',
+  production_2nd: '2차 진행중',
+  production_3rd: '3차 진행중',
+  production_completed: '생산 완료',
+};
+
+const PRODUCTION_STATUS_COLORS: Record<string, string> = {
+  production_waiting: 'bg-gray-100 text-gray-800',
+  production_2nd: 'bg-blue-100 text-blue-800',
+  production_3rd: 'bg-yellow-100 text-yellow-800',
+  production_completed: 'bg-green-100 text-green-800',
+};
+
 export default function ProductionRequestListPage() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
@@ -43,6 +57,7 @@ export default function ProductionRequestListPage() {
 
   // 인증 확인
   useEffect(() => {
+    // 로딩이 완료되고 인증되지 않은 경우에만 로그인 페이지로 리다이렉트
     if (!loading && !isAuthenticated) {
       router.push('/login');
     }
@@ -91,6 +106,7 @@ export default function ProductionRequestListPage() {
           plannedCompletionDate: data.plannedCompletionDate?.toDate(),
           actualStartDate: data.actualStartDate?.toDate(),
           actualCompletionDate: data.actualCompletionDate?.toDate(),
+          productionStatus: data.productionStatus || undefined,
           priority: data.priority,
           memo: data.memo || '',
           createdAt: data.createdAt?.toDate() || new Date(),
@@ -135,6 +151,7 @@ export default function ProductionRequestListPage() {
       const productionLine = request.productionLine?.toLowerCase() || '';
       const userName = request.userName?.toLowerCase() || '';
       const statusLabel = STATUS_LABELS[request.status]?.toLowerCase() || request.status || '';
+      const productionStatusLabel = request.productionStatus ? PRODUCTION_STATUS_LABELS[request.productionStatus]?.toLowerCase() || '' : '';
 
       return (
         productName.includes(query) ||
@@ -143,6 +160,7 @@ export default function ProductionRequestListPage() {
         productionLine.includes(query) ||
         userName.includes(query) ||
         statusLabel.includes(query) ||
+        productionStatusLabel.includes(query) ||
         request.status.includes(query)
       );
     });
@@ -205,6 +223,7 @@ export default function ProductionRequestListPage() {
       '생산수량',
       '완료요청일',
       '완료예정일',
+      '생산현황',
       '생산완료일',
       '생산라인',
       '요청자',
@@ -232,6 +251,7 @@ export default function ProductionRequestListPage() {
         request.quantity,
         requestedDateStr,
         plannedDateStr,
+        request.productionStatus ? PRODUCTION_STATUS_LABELS[request.productionStatus] || '' : '',
         actualDateStr,
         request.productionLine || '',
         request.userName || '',
@@ -322,7 +342,7 @@ export default function ProductionRequestListPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="제품명, 생산목적, 고객사명, 생산라인, 요청자, 상태 검색..."
+                placeholder="제품명, 생산목적, 고객사명, 생산라인, 생산현황, 요청자, 상태 검색..."
                 className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               />
               <svg
@@ -389,6 +409,7 @@ export default function ProductionRequestListPage() {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산수량</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산현황</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산완료일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산라인</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
@@ -467,6 +488,15 @@ export default function ProductionRequestListPage() {
                                 : <span className="text-gray-400">-</span>
                               }
                             </div>
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap">
+                            {request.productionStatus ? (
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${PRODUCTION_STATUS_COLORS[request.productionStatus] || 'bg-gray-100 text-gray-800'}`}>
+                                {PRODUCTION_STATUS_LABELS[request.productionStatus] || request.productionStatus}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
                           </td>
                           <td className="px-3 py-4">
                             <div className="text-sm text-gray-900">

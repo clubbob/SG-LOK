@@ -75,6 +75,7 @@ export interface ProductionRequest {
   
   // 상태 및 관리
   status: ProductionRequestStatus; // 검토 대기 / 확정 / 진행중 / 완료 / 취소
+  productionStatus?: 'production_waiting' | 'production_2nd' | 'production_3rd' | 'production_completed'; // 생산현황: 생산 대기 / 2차 진행중 / 3차 진행중 / 생산 완료
   itemCode?: string; // 품목코드 (확정 시 자동 생성)
   itemName?: string; // 정식 품목명 (확정 시)
   

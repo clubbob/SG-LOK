@@ -26,6 +26,20 @@ const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   cancelled: '취소',
 };
 
+const PRODUCTION_STATUS_LABELS: Record<string, string> = {
+  production_waiting: '생산 대기',
+  production_2nd: '2차 진행중',
+  production_3rd: '3차 진행중',
+  production_completed: '생산 완료',
+};
+
+const PRODUCTION_STATUS_COLORS: Record<string, string> = {
+  production_waiting: 'bg-gray-400',
+  production_2nd: 'bg-blue-400',
+  production_3rd: 'bg-yellow-400',
+  production_completed: 'bg-green-400',
+};
+
 interface GanttTask {
   id: string;
   name: string;
@@ -36,6 +50,7 @@ interface GanttTask {
   productName: string;
   quantity: number;
   userName: string;
+  productionStatus?: 'production_waiting' | 'production_2nd' | 'production_3rd' | 'production_completed';
 }
 
 function ProductionCalendarContent() {
@@ -204,6 +219,7 @@ function ProductionCalendarContent() {
           productName: req.productName,
           quantity: req.quantity,
           userName: req.userName,
+          productionStatus: req.productionStatus,
         };
       });
   };
@@ -476,7 +492,7 @@ function ProductionCalendarContent() {
           {/* 범례 */}
           <div className="mb-4 bg-white rounded-lg shadow-sm p-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">상태 범례</h3>
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap gap-4 mb-4">
           {Object.entries(STATUS_LABELS)
             .filter(([status]) => status !== 'cancelled' && status !== 'in_progress')
             .map(([status, label]) => (
@@ -485,6 +501,15 @@ function ProductionCalendarContent() {
                     <span className="text-sm text-gray-700">{label}</span>
                   </div>
                 ))}
+            </div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">생산현황 범례</h3>
+            <div className="flex flex-wrap gap-4">
+              {Object.entries(PRODUCTION_STATUS_LABELS).map(([status, label]) => (
+                <div key={status} className="flex items-center gap-2">
+                  <div className={`w-4 h-4 rounded ${PRODUCTION_STATUS_COLORS[status]}`}></div>
+                  <span className="text-sm text-gray-700">{label}</span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -632,6 +657,15 @@ function ProductionCalendarContent() {
                               // 같은 라인에 여러 태스크가 있을 때 세로로 배치 (각 태스크마다 50px 간격, 상단 여백 8px)
                               const topOffset = taskIdx * 50 + 8;
 
+                              // 생산현황에 따른 색상 결정 (생산현황이 있으면 생산현황 색상 사용, 없으면 상태 색상 사용)
+                              const taskColor = task.productionStatus 
+                                ? PRODUCTION_STATUS_COLORS[task.productionStatus] || STATUS_COLORS[task.status]
+                                : STATUS_COLORS[task.status];
+                              const productionStatusLabel = task.productionStatus 
+                                ? PRODUCTION_STATUS_LABELS[task.productionStatus] 
+                                : null;
+                              const tooltipText = `${task.productName} (${task.quantity.toLocaleString()}) - ${task.userName} - ${STATUS_LABELS[task.status]}${productionStatusLabel ? ` - ${productionStatusLabel}` : ''} - ${formatDateShort(task.start)} ~ ${formatDateShort(task.end)}`;
+
                               return (
                                 <div
                                   key={task.id}
@@ -644,14 +678,19 @@ function ProductionCalendarContent() {
                                   }}
                                 >
                                   <div
-                                    className={`${STATUS_COLORS[task.status]} text-white rounded px-2 py-2 text-xs shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
+                                    className={`${taskColor} text-white rounded px-2 py-2 text-xs shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
                                       isOverdue ? 'ring-2 ring-red-500' : ''
                                     }`}
-                                    title={`${task.productName} (${task.quantity.toLocaleString()}) - ${task.userName} - ${STATUS_LABELS[task.status]} - ${formatDateShort(task.start)} ~ ${formatDateShort(task.end)}`}
+                                    title={tooltipText}
                                   >
                                     <div className="font-semibold truncate whitespace-nowrap">
                                       {task.productName} | {task.quantity.toLocaleString()}개 | {task.userName}
                                     </div>
+                                    {productionStatusLabel && (
+                                      <div className="text-xs mt-0.5 opacity-90 truncate whitespace-nowrap">
+                                        {productionStatusLabel}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               );

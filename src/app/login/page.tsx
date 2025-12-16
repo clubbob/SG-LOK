@@ -3,16 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, runTransaction, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, Timestamp, getDoc } from 'firebase/firestore';
 import { Button, Input } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
+import { useAuth } from '@/hooks/useAuth';
 
 const SAVED_EMAIL_KEY = 'sglok_saved_email';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -21,6 +23,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+
+  // 이미 로그인된 사용자는 생산요청 목록으로 리다이렉트
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.push('/production/list');
+    }
+  }, [isAuthenticated, authLoading, router]);
 
   // 페이지 로드 시 저장된 이메일 불러오기
   useEffect(() => {
@@ -78,13 +87,21 @@ export default function LoginPage() {
             throw new Error('NOT_APPROVED');
           }
           
-          // 세션 체크: 로그인 페이지에서 로그인 시도는 새로운 로그인 시도이므로
-          // sessionId가 있으면 무조건 차단 (이미 다른 곳에서 로그인 중)
-          if (data.sessionId) {
+          // 세션 체크: 현재 브라우저의 localStorage에 저장된 세션 ID 확인
+          const currentSessionId = localStorage.getItem(`session_${credential.user.uid}`);
+          
+          // localStorage에 세션이 있고, Firestore의 sessionId와 다르면 다른 기기에서 로그인 중
+          // localStorage에 세션이 없으면 이 브라우저에서는 처음 로그인하는 것이므로 새로 로그인 허용
+          if (currentSessionId && data.sessionId && data.sessionId !== currentSessionId) {
+            // 현재 브라우저에 세션이 있지만 Firestore의 sessionId와 다름
+            // 이는 다른 기기에서 로그인했거나 세션이 변경된 경우
             throw new Error('SESSION_EXISTS');
           }
           
-          // 새 세션 ID 생성 및 저장
+          // localStorage에 세션이 없으면 (처음 로그인 또는 브라우저를 닫았다가 다시 열었을 때)
+          // 기존 Firestore의 sessionId를 무시하고 새로 로그인 허용
+          
+          // 새 세션 ID 생성 및 저장 (기존 세션이 없거나 만료되었거나 현재 브라우저의 세션과 같은 경우)
           const newSessionId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
           
           // 트랜잭션으로 세션 정보 업데이트
@@ -126,7 +143,12 @@ export default function LoginPage() {
         localStorage.removeItem(SAVED_EMAIL_KEY);
       }
       
-      router.push('/');
+      // 로그인 성공 - useAuth가 프로필을 로드할 시간을 주고 리다이렉트
+      setLoading(false);
+      // 약간의 지연을 두어 useAuth가 세션을 동기화할 시간을 줌
+      setTimeout(() => {
+        window.location.href = '/production/list';
+      }, 300);
     } catch (error) {
       // 콘솔 에러 출력하지 않음 (사용자에게만 친화적인 메시지 표시)
       setLoading(false); // 에러 발생 시 즉시 로딩 해제
@@ -180,6 +202,18 @@ export default function LoginPage() {
       }, 100);
     }
   };
+
+  // 인증 로딩 중이거나 이미 로그인된 경우
+  if (authLoading || isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">

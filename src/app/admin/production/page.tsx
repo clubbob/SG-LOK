@@ -49,6 +49,20 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
   cancelled: 'bg-red-100 text-red-800',
 };
 
+const PRODUCTION_STATUS_LABELS: Record<string, string> = {
+  production_waiting: '생산 대기',
+  production_2nd: '2차 진행중',
+  production_3rd: '3차 진행중',
+  production_completed: '생산 완료',
+};
+
+const PRODUCTION_STATUS_COLORS: Record<string, string> = {
+  production_waiting: 'bg-gray-100 text-gray-800',
+  production_2nd: 'bg-blue-100 text-blue-800',
+  production_3rd: 'bg-yellow-100 text-yellow-800',
+  production_completed: 'bg-green-100 text-green-800',
+};
+
 export default function AdminProductionPage() {
   const router = useRouter();
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
@@ -63,6 +77,7 @@ export default function AdminProductionPage() {
   const [approvalForm, setApprovalForm] = useState({
     plannedCompletionDate: '',
     productionLine: '',
+    quantity: '',
   });
   const [approving, setApproving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -113,6 +128,7 @@ export default function AdminProductionPage() {
             plannedCompletionDate: data.plannedCompletionDate?.toDate(),
             actualStartDate: data.actualStartDate?.toDate(),
             actualCompletionDate: data.actualCompletionDate?.toDate(),
+            productionStatus: data.productionStatus || undefined,
           priority: data.priority,
           memo: data.memo || '',
           createdAt: data.createdAt?.toDate() || new Date(),
@@ -189,6 +205,7 @@ export default function AdminProductionPage() {
         ? formatDateShort(request.plannedCompletionDate).replace(/\//g, '-')
         : '',
       productionLine: request.productionLine || '',
+      quantity: request.quantity?.toString() || '',
     });
   };
 
@@ -205,6 +222,17 @@ export default function AdminProductionPage() {
       return;
     }
 
+    if (!approvalForm.quantity.trim()) {
+      setError('생산수량을 입력해주세요.');
+      return;
+    }
+
+    const quantityNum = parseInt(approvalForm.quantity, 10);
+    if (isNaN(quantityNum) || quantityNum <= 0) {
+      setError('생산수량은 1 이상의 숫자여야 합니다.');
+      return;
+    }
+
     setApproving(true);
     setError('');
 
@@ -215,13 +243,15 @@ export default function AdminProductionPage() {
         status: 'confirmed',
         productionLine: approvalForm.productionLine.trim(),
         plannedCompletionDate: plannedCompletionDate,
+        quantity: quantityNum,
+        productionStatus: 'production_waiting', // 승인 시 생산현황 기본값: 생산 대기
         updatedAt: Timestamp.now(),
         updatedBy: 'admin',
       });
 
       // 모달 닫기
       setApprovingRequest(null);
-      setApprovalForm({ plannedCompletionDate: '', productionLine: '' });
+      setApprovalForm({ plannedCompletionDate: '', productionLine: '', quantity: '' });
       // 실시간 업데이트로 자동 새로고침됨
     } catch (error) {
       console.error('생산요청 승인 오류:', error);
@@ -441,6 +471,7 @@ export default function AdminProductionPage() {
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산수량</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산현황</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산완료일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산라인</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
@@ -520,6 +551,15 @@ export default function AdminProductionPage() {
                             <span className="text-gray-400">-</span>
                           )}
                         </div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        {request.productionStatus ? (
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${PRODUCTION_STATUS_COLORS[request.productionStatus] || 'bg-gray-100 text-gray-800'}`}>
+                            {PRODUCTION_STATUS_LABELS[request.productionStatus] || request.productionStatus}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="px-3 py-4">
                         <div className="text-sm text-gray-900">
@@ -677,14 +717,28 @@ export default function AdminProductionPage() {
 
       {/* 승인 모달 */}
       {approvingRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30" onClick={() => setApprovingRequest(null)}>
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30" 
+          onMouseDown={(e) => {
+            // 모달 내부가 아닌 배경만 클릭했을 때만 모달 닫기
+            if (e.target === e.currentTarget) {
+              setApprovingRequest(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 flex flex-col relative" 
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
+            onMouseMove={(e) => e.stopPropagation()}
+          >
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
               <h3 className="text-lg font-semibold text-gray-900">생산요청 승인</h3>
               <button
                 onClick={() => {
                   setApprovingRequest(null);
-                  setApprovalForm({ plannedCompletionDate: '', productionLine: '' });
+                  setApprovalForm({ plannedCompletionDate: '', productionLine: '', quantity: '' });
                   setError('');
                 }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -695,35 +749,123 @@ export default function AdminProductionPage() {
                 </svg>
               </button>
             </div>
-            <div className="px-6 py-4 overflow-y-auto flex-1">
+            <div 
+              className="px-6 py-4 overflow-y-auto flex-1"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-gray-600 mb-2">제품명: <span className="font-medium text-gray-900">{approvingRequest.productName}</span></p>
-                  <p className="text-sm text-gray-600">생산수량: <span className="font-medium text-gray-900">{approvingRequest.quantity.toLocaleString()}</span></p>
                 </div>
-                <div>
+                <div 
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onMouseUp={(e) => e.stopPropagation()}
+                  onMouseMove={(e) => e.stopPropagation()}
+                  onSelect={(e) => e.stopPropagation()}
+                >
+                  <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-2">
+                    생산수량: *
+                  </label>
+                  <input
+                    type="number"
+                    id="quantity"
+                    value={approvalForm.quantity}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                      setApprovalForm({ ...approvalForm, quantity: e.target.value });
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                    }}
+                    onMouseUp={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                    }}
+                    onMouseMove={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                    }}
+                    onFocus={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                    }}
+                    onBlur={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                    }}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                    }}
+                    onKeyUp={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                    }}
+                    onKeyPress={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                    }}
+                    onInput={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                    }}
+                    onSelect={(e) => {
+                      e.stopPropagation();
+                      e.nativeEvent.stopImmediatePropagation();
+                    }}
+                    placeholder="생산수량을 입력하세요"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    disabled={approving}
+                    min="1"
+                    step="1"
+                    required
+                    autoFocus={false}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">기존 생산수량: {approvingRequest.quantity.toLocaleString()}</p>
+                </div>
+                <div onClick={(e) => e.stopPropagation()}>
                   <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
-                    완료예정일:
+                    완료예정일: *
                   </label>
                   <input
                     type="date"
                     id="plannedCompletionDate"
                     value={approvalForm.plannedCompletionDate}
-                    onChange={(e) => setApprovalForm({ ...approvalForm, plannedCompletionDate: e.target.value })}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setApprovalForm({ ...approvalForm, plannedCompletionDate: e.target.value });
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.stopPropagation()}
                     className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     disabled={approving}
                     required
                   />
                 </div>
-                <div>
+                <div onClick={(e) => e.stopPropagation()}>
                   <label htmlFor="productionLine" className="block text-sm font-medium text-gray-700 mb-2">
-                    생산라인:
+                    생산라인: *
                   </label>
                   <input
                     type="text"
                     id="productionLine"
                     value={approvalForm.productionLine}
-                    onChange={(e) => setApprovalForm({ ...approvalForm, productionLine: e.target.value })}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setApprovalForm({ ...approvalForm, productionLine: e.target.value });
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.stopPropagation()}
                     placeholder="생산라인을 입력하세요 (예: 라인1, 라인2)"
                     className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     disabled={approving}
@@ -732,12 +874,16 @@ export default function AdminProductionPage() {
                 </div>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 sticky bottom-0 bg-white">
+            <div 
+              className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 sticky bottom-0 bg-white"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
               <Button
                 variant="outline"
                 onClick={() => {
                   setApprovingRequest(null);
-                  setApprovalForm({ plannedCompletionDate: '', productionLine: '' });
+                  setApprovalForm({ plannedCompletionDate: '', productionLine: '', quantity: '' });
                   setError('');
                 }}
                 disabled={approving}

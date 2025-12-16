@@ -36,23 +36,23 @@ const checkAdminAuth = (): boolean => {
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   pending_review: '검토 대기',
   confirmed: '계획 확정',
-  in_progress: '진행 중',
+  in_progress: '생산 중',
   completed: '생산 완료',
   cancelled: '취소',
 };
 
 const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
-  pending_review: 'bg-yellow-100 text-yellow-800',
-  confirmed: 'bg-blue-100 text-blue-800',
-  in_progress: 'bg-green-100 text-green-800',
-  completed: 'bg-gray-100 text-gray-800',
-  cancelled: 'bg-red-100 text-red-800',
+  pending_review: 'bg-yellow-400 text-white',
+  confirmed: 'bg-blue-500 text-white',
+  in_progress: 'bg-green-500 text-white',
+  completed: 'bg-gray-500 text-white',
+  cancelled: 'bg-red-500 text-white',
 };
 
 const PRODUCTION_STATUS_LABELS: Record<string, string> = {
-  production_waiting: '생산 대기',
-  production_2nd: '2차 진행중',
-  production_3rd: '3차 진행중',
+  production_waiting: '계획 확정',
+  production_2nd: '생산 중 (2차 진행중)',
+  production_3rd: '생산 중 (3차 진행중)',
   production_completed: '생산 완료',
 };
 
@@ -96,8 +96,10 @@ export default function AdminProductionPage() {
     
     const unsubscribeSnapshot = onSnapshot(
       q,
-      (querySnapshot) => {
+      async (querySnapshot) => {
         const requestsData: ProductionRequest[] = [];
+        const updatePromises: Promise<void>[] = [];
+        
         querySnapshot.forEach((doc) => {
           const data = doc.data();
           const rawOrderQty = data.orderQuantity ?? data.orderqty ?? data.order_qty;
@@ -107,6 +109,47 @@ export default function AdminProductionPage() {
               : rawOrderQty
               ? Number(rawOrderQty)
               : undefined;
+          
+          const currentStatus = data.status || 'pending_review';
+          const productionStatus = data.productionStatus;
+          
+          // 생산현황에 따라 상태 자동 동기화
+          let shouldUpdateStatus = false;
+          let newStatus = currentStatus;
+          
+          if (productionStatus === 'production_2nd' || productionStatus === 'production_3rd') {
+            // 생산현황이 2차/3차 진행중인데 상태가 생산 중이 아니면 업데이트
+            if (currentStatus !== 'in_progress') {
+              shouldUpdateStatus = true;
+              newStatus = 'in_progress';
+            }
+          } else if (productionStatus === 'production_completed') {
+            // 생산현황이 생산 완료인데 상태가 완료가 아니면 업데이트
+            if (currentStatus !== 'completed') {
+              shouldUpdateStatus = true;
+              newStatus = 'completed';
+            }
+          } else if (productionStatus === 'production_waiting') {
+            // 생산현황이 생산 대기인데 상태가 계획 확정이 아니면 업데이트
+            if (currentStatus !== 'confirmed') {
+              shouldUpdateStatus = true;
+              newStatus = 'confirmed';
+            }
+          }
+          
+          // 상태 업데이트가 필요한 경우
+          if (shouldUpdateStatus) {
+            updatePromises.push(
+              updateDoc(doc.ref, {
+                status: newStatus,
+                updatedAt: Timestamp.now(),
+                updatedBy: 'admin',
+              }).catch((error) => {
+                console.error(`생산요청 ${doc.id} 상태 업데이트 실패:`, error);
+              })
+            );
+          }
+          
           requestsData.push({
             id: doc.id,
             userId: data.userId,
@@ -120,7 +163,7 @@ export default function AdminProductionPage() {
             requestedCompletionDate: data.requestedCompletionDate?.toDate() || new Date(),
             productionReason: data.productionReason,
             customerName: data.customerName,
-            status: data.status || 'pending_review',
+            status: newStatus, // 동기화된 상태 사용
             itemCode: data.itemCode,
             itemName: data.itemName,
             productionLine: data.productionLine,
@@ -128,7 +171,7 @@ export default function AdminProductionPage() {
             plannedCompletionDate: data.plannedCompletionDate?.toDate(),
             actualStartDate: data.actualStartDate?.toDate(),
             actualCompletionDate: data.actualCompletionDate?.toDate(),
-            productionStatus: data.productionStatus || undefined,
+            productionStatus: productionStatus || undefined,
           priority: data.priority,
           memo: data.memo || '',
           createdAt: data.createdAt?.toDate() || new Date(),
@@ -138,6 +181,13 @@ export default function AdminProductionPage() {
             history: data.history,
           });
         });
+        
+        // 상태 업데이트 실행 (비동기, 에러가 발생해도 계속 진행)
+        if (updatePromises.length > 0) {
+          Promise.all(updatePromises).catch((error) => {
+            console.error('일부 생산요청 상태 업데이트 실패:', error);
+          });
+        }
         
         setRequests(requestsData);
         setLoadingRequests(false);
@@ -284,6 +334,7 @@ export default function AdminProductionPage() {
       '생산수량',
       '완료요청일',
       '완료예정일',
+      '생산현황',
       '생산완료일',
       '생산라인',
       '요청자',
@@ -295,6 +346,9 @@ export default function AdminProductionPage() {
       const rowNumber = filteredRequests.length - idx;
       const productionReasonLabel = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const statusLabel = STATUS_LABELS[request.status];
+      const productionStatusLabel = request.productionStatus 
+        ? PRODUCTION_STATUS_LABELS[request.productionStatus] || request.productionStatus
+        : '';
 
       const requestedDateStr = request.requestedCompletionDate ? formatDateShort(request.requestedCompletionDate) : '';
       const plannedDateStr = request.plannedCompletionDate ? formatDateShort(request.plannedCompletionDate) : '';
@@ -311,6 +365,7 @@ export default function AdminProductionPage() {
         request.quantity,
         requestedDateStr,
         plannedDateStr,
+        productionStatusLabel,
         actualDateStr,
         request.productionLine || '',
         request.userName || '',
@@ -554,7 +609,7 @@ export default function AdminProductionPage() {
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         {request.productionStatus ? (
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${PRODUCTION_STATUS_COLORS[request.productionStatus] || 'bg-gray-100 text-gray-800'}`}>
+                          <span className="text-sm text-gray-700">
                             {PRODUCTION_STATUS_LABELS[request.productionStatus] || request.productionStatus}
                           </span>
                         ) : (

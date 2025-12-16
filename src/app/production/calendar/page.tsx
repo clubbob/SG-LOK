@@ -21,23 +21,23 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   pending_review: '검토 대기',
   confirmed: '계획 확정',
-  in_progress: '진행 중',
+  in_progress: '생산 중',
   completed: '생산 완료',
   cancelled: '취소',
 };
 
 const PRODUCTION_STATUS_LABELS: Record<string, string> = {
-  production_waiting: '생산 대기',
-  production_2nd: '2차 진행중',
-  production_3rd: '3차 진행중',
+  production_waiting: '계획 확정',
+  production_2nd: '생산 중 (2차 진행중)',
+  production_3rd: '생산 중 (3차 진행중)',
   production_completed: '생산 완료',
 };
 
 const PRODUCTION_STATUS_COLORS: Record<string, string> = {
-  production_waiting: 'bg-gray-400',
-  production_2nd: 'bg-blue-400',
-  production_3rd: 'bg-yellow-400',
-  production_completed: 'bg-green-400',
+  production_waiting: 'bg-blue-500',
+  production_2nd: 'bg-green-500', // 생산 중 색상과 통일
+  production_3rd: 'bg-green-500', // 생산 중 색상과 통일
+  production_completed: 'bg-gray-500', // 생산 완료 색상과 통일
 };
 
 interface GanttTask {
@@ -172,7 +172,7 @@ function ProductionCalendarContent() {
           endDate = normalizeToKST(requestedEnd);
           productionLine = '검토 대기';
         } else if (req.status === 'confirmed' || req.status === 'in_progress') {
-          // 계획 확정/진행 중: 등록일 ~ 완료예정일
+          // 계획 확정/생산 중: 등록일 ~ 완료예정일
           const requestStart = req.requestDate || req.createdAt || new Date();
           startDate = normalizeToKST(requestStart);
           const plannedEnd = req.plannedCompletionDate ||
@@ -492,24 +492,23 @@ function ProductionCalendarContent() {
           {/* 범례 */}
           <div className="mb-4 bg-white rounded-lg shadow-sm p-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">상태 범례</h3>
-            <div className="flex flex-wrap gap-4 mb-4">
-          {Object.entries(STATUS_LABELS)
-            .filter(([status]) => status !== 'cancelled' && status !== 'in_progress')
-            .map(([status, label]) => (
-                  <div key={status} className="flex items-center gap-2">
-                    <div className={`w-4 h-4 rounded ${STATUS_COLORS[status as ProductionRequestStatus]}`}></div>
-                    <span className="text-sm text-gray-700">{label}</span>
-                  </div>
-                ))}
-            </div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">생산현황 범례</h3>
             <div className="flex flex-wrap gap-4">
-              {Object.entries(PRODUCTION_STATUS_LABELS).map(([status, label]) => (
-                <div key={status} className="flex items-center gap-2">
-                  <div className={`w-4 h-4 rounded ${PRODUCTION_STATUS_COLORS[status]}`}></div>
-                  <span className="text-sm text-gray-700">{label}</span>
-                </div>
-              ))}
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS['pending_review']}`}></div>
+                <span className="text-sm text-gray-700">{STATUS_LABELS['pending_review']}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS['confirmed']}`}></div>
+                <span className="text-sm text-gray-700">{STATUS_LABELS['confirmed']}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS['in_progress']}`}></div>
+                <span className="text-sm text-gray-700">{STATUS_LABELS['in_progress']}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS['completed']}`}></div>
+                <span className="text-sm text-gray-700">{STATUS_LABELS['completed']}</span>
+              </div>
             </div>
           </div>
 
@@ -686,11 +685,15 @@ function ProductionCalendarContent() {
                                     <div className="font-semibold truncate whitespace-nowrap">
                                       {task.productName} | {task.quantity.toLocaleString()}개 | {task.userName}
                                     </div>
-                                    {productionStatusLabel && (
+                                    {productionStatusLabel ? (
                                       <div className="text-xs mt-0.5 opacity-90 truncate whitespace-nowrap">
                                         {productionStatusLabel}
                                       </div>
-                                    )}
+                                    ) : task.status === 'pending_review' ? (
+                                      <div className="text-xs mt-0.5 opacity-90 truncate whitespace-nowrap">
+                                        검토 대기
+                                      </div>
+                                    ) : null}
                                   </div>
                                 </div>
                               );

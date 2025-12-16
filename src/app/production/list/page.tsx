@@ -14,23 +14,23 @@ import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   pending_review: '검토 대기',
   confirmed: '계획 확정',
-  in_progress: '진행 중',
+  in_progress: '생산 중',
   completed: '생산 완료',
   cancelled: '취소',
 };
 
 const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
-  pending_review: 'bg-yellow-100 text-yellow-800',
-  confirmed: 'bg-blue-100 text-blue-800',
-  in_progress: 'bg-green-100 text-green-800',
-  completed: 'bg-gray-100 text-gray-800',
-  cancelled: 'bg-red-100 text-red-800',
+  pending_review: 'bg-yellow-400 text-white',
+  confirmed: 'bg-blue-500 text-white',
+  in_progress: 'bg-green-500 text-white',
+  completed: 'bg-gray-500 text-white',
+  cancelled: 'bg-red-500 text-white',
 };
 
 const PRODUCTION_STATUS_LABELS: Record<string, string> = {
-  production_waiting: '생산 대기',
-  production_2nd: '2차 진행중',
-  production_3rd: '3차 진행중',
+  production_waiting: '계획 확정',
+  production_2nd: '생산 중 (2차 진행중)',
+  production_3rd: '생산 중 (3차 진행중)',
   production_completed: '생산 완료',
 };
 

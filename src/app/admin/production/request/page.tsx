@@ -306,7 +306,7 @@ function AdminProductionRequestContent() {
         }
 
         // 확정된 경우 또는 완료된 경우 완료예정일, 생산라인, 생산현황 업데이트
-        if (currentStatus === 'confirmed' || currentStatus === 'completed') {
+        if (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress') {
           if (formData.plannedCompletionDate) {
             productionRequestData.plannedCompletionDate = Timestamp.fromDate(new Date(formData.plannedCompletionDate));
           }
@@ -317,16 +317,34 @@ function AdminProductionRequestContent() {
             productionRequestData.productionStatus = formData.productionStatus;
           }
           
-          // 생산현황이 생산 완료이고 생산완료일이 입력되면 상태를 완료로 변경
-          if (formData.productionStatus === 'production_completed' && formData.actualCompletionDate) {
-            productionRequestData.actualCompletionDate = Timestamp.fromDate(new Date(formData.actualCompletionDate));
-            productionRequestData.status = 'completed';
-          } else if (formData.productionStatus === 'production_completed' && !formData.actualCompletionDate) {
-            // 생산 완료 선택했지만 생산완료일이 없으면 에러
-            setError('생산 완료를 선택한 경우 생산완료일을 입력해주세요.');
-            setSubmitting(false);
-            return;
-          } else if (currentStatus === 'completed' && formData.productionStatus !== 'production_completed') {
+          // 생산현황에 따른 상태 변경 (우선순위: 생산완료 > 2차/3차 진행중 > 생산 대기)
+          // 생산현황이 변경되지 않았더라도 현재 생산현황에 따라 상태를 확인하고 업데이트
+          if (formData.productionStatus === 'production_completed') {
+            // 생산 완료: 생산완료일이 입력되면 상태를 완료로 변경
+            if (formData.actualCompletionDate) {
+              productionRequestData.actualCompletionDate = Timestamp.fromDate(new Date(formData.actualCompletionDate));
+              productionRequestData.status = 'completed';
+            } else {
+              // 생산 완료 선택했지만 생산완료일이 없으면 에러
+              setError('생산 완료를 선택한 경우 생산완료일을 입력해주세요.');
+              setSubmitting(false);
+              return;
+            }
+          } else if (formData.productionStatus === 'production_2nd' || formData.productionStatus === 'production_3rd') {
+            // 2차 진행중 또는 3차 진행중: 상태를 생산 중으로 변경 (항상 업데이트)
+            productionRequestData.status = 'in_progress';
+            // 생산완료일이 있으면 제거
+            if (formData.actualCompletionDate) {
+              productionRequestData.actualCompletionDate = null;
+            }
+          } else if (formData.productionStatus === 'production_waiting') {
+            // 생산 대기: 상태를 계획 확정으로 변경
+            productionRequestData.status = 'confirmed';
+            // 생산완료일이 있으면 제거
+            if (formData.actualCompletionDate) {
+              productionRequestData.actualCompletionDate = null;
+            }
+          } else if (currentStatus === 'completed' && formData.productionStatus && formData.productionStatus !== 'production_completed') {
             // 생산완료 상태인데 생산현황이 생산 완료가 아니면 상태를 확정으로 변경
             productionRequestData.status = 'confirmed';
             if (formData.actualCompletionDate) {
@@ -589,8 +607,8 @@ function AdminProductionRequestContent() {
             </div>
           </div>
 
-          {/* 확정된 경우 또는 완료된 경우 완료예정일, 생산라인, 생산현황, 생산완료일 수정 가능 */}
-          {isEditMode && (currentStatus === 'confirmed' || currentStatus === 'completed') && (
+          {/* 확정된 경우 또는 완료된 경우 또는 진행중인 경우 완료예정일, 생산라인, 생산현황, 생산완료일 수정 가능 */}
+          {isEditMode && (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress') && (
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -634,9 +652,9 @@ function AdminProductionRequestContent() {
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                 >
                   <option value="">-- 선택 --</option>
-                  <option value="production_waiting">생산 대기</option>
-                  <option value="production_2nd">2차 진행중</option>
-                  <option value="production_3rd">3차 진행중</option>
+                  <option value="production_waiting">계획 확정</option>
+                  <option value="production_2nd">생산 중 (2차 진행중)</option>
+                  <option value="production_3rd">생산 중 (3차 진행중)</option>
                   <option value="production_completed">생산 완료</option>
                 </select>
               </div>

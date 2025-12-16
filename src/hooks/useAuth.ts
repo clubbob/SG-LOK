@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { User, onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { User as UserType } from '@/types';
 
@@ -49,8 +49,21 @@ export function useAuth() {
               await firebaseSignOut(auth);
               setUser(null);
               setUserProfile(null);
+              localStorage.removeItem(`session_${user.uid}`);
               return;
             }
+            
+            // 세션 유효성 검증: 다른 곳에서 로그인했는지 확인
+            const currentSessionId = localStorage.getItem(`session_${user.uid}`);
+            if (userData.sessionId && currentSessionId !== userData.sessionId) {
+              console.log('다른 기기에서 로그인되어 있습니다. 자동 로그아웃합니다.');
+              await firebaseSignOut(auth);
+              setUser(null);
+              setUserProfile(null);
+              localStorage.removeItem(`session_${user.uid}`);
+              return;
+            }
+            
             setUserProfile(userData);
           } else {
             // 문서가 없어도 정상적으로 처리 (회원가입 직후일 수 있음)
@@ -74,6 +87,20 @@ export function useAuth() {
 
   const signOut = async () => {
     try {
+      // Firestore에서 세션 정보 제거
+      if (user) {
+        try {
+          await updateDoc(doc(db, 'users', user.uid), {
+            sessionId: deleteField(),
+            lastLoginAt: deleteField(),
+          });
+        } catch (error) {
+          console.error('세션 정보 제거 중 오류:', error);
+        }
+        // localStorage에서 세션 정보 제거
+        localStorage.removeItem(`session_${user.uid}`);
+      }
+      
       await firebaseSignOut(auth);
       setUser(null);
       setUserProfile(null);

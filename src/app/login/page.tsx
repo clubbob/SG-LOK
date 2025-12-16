@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { Button, Input } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -60,22 +60,59 @@ export default function LoginPage() {
     try {
       const credential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
 
-      // 관리자 승인 여부 확인
+      // 관리자 승인 여부 및 세션 확인 (트랜잭션으로 원자적 처리)
       try {
-        const userDoc = await getDoc(doc(db, 'users', credential.user.uid));
-        const data = userDoc.exists() ? userDoc.data() as { approved?: boolean } : null;
-
-        if (!data || data.approved === false) {
-          await auth.signOut();
-          setLoading(false);
-          setError('회원가입 신청이 접수되었습니다. 관리자가 승인을 완료한 후에 로그인할 수 있습니다.');
-          return;
-        }
-      } catch (profileError) {
-        console.error('승인 여부 확인 중 오류:', profileError);
+        // 트랜잭션으로 세션 체크 및 업데이트를 원자적으로 처리
+        const result = await runTransaction(db, async (transaction) => {
+          const userRef = doc(db, 'users', credential.user.uid);
+          const userDoc = await transaction.get(userRef);
+          
+          if (!userDoc.exists()) {
+            throw new Error('USER_NOT_FOUND');
+          }
+          
+          const data = userDoc.data() as { approved?: boolean; sessionId?: string; lastLoginAt?: any };
+          
+          // 관리자 승인 여부 확인
+          if (!data || data.approved === false) {
+            throw new Error('NOT_APPROVED');
+          }
+          
+          // 세션 체크: 로그인 페이지에서 로그인 시도는 새로운 로그인 시도이므로
+          // sessionId가 있으면 무조건 차단 (이미 다른 곳에서 로그인 중)
+          if (data.sessionId) {
+            throw new Error('SESSION_EXISTS');
+          }
+          
+          // 새 세션 ID 생성 및 저장
+          const newSessionId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+          
+          // 트랜잭션으로 세션 정보 업데이트
+          transaction.update(userRef, {
+            sessionId: newSessionId,
+            lastLoginAt: serverTimestamp(),
+          });
+          
+          return newSessionId;
+        });
+        
+        // localStorage에 세션 ID 저장 (트랜잭션 성공 후)
+        localStorage.setItem(`session_${credential.user.uid}`, result);
+        
+      } catch (profileError: any) {
         await auth.signOut();
         setLoading(false);
-        setError('로그인 중 오류가 발생했습니다. 잠시 후 다시 시도하거나 관리자에게 문의해주세요.');
+        
+        if (profileError.message === 'NOT_APPROVED') {
+          setError('회원가입 신청이 접수되었습니다. 관리자가 승인을 완료한 후에 로그인할 수 있습니다.');
+        } else if (profileError.message === 'SESSION_EXISTS') {
+          setError('이미 다른 기기에서 로그인되어 있습니다. 다른 기기에서 로그아웃한 후 다시 시도해주세요.');
+        } else if (profileError.message === 'USER_NOT_FOUND') {
+          setError('사용자 정보를 찾을 수 없습니다. 관리자에게 문의해주세요.');
+        } else {
+          console.error('승인 여부 확인 중 오류:', profileError);
+          setError('로그인 중 오류가 발생했습니다. 잠시 후 다시 시도하거나 관리자에게 문의해주세요.');
+        }
         return;
       }
 

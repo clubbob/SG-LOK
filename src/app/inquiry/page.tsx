@@ -6,14 +6,16 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { collection, addDoc, query, where, orderBy, getDocs, Timestamp, limit } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { Inquiry } from '@/types';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '@/lib/firebase';
+import { Inquiry, InquiryAttachment } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 
 type TabType = 'new' | 'history';
 
 const INQUIRY_TYPES = [
   { value: 'production', label: '생산 요청' },
+  { value: 'certificate', label: '성적서 요청' },
   { value: 'account', label: '계정 관련' },
   { value: 'other', label: '기타' },
 ];
@@ -23,10 +25,12 @@ export default function InquiryPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('new');
   const [formData, setFormData] = useState({
-    type: 'production',
+    type: '',
     subject: '',
     message: '',
   });
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -74,21 +78,22 @@ export default function InquiryPage() {
       const inquiriesData: Inquiry[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        inquiriesData.push({
-          id: doc.id,
-          userId: data.userId,
-          userName: data.userName,
-          userEmail: data.userEmail,
-          userCompany: data.userCompany,
-          type: data.type,
-          subject: data.subject,
-          message: data.message,
-          status: data.status || 'pending',
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
-          repliedAt: data.repliedAt?.toDate(),
-          replyMessage: data.replyMessage,
-        });
+      inquiriesData.push({
+        id: doc.id,
+        userId: data.userId,
+        userName: data.userName,
+        userEmail: data.userEmail,
+        userCompany: data.userCompany,
+        type: data.type,
+        subject: data.subject,
+        message: data.message,
+        status: data.status || 'pending',
+        attachments: data.attachments || [],
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+        repliedAt: data.repliedAt?.toDate(),
+        replyMessage: data.replyMessage,
+      });
       });
       
       // 클라이언트 측에서 날짜순 정렬 (최신순)
@@ -117,6 +122,36 @@ export default function InquiryPage() {
     if (success) setSuccess('');
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      // 최대 5개 파일 제한
+      if (attachedFiles.length + files.length > 5) {
+        setError('최대 5개까지 파일을 첨부할 수 있습니다.');
+        return;
+      }
+      // 파일 크기 제한 (10MB)
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      const oversizedFiles = files.filter(file => file.size > maxSize);
+      if (oversizedFiles.length > 0) {
+        setError('파일 크기는 10MB를 초과할 수 없습니다.');
+        return;
+      }
+      setAttachedFiles(prev => [...prev, ...files]);
+      if (error) setError('');
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -125,6 +160,12 @@ export default function InquiryPage() {
 
     if (!formData.subject.trim()) {
       setError('제목을 입력해주세요.');
+      setSubmitting(false);
+      return;
+    }
+
+    if (!formData.type) {
+      setError('문의 유형을 선택해주세요.');
       setSubmitting(false);
       return;
     }
@@ -142,6 +183,121 @@ export default function InquiryPage() {
         return;
       }
 
+      // 파일 업로드
+      let attachments: InquiryAttachment[] = [];
+      if (attachedFiles.length > 0) {
+        try {
+          setUploadingFiles(true);
+          
+          // Storage 초기화 확인
+          if (!storage) {
+            throw new Error('Firebase Storage가 초기화되지 않았습니다. Storage 설정을 확인해주세요.');
+          }
+          
+          console.log('=== 파일 업로드 시작 ===');
+          console.log('Storage 인스턴스:', storage);
+          console.log('Storage Bucket:', storage.app.options.storageBucket);
+          console.log('업로드할 파일 수:', attachedFiles.length);
+          console.log('사용자 ID:', userProfile.id);
+          console.log('인증 상태:', userProfile ? '인증됨' : '인증 안 됨');
+          
+          // 타임아웃 함수
+          const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number, operation: string): Promise<T> => {
+            return Promise.race([
+              promise,
+              new Promise<T>((_, reject) => {
+                const timeoutId = setTimeout(() => {
+                  console.error(`${operation} 타임아웃 (${timeoutMs}ms)`);
+                  reject(new Error(`${operation} 시간이 초과되었습니다. 네트워크 연결을 확인해주세요.`));
+                }, timeoutMs);
+                promise.finally(() => clearTimeout(timeoutId));
+              })
+            ]);
+          };
+          
+          const uploadPromises = attachedFiles.map(async (file, index) => {
+            try {
+              const timestamp = Date.now();
+              const randomId = Math.random().toString(36).substring(2, 15);
+              const fileName = `${userProfile.id}_${timestamp}_${randomId}_${file.name}`;
+              const filePath = `inquiries/${userProfile.id}/${fileName}`;
+              
+              console.log(`[${index + 1}/${attachedFiles.length}] 파일 업로드 시작:`, {
+                fileName: file.name,
+                size: file.size,
+                type: file.type,
+                path: filePath
+              });
+              
+              const storageRef = ref(storage, filePath);
+              console.log('Storage 참조 생성 완료:', storageRef);
+              
+              // 60초 타임아웃 설정
+              const uploadTask = uploadBytes(storageRef, file);
+              console.log('업로드 작업 시작...');
+              
+              await withTimeout(uploadTask, 60000, `파일 "${file.name}" 업로드`);
+              console.log(`[${index + 1}/${attachedFiles.length}] 파일 업로드 완료: ${file.name}`);
+              
+              const downloadURL = await withTimeout(getDownloadURL(storageRef), 10000, `파일 "${file.name}" URL 획득`);
+              console.log(`[${index + 1}/${attachedFiles.length}] 다운로드 URL 획득: ${file.name}`);
+              
+              return {
+                name: file.name,
+                url: downloadURL,
+                size: file.size,
+                type: file.type,
+              };
+            } catch (fileError) {
+              console.error(`[${index + 1}/${attachedFiles.length}] 파일 업로드 실패: ${file.name}`, fileError);
+              
+              // 에러 객체의 전체 정보 로깅
+              if (fileError && typeof fileError === 'object') {
+                console.error('에러 상세 정보:', {
+                  message: (fileError as any).message,
+                  code: (fileError as any).code,
+                  serverResponse: (fileError as any).serverResponse,
+                  stack: (fileError as any).stack
+                });
+              }
+              
+              const errorMessage = fileError instanceof Error ? fileError.message : String(fileError);
+              const errorCode = (fileError as any)?.code || '';
+              
+              // Firebase Storage 관련 에러 메시지 개선
+              if (errorCode === 'storage/unauthorized' || errorCode === 'storage/permission-denied' || 
+                  errorMessage.includes('permission') || errorMessage.includes('권한') || 
+                  errorMessage.includes('unauthorized') || errorMessage.includes('Permission denied')) {
+                throw new Error(`파일 "${file.name}" 업로드 실패: Firebase Storage 보안 규칙을 확인해주세요. Storage → Rules에서 읽기/쓰기 권한을 설정해야 합니다.`);
+              } else if (errorCode === 'storage/object-not-found' || errorCode === 'storage/bucket-not-found' ||
+                         errorMessage.includes('bucket') || errorMessage.includes('not found')) {
+                throw new Error(`파일 "${file.name}" 업로드 실패: Firebase Storage가 활성화되지 않았습니다. Firebase Console에서 Storage를 활성화해주세요.`);
+              } else if (errorCode === 'storage/unauthenticated' || errorMessage.includes('unauthenticated')) {
+                throw new Error(`파일 "${file.name}" 업로드 실패: 로그인이 필요합니다. 다시 로그인해주세요.`);
+              } else if (errorMessage.includes('network') || errorMessage.includes('네트워크') || 
+                         errorMessage.includes('failed') || errorMessage.includes('timeout') ||
+                         errorCode === 'storage/retry-limit-exceeded') {
+                throw new Error(`파일 "${file.name}" 업로드 실패: 네트워크 연결을 확인해주세요. 또는 Firebase Storage 보안 규칙을 확인해주세요.`);
+              } else {
+                throw new Error(`파일 "${file.name}" 업로드 실패: ${errorMessage} (에러 코드: ${errorCode || '없음'})`);
+              }
+            }
+          });
+          
+          console.log('모든 파일 업로드 Promise 시작...');
+          attachments = await Promise.all(uploadPromises);
+          console.log('모든 파일 업로드 완료:', attachments);
+          setUploadingFiles(false);
+        } catch (uploadError) {
+          console.error('파일 업로드 오류 (전체):', uploadError);
+          setUploadingFiles(false);
+          const errorMessage = uploadError instanceof Error ? uploadError.message : '파일 업로드에 실패했습니다. 다시 시도해주세요.';
+          setError(`${errorMessage} (브라우저 콘솔에서 자세한 에러를 확인하세요)`);
+          setSubmitting(false);
+          return;
+        }
+      }
+
       // Firestore에 문의 내용 저장
       const now = Timestamp.now();
       await addDoc(collection(db, 'inquiries'), {
@@ -153,11 +309,14 @@ export default function InquiryPage() {
         subject: formData.subject.trim(),
         message: formData.message.trim(),
         status: 'pending',
+        attachments: attachments.length > 0 ? attachments : undefined,
         createdAt: now,
         updatedAt: now,
       });
 
-      setFormData({ type: 'production', subject: '', message: '' });
+      setFormData({ type: '', subject: '', message: '' });
+      setAttachedFiles([]);
+      setUploadingFiles(false);
       
       // 내 문의 내역 탭으로 전환하고 목록 새로고침
       // 성공 메시지는 표시하지 않음 (답변이 완료된 문의를 볼 때 불필요)
@@ -167,8 +326,9 @@ export default function InquiryPage() {
       loadMyInquiries();
     } catch (error) {
       console.error('문의하기 오류:', error);
-      setError('문의 전송에 실패했습니다. 다시 시도해주세요.');
-    } finally {
+      const errorMessage = error instanceof Error ? error.message : '문의 전송에 실패했습니다. 다시 시도해주세요.';
+      setError(errorMessage);
+      setUploadingFiles(false);
       setSubmitting(false);
     }
   };
@@ -290,6 +450,7 @@ export default function InquiryPage() {
                     required
                     className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   >
+                    <option value="">-- 선택 --</option>
                     {INQUIRY_TYPES.map((type) => (
                       <option key={type.value} value={type.value}>
                         {type.label}
@@ -325,14 +486,63 @@ export default function InquiryPage() {
                   />
                 </div>
 
+                <div>
+                  <label htmlFor="files" className="block text-sm font-medium text-gray-700 mb-1">
+                    파일 첨부 (선택)
+                  </label>
+                  <input
+                    id="files"
+                    type="file"
+                    multiple
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    disabled={uploadingFiles || submitting}
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    최대 5개까지 첨부 가능, 파일 크기 10MB 이하
+                  </p>
+                  
+                  {attachedFiles.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {attachedFiles.map((file, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between bg-gray-50 rounded-lg p-3"
+                        >
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{file.name}</p>
+                              <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => removeFile(index)}
+                            className="ml-2 text-red-600 hover:text-red-800"
+                            disabled={uploadingFiles || submitting}
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex justify-end">
                   <Button
                     type="submit"
                     variant="primary"
                     size="lg"
-                    loading={submitting}
+                    loading={submitting || uploadingFiles}
+                    disabled={uploadingFiles}
                   >
-                    문의하기
+                    {uploadingFiles ? '파일 업로드 중...' : submitting ? '전송 중...' : '문의하기'}
                   </Button>
                 </div>
               </form>
@@ -385,6 +595,17 @@ export default function InquiryPage() {
                           {inquiry.message}
                         </p>
                       </div>
+
+                      {inquiry.attachments && inquiry.attachments.length > 0 && (
+                        <div className="mb-4">
+                          <div className="flex items-center gap-2 text-sm text-gray-600 mb-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                            </svg>
+                            <span>첨부 파일 {inquiry.attachments.length}개</span>
+                          </div>
+                        </div>
+                      )}
 
                       {inquiry.replyMessage && (
                         <div className="border-t pt-4">
@@ -475,6 +696,34 @@ export default function InquiryPage() {
                     <div className="bg-gray-50 rounded-lg p-4 whitespace-pre-wrap text-gray-900">
                       {selectedInquiry.message}
                     </div>
+                    
+                    {selectedInquiry.attachments && selectedInquiry.attachments.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="font-semibold text-gray-900 mb-2">첨부 파일</h4>
+                        <div className="space-y-2">
+                          {selectedInquiry.attachments.map((attachment, index) => (
+                            <a
+                              key={index}
+                              href={attachment.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                            >
+                              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{attachment.name}</p>
+                                <p className="text-xs text-gray-500">{formatFileSize(attachment.size)}</p>
+                              </div>
+                              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {selectedInquiry.replyMessage && (

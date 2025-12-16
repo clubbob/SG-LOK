@@ -20,6 +20,8 @@ export interface User {
   deleted?: boolean;
   deletedAt?: Date;
   deletedBy?: string;
+  sessionId?: string; // 현재 활성 세션 ID (한 곳에서만 로그인 허용)
+  lastLoginAt?: Date; // 마지막 로그인 시간
 }
 
 export interface FirebaseError {
@@ -41,6 +43,14 @@ export interface Inquiry {
   updatedAt: Date;
   repliedAt?: Date;
   replyMessage?: string;
+  attachments?: InquiryAttachment[]; // 첨부 파일
+}
+
+export interface InquiryAttachment {
+  name: string; // 파일명
+  url: string; // 다운로드 URL
+  size: number; // 파일 크기 (bytes)
+  type: string; // MIME 타입
 }
 
 // 생산요청 관련 타입

@@ -613,7 +613,6 @@ function AdminProductionRequestContent() {
                   onChange={handleChange}
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                 />
-                <p className="mt-1 text-xs text-gray-500">생산완료일을 입력하면 상태가 완료로 변경됩니다.</p>
               </div>
             </div>
           )}

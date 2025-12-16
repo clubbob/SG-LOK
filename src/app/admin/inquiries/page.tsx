@@ -11,6 +11,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 const INQUIRY_TYPES = [
   { value: 'production', label: '생산 요청' },
+  { value: 'certificate', label: '성적서 요청' },
   { value: 'account', label: '계정 관련' },
   { value: 'other', label: '기타' },
 ];
@@ -78,6 +79,7 @@ export default function AdminInquiriesPage() {
             subject: data.subject,
             message: data.message,
             status: data.status || 'pending',
+            attachments: data.attachments || [],
             createdAt: data.createdAt?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || new Date(),
             repliedAt: data.repliedAt?.toDate(),
@@ -130,6 +132,7 @@ export default function AdminInquiriesPage() {
           subject: data.subject,
           message: data.message,
           status: data.status || 'pending',
+          attachments: data.attachments || [],
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
           repliedAt: data.repliedAt?.toDate(),
@@ -414,6 +417,34 @@ export default function AdminInquiriesPage() {
                       <div className="bg-gray-50 rounded-lg p-4 whitespace-pre-wrap text-gray-900">
                         {selectedInquiry.message}
                       </div>
+                      
+                      {selectedInquiry.attachments && selectedInquiry.attachments.length > 0 && (
+                        <div className="mt-4">
+                          <h4 className="font-semibold text-gray-900 mb-2">첨부 파일</h4>
+                          <div className="space-y-2">
+                            {selectedInquiry.attachments.map((attachment, index) => (
+                              <a
+                                key={index}
+                                href={attachment.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                              >
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{attachment.name}</p>
+                                  <p className="text-xs text-gray-500">{attachment.size ? `${(attachment.size / 1024).toFixed(1)} KB` : ''}</p>
+                                </div>
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {selectedInquiry.replyMessage ? (

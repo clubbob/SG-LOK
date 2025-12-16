@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '@/lib/firebase';
-import { doc, getDoc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, runTransaction, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { Button, Input } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -71,7 +71,7 @@ export default function LoginPage() {
             throw new Error('USER_NOT_FOUND');
           }
           
-          const data = userDoc.data() as { approved?: boolean; sessionId?: string; lastLoginAt?: any };
+          const data = userDoc.data() as { approved?: boolean; sessionId?: string; lastLoginAt?: Timestamp };
           
           // 관리자 승인 여부 확인
           if (!data || data.approved === false) {
@@ -99,15 +99,17 @@ export default function LoginPage() {
         // localStorage에 세션 ID 저장 (트랜잭션 성공 후)
         localStorage.setItem(`session_${credential.user.uid}`, result);
         
-      } catch (profileError: any) {
+      } catch (profileError: unknown) {
         await auth.signOut();
         setLoading(false);
         
-        if (profileError.message === 'NOT_APPROVED') {
+        const errorMessage = profileError instanceof Error ? profileError.message : '';
+        
+        if (errorMessage === 'NOT_APPROVED') {
           setError('회원가입 신청이 접수되었습니다. 관리자가 승인을 완료한 후에 로그인할 수 있습니다.');
-        } else if (profileError.message === 'SESSION_EXISTS') {
+        } else if (errorMessage === 'SESSION_EXISTS') {
           setError('이미 다른 기기에서 로그인되어 있습니다. 다른 기기에서 로그아웃한 후 다시 시도해주세요.');
-        } else if (profileError.message === 'USER_NOT_FOUND') {
+        } else if (errorMessage === 'USER_NOT_FOUND') {
           setError('사용자 정보를 찾을 수 없습니다. 관리자에게 문의해주세요.');
         } else {
           console.error('승인 여부 확인 중 오류:', profileError);

@@ -252,17 +252,26 @@ export default function InquiryPage() {
               console.error(`[${index + 1}/${attachedFiles.length}] 파일 업로드 실패: ${file.name}`, fileError);
               
               // 에러 객체의 전체 정보 로깅
+              interface FirebaseStorageError {
+                message?: string;
+                code?: string;
+                serverResponse?: unknown;
+                stack?: string;
+              }
+              
               if (fileError && typeof fileError === 'object') {
+                const firebaseError = fileError as FirebaseStorageError;
                 console.error('에러 상세 정보:', {
-                  message: (fileError as any).message,
-                  code: (fileError as any).code,
-                  serverResponse: (fileError as any).serverResponse,
-                  stack: (fileError as any).stack
+                  message: firebaseError.message,
+                  code: firebaseError.code,
+                  serverResponse: firebaseError.serverResponse,
+                  stack: firebaseError.stack
                 });
               }
               
               const errorMessage = fileError instanceof Error ? fileError.message : String(fileError);
-              const errorCode = (fileError as any)?.code || '';
+              const firebaseError = fileError as FirebaseStorageError;
+              const errorCode = firebaseError?.code || '';
               
               // Firebase Storage 관련 에러 메시지 개선
               if (errorCode === 'storage/unauthorized' || errorCode === 'storage/permission-denied' || 
@@ -300,7 +309,21 @@ export default function InquiryPage() {
 
       // Firestore에 문의 내용 저장
       const now = Timestamp.now();
-      await addDoc(collection(db, 'inquiries'), {
+      interface InquiryData {
+        userId: string;
+        userName: string;
+        userEmail: string;
+        userCompany: string;
+        type: string;
+        subject: string;
+        message: string;
+        status: string;
+        attachments?: InquiryAttachment[];
+        createdAt: Timestamp;
+        updatedAt: Timestamp;
+      }
+      
+      const inquiryData: InquiryData = {
         userId: userProfile.id,
         userName: userProfile.name,
         userEmail: userProfile.email,
@@ -309,10 +332,16 @@ export default function InquiryPage() {
         subject: formData.subject.trim(),
         message: formData.message.trim(),
         status: 'pending',
-        attachments: attachments.length > 0 ? attachments : undefined,
         createdAt: now,
         updatedAt: now,
-      });
+      };
+      
+      // attachments가 있을 때만 추가 (undefined는 Firestore에서 허용되지 않음)
+      if (attachments.length > 0) {
+        inquiryData.attachments = attachments;
+      }
+      
+      await addDoc(collection(db, 'inquiries'), inquiryData);
 
       setFormData({ type: '', subject: '', message: '' });
       setAttachedFiles([]);

@@ -89,21 +89,7 @@ export default function LoginPage() {
             throw new Error('NOT_APPROVED');
           }
           
-          // 세션 체크: 현재 브라우저의 localStorage에 저장된 세션 ID 확인
-          const currentSessionId = localStorage.getItem(`session_${credential.user.uid}`);
-          
-          // localStorage에 세션이 있고, Firestore의 sessionId와 다르면 다른 기기에서 로그인 중
-          // localStorage에 세션이 없으면 이 브라우저에서는 처음 로그인하는 것이므로 새로 로그인 허용
-          if (currentSessionId && data.sessionId && data.sessionId !== currentSessionId) {
-            // 현재 브라우저에 세션이 있지만 Firestore의 sessionId와 다름
-            // 이는 다른 기기에서 로그인했거나 세션이 변경된 경우
-            throw new Error('SESSION_EXISTS');
-          }
-          
-          // localStorage에 세션이 없으면 (처음 로그인 또는 브라우저를 닫았다가 다시 열었을 때)
-          // 기존 Firestore의 sessionId를 무시하고 새로 로그인 허용
-          
-          // 새 세션 ID 생성 및 저장 (기존 세션이 없거나 만료되었거나 현재 브라우저의 세션과 같은 경우)
+          // 새 세션 ID 생성 및 저장 (항상 새 세션으로 로그인 허용)
           const newSessionId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
           
           // 트랜잭션으로 세션 정보 업데이트
@@ -126,8 +112,6 @@ export default function LoginPage() {
         
         if (errorMessage === 'NOT_APPROVED') {
           setError('회원가입 신청이 접수되었습니다. 관리자가 승인을 완료한 후에 로그인할 수 있습니다.');
-        } else if (errorMessage === 'SESSION_EXISTS') {
-          setError('이미 다른 기기에서 로그인되어 있습니다. 다른 기기에서 로그아웃한 후 다시 시도해주세요.');
         } else if (errorMessage === 'USER_NOT_FOUND') {
           setError('사용자 정보를 찾을 수 없습니다. 관리자에게 문의해주세요.');
         } else {

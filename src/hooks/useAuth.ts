@@ -53,21 +53,9 @@ export function useAuth() {
               return;
             }
             
-            // 세션 유효성 검증: 다른 곳에서 로그인했는지 확인
-            // 단, localStorage에 세션이 없으면 로그인 직후일 수 있으므로 체크하지 않음
-            const currentSessionId = localStorage.getItem(`session_${user.uid}`);
-            if (currentSessionId && userData.sessionId && currentSessionId !== userData.sessionId) {
-              console.log('다른 기기에서 로그인되어 있습니다. 자동 로그아웃합니다.');
-              await firebaseSignOut(auth);
-              setUser(null);
-              setUserProfile(null);
-              localStorage.removeItem(`session_${user.uid}`);
-              return;
-            }
-            
-            // localStorage에 세션이 없지만 Firestore에 sessionId가 있으면
-            // 로그인 직후일 수 있으므로 localStorage에 저장
-            if (!currentSessionId && userData.sessionId) {
+            // 세션 동기화: Firestore의 sessionId를 localStorage에 저장
+            // 로그인 시 항상 새 세션이 생성되므로, Firestore의 sessionId를 신뢰
+            if (userData.sessionId) {
               localStorage.setItem(`session_${user.uid}`, userData.sessionId);
             }
             

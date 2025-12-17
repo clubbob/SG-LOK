@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
 import { collection, query, orderBy, getDocs, doc, updateDoc, Timestamp, onSnapshot, limit } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
-import { Inquiry } from '@/types';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, auth, storage } from '@/lib/firebase';
+import { Inquiry, InquiryAttachment } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -22,6 +23,8 @@ export default function AdminInquiriesPage() {
   const [loadingInquiries, setLoadingInquiries] = useState(true);
   const [selectedInquiry, setSelectedInquiry] = useState<Inquiry | null>(null);
   const [replyMessage, setReplyMessage] = useState('');
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
   const [replying, setReplying] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -80,6 +83,7 @@ export default function AdminInquiriesPage() {
             message: data.message,
             status: data.status || 'pending',
             attachments: data.attachments || [],
+            replyAttachments: data.replyAttachments || [],
             createdAt: data.createdAt?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || new Date(),
             repliedAt: data.repliedAt?.toDate(),
@@ -133,6 +137,7 @@ export default function AdminInquiriesPage() {
           message: data.message,
           status: data.status || 'pending',
           attachments: data.attachments || [],
+          replyAttachments: data.replyAttachments || [],
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
           repliedAt: data.repliedAt?.toDate(),
@@ -162,6 +167,7 @@ export default function AdminInquiriesPage() {
   const handleInquiryClick = (inquiry: Inquiry) => {
     setSelectedInquiry(inquiry);
     setReplyMessage(inquiry.replyMessage || '');
+    setReplyFiles([]);
     setError('');
     setSuccess('');
     
@@ -169,6 +175,17 @@ export default function AdminInquiriesPage() {
     if (inquiry.status === 'pending') {
       markAsRead(inquiry.id);
     }
+  };
+
+  const handleReplyFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files);
+      setReplyFiles(prev => [...prev, ...newFiles]);
+    }
+  };
+
+  const removeReplyFile = (index: number) => {
+    setReplyFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const markAsRead = async (inquiryId: string) => {
@@ -196,18 +213,55 @@ export default function AdminInquiriesPage() {
     }
 
     setReplying(true);
+    setUploadingFiles(true);
     setError('');
     setSuccess('');
 
     try {
+      let replyAttachments: InquiryAttachment[] = [];
+
+      // 파일 업로드
+      if (replyFiles.length > 0) {
+        const uploadPromises = replyFiles.map(async (file) => {
+          try {
+            const timestamp = Date.now();
+            const randomId = Math.random().toString(36).substring(2, 15);
+            const fileName = `reply_${selectedInquiry.id}_${timestamp}_${randomId}_${file.name}`;
+            const filePath = `inquiries/replies/${selectedInquiry.id}/${fileName}`;
+            
+            const storageRef = ref(storage, filePath);
+            await uploadBytes(storageRef, file);
+            const downloadURL = await getDownloadURL(storageRef);
+            
+            return {
+              name: file.name,
+              url: downloadURL,
+              size: file.size,
+              type: file.type,
+            };
+          } catch (fileError) {
+            console.error(`파일 "${file.name}" 업로드 오류:`, fileError);
+            throw fileError;
+          }
+        });
+
+        replyAttachments = await Promise.all(uploadPromises);
+      }
+
+      // 기존 답변 첨부 파일이 있으면 유지
+      const existingReplyAttachments = selectedInquiry.replyAttachments || [];
+      const allReplyAttachments = [...existingReplyAttachments, ...replyAttachments];
+
       await updateDoc(doc(db, 'inquiries', selectedInquiry.id), {
         status: 'replied',
         replyMessage: replyMessage.trim(),
+        replyAttachments: allReplyAttachments,
         repliedAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
 
       setSuccess('답변이 성공적으로 저장되었습니다.');
+      setReplyFiles([]);
       loadInquiries(); // 목록 새로고침
       
       // 선택된 문의 정보 업데이트
@@ -215,6 +269,7 @@ export default function AdminInquiriesPage() {
         ...selectedInquiry,
         status: 'replied',
         replyMessage: replyMessage.trim(),
+        replyAttachments: allReplyAttachments,
         repliedAt: new Date(),
       });
     } catch (error) {
@@ -228,6 +283,7 @@ export default function AdminInquiriesPage() {
       }
     } finally {
       setReplying(false);
+      setUploadingFiles(false);
     }
   };
 
@@ -458,6 +514,33 @@ export default function AdminInquiriesPage() {
                             답변일: {formatDateTime(selectedInquiry.repliedAt)}
                           </p>
                         )}
+                        {selectedInquiry.replyAttachments && selectedInquiry.replyAttachments.length > 0 && (
+                          <div className="mt-4">
+                            <h4 className="font-semibold text-gray-900 mb-2">답변 첨부 파일</h4>
+                            <div className="space-y-2">
+                              {selectedInquiry.replyAttachments.map((attachment, index) => (
+                                <a
+                                  key={index}
+                                  href={attachment.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                                >
+                                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-gray-900 truncate">{attachment.name}</p>
+                                    <p className="text-xs text-gray-500">{attachment.size ? `${(attachment.size / 1024).toFixed(1)} KB` : ''}</p>
+                                  </div>
+                                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                  </svg>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="mb-6">
@@ -472,6 +555,44 @@ export default function AdminInquiriesPage() {
                           placeholder="답변 내용을 입력하세요..."
                           className="flex w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                         />
+                        <div className="mt-4">
+                          <label htmlFor="replyFiles" className="block text-sm font-medium text-gray-700 mb-2">
+                            첨부 파일
+                          </label>
+                          <input
+                            id="replyFiles"
+                            type="file"
+                            multiple
+                            onChange={handleReplyFileChange}
+                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                            disabled={replying || uploadingFiles}
+                          />
+                          {replyFiles.length > 0 && (
+                            <div className="mt-2 space-y-2">
+                              {replyFiles.map((file, index) => (
+                                <div key={index} className="flex items-center justify-between bg-gray-50 rounded-lg p-2">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <span className="text-sm text-gray-900 truncate">{file.name}</span>
+                                    <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeReplyFile(index)}
+                                    className="text-red-500 hover:text-red-700 ml-2"
+                                    disabled={replying || uploadingFiles}
+                                  >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -482,6 +603,7 @@ export default function AdminInquiriesPage() {
                         onClick={() => {
                           setSelectedInquiry(null);
                           setReplyMessage('');
+                          setReplyFiles([]);
                           setError('');
                           setSuccess('');
                         }}
@@ -494,9 +616,10 @@ export default function AdminInquiriesPage() {
                           variant="primary"
                           size="md"
                           onClick={handleReply}
-                          loading={replying}
+                          loading={replying || uploadingFiles}
+                          disabled={replying || uploadingFiles}
                         >
-                          답변 저장
+                          {uploadingFiles ? '파일 업로드 중...' : '답변 저장'}
                         </Button>
                       )}
                   </div>

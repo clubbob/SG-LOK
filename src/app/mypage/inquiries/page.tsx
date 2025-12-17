@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Header, Footer } from '@/components/layout';
+import { Button } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
-import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Inquiry } from '@/types';
 import { formatDateTime } from '@/lib/utils';
@@ -34,10 +35,10 @@ export default function MyInquiriesPage() {
     try {
       setLoadingInquiries(true);
       const inquiriesRef = collection(db, 'inquiries');
+      // orderBy 제거하고 클라이언트 측에서 정렬
       const q = query(
         inquiriesRef,
-        where('userId', '==', userProfile.id),
-        orderBy('createdAt', 'desc')
+        where('userId', '==', userProfile.id)
       );
       const querySnapshot = await getDocs(q);
       
@@ -57,7 +58,15 @@ export default function MyInquiriesPage() {
           updatedAt: data.updatedAt?.toDate() || new Date(),
           repliedAt: data.repliedAt?.toDate(),
           replyMessage: data.replyMessage,
+          replyAttachments: data.replyAttachments || [],
         });
+      });
+
+      // 클라이언트 측에서 날짜순 정렬 (최신순)
+      inquiriesData.sort((a, b) => {
+        const dateA = a.createdAt.getTime();
+        const dateB = b.createdAt.getTime();
+        return dateB - dateA; // 내림차순
       });
       
       setInquiries(inquiriesData);
@@ -103,7 +112,17 @@ export default function MyInquiriesPage() {
       <Header />
       <main className="flex-1 bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <h1 className="text-3xl font-bold text-gray-900 mb-8">내 문의 내역</h1>
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900">내 문의 내역</h1>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadMyInquiries}
+              disabled={loadingInquiries}
+            >
+              새로고침
+            </Button>
+          </div>
 
           {inquiries.length === 0 ? (
             <div className="bg-white rounded-lg shadow-sm p-12 text-center">
@@ -156,6 +175,33 @@ export default function MyInquiriesPage() {
                           {inquiry.replyMessage}
                         </p>
                       </div>
+                      {inquiry.replyAttachments && inquiry.replyAttachments.length > 0 && (
+                        <div className="mt-4">
+                          <h5 className="text-sm font-semibold text-gray-900 mb-2">답변 첨부 파일</h5>
+                          <div className="space-y-2">
+                            {inquiry.replyAttachments.map((attachment, index) => (
+                              <a
+                                key={index}
+                                href={attachment.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                              >
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{attachment.name}</p>
+                                  <p className="text-xs text-gray-500">{attachment.size ? `${(attachment.size / 1024).toFixed(1)} KB` : ''}</p>
+                                </div>
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -212,6 +258,33 @@ export default function MyInquiriesPage() {
                       <div className="bg-blue-50 rounded-lg p-4 border-l-4 border-blue-500 whitespace-pre-wrap text-gray-900">
                         {selectedInquiry.replyMessage}
                       </div>
+                      {selectedInquiry.replyAttachments && selectedInquiry.replyAttachments.length > 0 && (
+                        <div className="mt-4">
+                          <h4 className="text-sm font-semibold text-gray-900 mb-2">답변 첨부 파일</h4>
+                          <div className="space-y-2">
+                            {selectedInquiry.replyAttachments.map((attachment, index) => (
+                              <a
+                                key={index}
+                                href={attachment.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors"
+                              >
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{attachment.name}</p>
+                                  <p className="text-xs text-gray-500">{attachment.size ? `${(attachment.size / 1024).toFixed(1)} KB` : ''}</p>
+                                </div>
+                                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 

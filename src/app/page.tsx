@@ -47,9 +47,9 @@ export default function Home() {
               </div>
             )}
             {isAuthenticated && (
-              <Link href="/production">
+              <Link href="/dashboard">
                 <Button variant="primary" size="lg">
-                  생산관리 시작하기
+                  대시보드 바로가기
                 </Button>
               </Link>
             )}

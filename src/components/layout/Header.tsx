@@ -60,6 +60,16 @@ export default function Header() {
           {/* 데스크톱 네비게이션 */}
           {!isAuthPage && (
             <nav className="hidden md:flex items-center space-x-4">
+              <Link
+                href="/dashboard"
+                className={`px-4 py-2.5 rounded-md text-base font-semibold transition-colors shadow-sm ${
+                  isActivePath('/dashboard')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white hover:bg-blue-600 hover:text-white'
+                }`}
+              >
+                대시보드
+              </Link>
               <div className="relative">
                 <button
                   type="button"
@@ -125,7 +135,7 @@ export default function Header() {
 
               <button
                 type="button"
-                onClick={() => alert('성적서관리 서비스는 준비 중입니다.')}
+                onClick={() => alert('성적서관리 기능이 곧 추가될 예정입니다.')}
                 className="px-4 py-2.5 rounded-md text-base font-semibold text-white hover:bg-blue-600 hover:text-white transition-colors shadow-sm"
               >
                 성적서관리
@@ -265,6 +275,17 @@ export default function Header() {
           <div className="md:hidden pb-4">
             <nav className="flex flex-col space-y-2">
               <Link
+                href="/dashboard"
+                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                  isActivePath('/dashboard')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                대시보드
+              </Link>
+              <Link
                 href="/production"
                 className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
                   isActivePath('/production')
@@ -311,7 +332,7 @@ export default function Header() {
               <button
                 type="button"
                 onClick={() => {
-                  alert('성적서관리 서비스는 준비 중입니다.');
+                  alert('성적서관리 기능이 곧 추가될 예정입니다.');
                   setIsMobileMenuOpen(false);
                 }}
                 className="px-5 py-3 rounded-md text-base font-semibold text-left text-white hover:bg-blue-600"

@@ -105,6 +105,46 @@ export default function AdminUsersPage() {
 
   const totalPages = Math.ceil(users.length / itemsPerPage);
 
+  const loadUsers = async () => {
+    try {
+      setLoadingUsers(true);
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      
+      const usersData: User[] = [];
+      querySnapshot.forEach((snapshotDoc) => {
+        const data = snapshotDoc.data();
+        usersData.push({
+          id: snapshotDoc.id,
+          name: data.name || '',
+          email: data.email || '',
+          company: data.company,
+          position: data.position,
+          phone: data.phone,
+          address: data.address,
+          businessNumber: data.businessNumber,
+          website: data.website,
+          userTypes: data.userTypes || [],
+          currentRole: data.currentRole,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+          approved: data.approved,
+          deleted: data.deleted || false,
+          deletedAt: data.deletedAt?.toDate(),
+          deletedBy: data.deletedBy,
+        });
+      });
+      setUsers(usersData);
+      setCurrentPage(1);
+    } catch (error) {
+      console.error('사용자 목록 로드 오류:', error);
+      setError('사용자 목록을 불러오는데 실패했습니다.');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
   const handleUserClick = (user: User) => {
     setSelectedUser(user);
     setError('');
@@ -168,6 +208,14 @@ export default function AdminUsersPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex justify-between items-center mb-6">
             <h1 className="text-2xl font-bold text-gray-900">회원 관리</h1>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadUsers}
+              disabled={loadingUsers}
+            >
+              새로고침
+            </Button>
           </div>
 
           {successMessage && (

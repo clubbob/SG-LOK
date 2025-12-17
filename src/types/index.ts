@@ -44,6 +44,7 @@ export interface Inquiry {
   repliedAt?: Date;
   replyMessage?: string;
   attachments?: InquiryAttachment[]; // 첨부 파일
+  replyAttachments?: InquiryAttachment[]; // 답변 첨부 파일
 }
 
 export interface InquiryAttachment {

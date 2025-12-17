@@ -14,7 +14,7 @@ const SAVED_EMAIL_KEY = 'sglok_saved_email';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading, userProfile } = useAuth();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -24,10 +24,10 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
 
-  // 이미 로그인된 사용자는 생산요청 목록으로 리다이렉트
+  // 이미 로그인된 사용자는 대시보드로 리다이렉트
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      router.push('/production/list');
+      router.push('/dashboard');
     }
   }, [isAuthenticated, authLoading, router]);
 
@@ -145,10 +145,32 @@ export default function LoginPage() {
       
       // 로그인 성공 - useAuth가 프로필을 로드할 시간을 주고 리다이렉트
       setLoading(false);
-      // 약간의 지연을 두어 useAuth가 세션을 동기화할 시간을 줌
-      setTimeout(() => {
-        window.location.href = '/production/list';
-      }, 300);
+      
+      // 프로필이 로드될 때까지 대기 (최대 3초)
+      let retries = 30; // 100ms * 30 = 3초
+      const checkProfileLoaded = setInterval(async () => {
+        retries--;
+        try {
+          // Firestore에서 직접 프로필 확인
+          const userDoc = await getDoc(doc(db, 'users', credential.user.uid));
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            if (userData && userData.approved !== false) {
+              clearInterval(checkProfileLoaded);
+              window.location.href = '/dashboard';
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('프로필 확인 중 오류:', error);
+        }
+        
+        if (retries <= 0) {
+          clearInterval(checkProfileLoaded);
+          // 타임아웃 시에도 리다이렉트 (프로필은 나중에 로드될 수 있음)
+          window.location.href = '/dashboard';
+        }
+      }, 100);
     } catch (error) {
       // 콘솔 에러 출력하지 않음 (사용자에게만 친화적인 메시지 표시)
       setLoading(false); // 에러 발생 시 즉시 로딩 해제

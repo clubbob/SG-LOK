@@ -7,7 +7,7 @@ import { Button } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function Home() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading } = useAuth(); // 페이지 마운트 시 한 번만 실행
 
   if (loading) {
     return (

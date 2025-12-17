@@ -23,13 +23,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
-  // 이미 로그인된 사용자는 대시보드로 리다이렉트
+  // 이미 로그인된 사용자는 메인 페이지로 리다이렉트 (window.location 사용하여 전체 리로드)
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      router.push('/dashboard');
+    if (!authLoading && isAuthenticated && !isRedirecting) {
+      setIsRedirecting(true);
+      window.location.href = '/';
     }
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, isRedirecting]);
 
   // 페이지 로드 시 저장된 이메일 불러오기
   useEffect(() => {
@@ -157,7 +159,10 @@ export default function LoginPage() {
             const userData = userDoc.data();
             if (userData && userData.approved !== false) {
               clearInterval(checkProfileLoaded);
-              window.location.href = '/dashboard';
+              if (!isRedirecting) {
+                setIsRedirecting(true);
+                window.location.href = '/';
+              }
               return;
             }
           }
@@ -168,7 +173,10 @@ export default function LoginPage() {
         if (retries <= 0) {
           clearInterval(checkProfileLoaded);
           // 타임아웃 시에도 리다이렉트 (프로필은 나중에 로드될 수 있음)
-          window.location.href = '/dashboard';
+          if (!isRedirecting) {
+            setIsRedirecting(true);
+            window.location.href = '/';
+          }
         }
       }, 100);
     } catch (error) {
@@ -225,8 +233,8 @@ export default function LoginPage() {
     }
   };
 
-  // 인증 로딩 중이거나 이미 로그인된 경우
-  if (authLoading || isAuthenticated) {
+  // 인증 로딩 중인 경우만 로딩 화면 표시
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -235,6 +243,11 @@ export default function LoginPage() {
         </div>
       </div>
     );
+  }
+
+  // 이미 로그인된 경우 리다이렉트만 수행 (로딩 화면 표시 안 함)
+  if (isAuthenticated) {
+    return null;
   }
 
   return (

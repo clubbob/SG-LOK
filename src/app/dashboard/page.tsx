@@ -24,6 +24,7 @@ export default function DashboardPage() {
     replied: 0,
   });
   const [loadingStats, setLoadingStats] = useState(true);
+  const [showLoginPopup, setShowLoginPopup] = useState(false);
 
   // 인증 확인 및 리다이렉트
   useEffect(() => {
@@ -31,6 +32,17 @@ export default function DashboardPage() {
       router.push('/login');
     }
   }, [loading, isAuthenticated, router]);
+
+  // 로그인 팝업 표시 확인
+  useEffect(() => {
+    if (typeof window !== 'undefined' && !loading && isAuthenticated) {
+      const showPopup = localStorage.getItem('show_login_popup');
+      if (showPopup === 'true') {
+        setShowLoginPopup(true);
+        localStorage.removeItem('show_login_popup');
+      }
+    }
+  }, [loading, isAuthenticated]);
 
   // 통계 및 최근 요청 불러오기
   useEffect(() => {
@@ -45,13 +57,10 @@ export default function DashboardPage() {
     try {
       setLoadingStats(true);
       
-      // 생산요청 통계
+      // 생산요청 통계 (모든 생산요청 기준)
       const requestsRef = collection(db, 'productionRequests');
-      const myRequestsQuery = query(
-        requestsRef,
-        where('userId', '==', userProfile.id)
-      );
-      const requestsSnapshot = await getDocs(myRequestsQuery);
+      const requestsQuery = query(requestsRef);
+      const requestsSnapshot = await getDocs(requestsQuery);
       
       let pendingCount = 0;
       let inProgressCount = 0;
@@ -134,6 +143,33 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+      {/* 로그인 팝업 */}
+      {showLoginPopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="text-center">
+              <div className="mb-4">
+                <svg className="w-16 h-16 text-blue-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">로그인 완료</h2>
+              <p className="text-gray-700 mb-2 text-lg">
+                사용 중 불편한 점, 개선할 점 알려주세요.
+              </p>
+              <p className="text-gray-600 mb-6 text-base">
+                작지만 강한 회사가 되도록 노력합시다
+              </p>
+              <button
+                onClick={() => setShowLoginPopup(false)}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-semibold"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <main className="flex-1 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {/* 헤더 */}

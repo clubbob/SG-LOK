@@ -56,8 +56,8 @@ export default function AdminPage() {
     const isAdmin = checkAdminAuth();
     
     if (!isAdmin) {
-      // 인증되지 않으면 로그인 페이지로 리다이렉트
-      router.replace('/admin/login');
+      // 인증되지 않으면 로그인 페이지로 즉시 리다이렉트
+      window.location.href = '/admin/login';
       return;
     }
 

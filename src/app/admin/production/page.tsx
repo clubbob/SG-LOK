@@ -49,19 +49,6 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
   cancelled: 'bg-red-500 text-white',
 };
 
-const PRODUCTION_STATUS_LABELS: Record<string, string> = {
-  production_waiting: '계획 확정',
-  production_2nd: '생산 중 (2차 진행중)',
-  production_3rd: '생산 중 (3차 진행중)',
-  production_completed: '생산 완료',
-};
-
-const PRODUCTION_STATUS_COLORS: Record<string, string> = {
-  production_waiting: 'bg-gray-100 text-gray-800',
-  production_2nd: 'bg-blue-100 text-blue-800',
-  production_3rd: 'bg-yellow-100 text-yellow-800',
-  production_completed: 'bg-green-100 text-green-800',
-};
 
 export default function AdminProductionPage() {
   const router = useRouter();
@@ -76,7 +63,6 @@ export default function AdminProductionPage() {
   const [approvingRequest, setApprovingRequest] = useState<ProductionRequest | null>(null);
   const [approvalForm, setApprovalForm] = useState({
     plannedCompletionDate: '',
-    productionLine: '',
     quantity: '',
   });
   const [approving, setApproving] = useState(false);
@@ -111,44 +97,6 @@ export default function AdminProductionPage() {
               : undefined;
           
           const currentStatus = data.status || 'pending_review';
-          const productionStatus = data.productionStatus;
-          
-          // 생산현황에 따라 상태 자동 동기화
-          let shouldUpdateStatus = false;
-          let newStatus = currentStatus;
-          
-          if (productionStatus === 'production_2nd' || productionStatus === 'production_3rd') {
-            // 생산현황이 2차/3차 진행중인데 상태가 생산 중이 아니면 업데이트
-            if (currentStatus !== 'in_progress') {
-              shouldUpdateStatus = true;
-              newStatus = 'in_progress';
-            }
-          } else if (productionStatus === 'production_completed') {
-            // 생산현황이 생산 완료인데 상태가 완료가 아니면 업데이트
-            if (currentStatus !== 'completed') {
-              shouldUpdateStatus = true;
-              newStatus = 'completed';
-            }
-          } else if (productionStatus === 'production_waiting') {
-            // 생산현황이 생산 대기인데 상태가 계획 확정이 아니면 업데이트
-            if (currentStatus !== 'confirmed') {
-              shouldUpdateStatus = true;
-              newStatus = 'confirmed';
-            }
-          }
-          
-          // 상태 업데이트가 필요한 경우
-          if (shouldUpdateStatus) {
-            updatePromises.push(
-              updateDoc(doc.ref, {
-                status: newStatus,
-                updatedAt: Timestamp.now(),
-                updatedBy: 'admin',
-              }).catch((error) => {
-                console.error(`생산요청 ${doc.id} 상태 업데이트 실패:`, error);
-              })
-            );
-          }
           
           requestsData.push({
             id: doc.id,
@@ -163,15 +111,13 @@ export default function AdminProductionPage() {
             requestedCompletionDate: data.requestedCompletionDate?.toDate() || new Date(),
             productionReason: data.productionReason,
             customerName: data.customerName,
-            status: newStatus, // 동기화된 상태 사용
+            status: currentStatus,
             itemCode: data.itemCode,
             itemName: data.itemName,
-            productionLine: data.productionLine,
             plannedStartDate: data.plannedStartDate?.toDate(),
             plannedCompletionDate: data.plannedCompletionDate?.toDate(),
             actualStartDate: data.actualStartDate?.toDate(),
             actualCompletionDate: data.actualCompletionDate?.toDate(),
-            productionStatus: productionStatus || undefined,
           priority: data.priority,
           memo: data.memo || '',
           createdAt: data.createdAt?.toDate() || new Date(),
@@ -215,7 +161,6 @@ export default function AdminProductionPage() {
       const productName = request.productName?.toLowerCase() || '';
       const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const customerName = request.customerName?.toLowerCase() || '';
-      const productionLine = request.productionLine?.toLowerCase() || '';
       const userName = request.userName?.toLowerCase() || '';
       const statusLabel = STATUS_LABELS[request.status]?.toLowerCase() || request.status || '';
 
@@ -223,7 +168,6 @@ export default function AdminProductionPage() {
         productName.includes(query) ||
         productionReason.includes(query) ||
         customerName.includes(query) ||
-        productionLine.includes(query) ||
         userName.includes(query) ||
         statusLabel.includes(query) ||
         request.status.includes(query)
@@ -254,7 +198,6 @@ export default function AdminProductionPage() {
       plannedCompletionDate: request.plannedCompletionDate 
         ? formatDateShort(request.plannedCompletionDate).replace(/\//g, '-')
         : '',
-      productionLine: request.productionLine || '',
       quantity: request.quantity?.toString() || '',
     });
   };
@@ -264,11 +207,6 @@ export default function AdminProductionPage() {
 
     if (!approvalForm.plannedCompletionDate.trim()) {
       setError('완료예정일을 입력해주세요.');
-      return;
-    }
-
-    if (!approvalForm.productionLine.trim()) {
-      setError('생산라인을 입력해주세요.');
       return;
     }
 
@@ -291,17 +229,15 @@ export default function AdminProductionPage() {
       
       await updateDoc(doc(db, 'productionRequests', approvingRequest.id), {
         status: 'confirmed',
-        productionLine: approvalForm.productionLine.trim(),
         plannedCompletionDate: plannedCompletionDate,
         quantity: quantityNum,
-        productionStatus: 'production_waiting', // 승인 시 생산현황 기본값: 생산 대기
         updatedAt: Timestamp.now(),
         updatedBy: 'admin',
       });
 
       // 모달 닫기
       setApprovingRequest(null);
-      setApprovalForm({ plannedCompletionDate: '', productionLine: '', quantity: '' });
+      setApprovalForm({ plannedCompletionDate: '', quantity: '' });
       // 실시간 업데이트로 자동 새로고침됨
     } catch (error) {
       console.error('생산요청 승인 오류:', error);
@@ -334,9 +270,7 @@ export default function AdminProductionPage() {
       '생산수량',
       '완료요청일',
       '완료예정일',
-      '생산현황',
       '생산완료일',
-      '생산라인',
       '요청자',
       '비고',
       '상태',
@@ -346,9 +280,6 @@ export default function AdminProductionPage() {
       const rowNumber = filteredRequests.length - idx;
       const productionReasonLabel = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const statusLabel = STATUS_LABELS[request.status];
-      const productionStatusLabel = request.productionStatus 
-        ? PRODUCTION_STATUS_LABELS[request.productionStatus] || request.productionStatus
-        : '';
 
       const requestedDateStr = request.requestedCompletionDate ? formatDateShort(request.requestedCompletionDate) : '';
       const plannedDateStr = request.plannedCompletionDate ? formatDateShort(request.plannedCompletionDate) : '';
@@ -365,9 +296,7 @@ export default function AdminProductionPage() {
         request.quantity,
         requestedDateStr,
         plannedDateStr,
-        productionStatusLabel,
         actualDateStr,
-        request.productionLine || '',
         request.userName || '',
         request.memo || '',
         statusLabel,
@@ -479,7 +408,7 @@ export default function AdminProductionPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="제품명, 생산목적, 고객사명, 생산라인, 요청자, 상태 검색..."
+            placeholder="제품명, 생산목적, 고객사명, 요청자, 상태 검색..."
             className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
           />
           <svg
@@ -508,7 +437,7 @@ export default function AdminProductionPage() {
           <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">등록된 생산요청이 없습니다</h3>
+          <h3 className="text-sm font-normal text-gray-500 mb-2">등록된 생산요청이 없습니다</h3>
         </div>
       ) : (
         <>
@@ -527,9 +456,7 @@ export default function AdminProductionPage() {
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산수량</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산현황</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산완료일</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산라인</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">비고</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">상태</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">관리</th>
@@ -610,15 +537,6 @@ export default function AdminProductionPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        {request.productionStatus ? (
-                          <span className="text-sm text-gray-700">
-                            {PRODUCTION_STATUS_LABELS[request.productionStatus] || request.productionStatus}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
                       <td className="px-3 py-4">
                         <div className="text-sm text-gray-900">
                           {request.actualCompletionDate ? (
@@ -637,11 +555,6 @@ export default function AdminProductionPage() {
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 whitespace-nowrap">
-                          {request.productionLine || <span className="text-gray-400">-</span>}
                         </div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
@@ -793,7 +706,7 @@ export default function AdminProductionPage() {
               <button
                 onClick={() => {
                   setApprovingRequest(null);
-                  setApprovalForm({ plannedCompletionDate: '', productionLine: '', quantity: '' });
+                  setApprovalForm({ plannedCompletionDate: '', quantity: '' });
                   setError('');
                 }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -906,27 +819,6 @@ export default function AdminProductionPage() {
                     required
                   />
                 </div>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <label htmlFor="productionLine" className="block text-sm font-medium text-gray-700 mb-2">
-                    생산라인: *
-                  </label>
-                  <input
-                    type="text"
-                    id="productionLine"
-                    value={approvalForm.productionLine}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      setApprovalForm({ ...approvalForm, productionLine: e.target.value });
-                    }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                    onFocus={(e) => e.stopPropagation()}
-                    placeholder="생산라인을 입력하세요 (예: 라인1, 라인2)"
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                    disabled={approving}
-                    required
-                  />
-                </div>
               </div>
             </div>
             <div 
@@ -938,7 +830,7 @@ export default function AdminProductionPage() {
                 variant="outline"
                 onClick={() => {
                   setApprovingRequest(null);
-                  setApprovalForm({ plannedCompletionDate: '', productionLine: '', quantity: '' });
+                  setApprovalForm({ plannedCompletionDate: '', quantity: '' });
                   setError('');
                 }}
                 disabled={approving}

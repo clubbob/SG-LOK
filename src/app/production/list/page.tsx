@@ -27,19 +27,6 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
   cancelled: 'bg-red-500 text-white',
 };
 
-const PRODUCTION_STATUS_LABELS: Record<string, string> = {
-  production_waiting: '계획 확정',
-  production_2nd: '생산 중 (2차 진행중)',
-  production_3rd: '생산 중 (3차 진행중)',
-  production_completed: '생산 완료',
-};
-
-const PRODUCTION_STATUS_COLORS: Record<string, string> = {
-  production_waiting: 'bg-gray-100 text-gray-800',
-  production_2nd: 'bg-blue-100 text-blue-800',
-  production_3rd: 'bg-yellow-100 text-yellow-800',
-  production_completed: 'bg-green-100 text-green-800',
-};
 
 export default function ProductionRequestListPage() {
   const { isAuthenticated, userProfile, loading } = useAuth();
@@ -101,12 +88,10 @@ export default function ProductionRequestListPage() {
           status: data.status || 'pending_review',
           itemCode: data.itemCode,
           itemName: data.itemName,
-          productionLine: data.productionLine,
           plannedStartDate: data.plannedStartDate?.toDate(),
           plannedCompletionDate: data.plannedCompletionDate?.toDate(),
           actualStartDate: data.actualStartDate?.toDate(),
           actualCompletionDate: data.actualCompletionDate?.toDate(),
-          productionStatus: data.productionStatus || undefined,
           priority: data.priority,
           memo: data.memo || '',
           createdAt: data.createdAt?.toDate() || new Date(),
@@ -148,19 +133,12 @@ export default function ProductionRequestListPage() {
       const productName = request.productName?.toLowerCase() || '';
       const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const customerName = request.customerName?.toLowerCase() || '';
-      const productionLine = request.productionLine?.toLowerCase() || '';
-      const userName = request.userName?.toLowerCase() || '';
       const statusLabel = STATUS_LABELS[request.status]?.toLowerCase() || request.status || '';
-      const productionStatusLabel = request.productionStatus ? PRODUCTION_STATUS_LABELS[request.productionStatus]?.toLowerCase() || '' : '';
-
       return (
         productName.includes(query) ||
         productionReason.includes(query) ||
         customerName.includes(query) ||
-        productionLine.includes(query) ||
-        userName.includes(query) ||
         statusLabel.includes(query) ||
-        productionStatusLabel.includes(query) ||
         request.status.includes(query)
       );
     });
@@ -223,10 +201,7 @@ export default function ProductionRequestListPage() {
       '생산수량',
       '완료요청일',
       '완료예정일',
-      '생산현황',
       '생산완료일',
-      '생산라인',
-      '요청자',
       '비고',
       '상태',
     ];
@@ -251,10 +226,7 @@ export default function ProductionRequestListPage() {
         request.quantity,
         requestedDateStr,
         plannedDateStr,
-        request.productionStatus ? PRODUCTION_STATUS_LABELS[request.productionStatus] || '' : '',
         actualDateStr,
-        request.productionLine || '',
-        request.userName || '',
         request.memo || '',
         statusLabel,
       ];
@@ -342,7 +314,7 @@ export default function ProductionRequestListPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="제품명, 생산목적, 고객사명, 생산라인, 생산현황, 요청자, 상태 검색..."
+                placeholder="제품명, 생산목적, 고객사명, 상태 검색..."
                 className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               />
               <svg
@@ -409,10 +381,7 @@ export default function ProductionRequestListPage() {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산수량</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산현황</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산완료일</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산라인</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">비고</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">상태</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">관리</th>
@@ -489,15 +458,6 @@ export default function ProductionRequestListPage() {
                               }
                             </div>
                           </td>
-                          <td className="px-3 py-4 whitespace-nowrap">
-                            {request.productionStatus ? (
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${PRODUCTION_STATUS_COLORS[request.productionStatus] || 'bg-gray-100 text-gray-800'}`}>
-                                {PRODUCTION_STATUS_LABELS[request.productionStatus] || request.productionStatus}
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </td>
                           <td className="px-3 py-4">
                             <div className="text-sm text-gray-900">
                               {request.actualCompletionDate ? (
@@ -517,12 +477,6 @@ export default function ProductionRequestListPage() {
                                 <span className="text-gray-400">-</span>
                               )}
                             </div>
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{request.productionLine || <span className="text-gray-400">-</span>}</div>
-                          </td>
-                          <td className="px-3 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{request.userName}</div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">

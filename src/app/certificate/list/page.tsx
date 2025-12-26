@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
-import { collection, query, getDocs, Timestamp, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, getDocs, Timestamp, doc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Certificate, CertificateStatus, CertificateType } from '@/types';
 import { formatDateShort } from '@/lib/utils';
@@ -54,21 +54,29 @@ export default function CertificateListPage() {
     }
   }, [loading, isAuthenticated, router]);
 
-  // 성적서 목록 불러오기
-  const loadCertificates = async () => {
-    if (!userProfile) return;
+  // 성적서 목록 불러오기 (실시간 업데이트)
+  useEffect(() => {
+    if (!isAuthenticated || !userProfile) return;
 
-    try {
-      setLoadingCertificates(true);
-      setError('');
-      
-      const certificatesRef = collection(db, 'certificates');
-      const q = query(certificatesRef);
-      const querySnapshot = await getDocs(q);
-      
-      const certificatesData: Certificate[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
+    setLoadingCertificates(true);
+    setError('');
+    
+    const certificatesRef = collection(db, 'certificates');
+    const q = query(certificatesRef);
+    
+    const unsubscribeSnapshot = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const certificatesData: Certificate[] = [];
+        
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          
+          // 생산요청 데이터 필터링
+          if (data.productionReason) {
+            return;
+          }
+          
           certificatesData.push({
             id: doc.id,
             userId: data.userId,
@@ -95,28 +103,29 @@ export default function CertificateListPage() {
             completedAt: data.completedAt?.toDate(),
             completedBy: data.completedBy,
           });
-      });
-      
-      // 클라이언트 사이드 정렬 (인덱스 없이 사용)
-      certificatesData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      
-      // 본인이 작성한 성적서만 필터링
-      const myCertificates = certificatesData.filter(cert => cert.userId === userProfile.id);
-      
-      setCertificates(myCertificates);
-    } catch (error) {
-      console.error('성적서 목록 로드 오류:', error);
-      const firebaseError = error as { code?: string; message?: string };
-      setError(`성적서 목록을 불러오는데 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
-    } finally {
-      setLoadingCertificates(false);
-    }
-  };
+        });
+        
+        // 클라이언트 사이드 정렬 (인덱스 없이 사용)
+        certificatesData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        
+        // 본인이 작성한 성적서만 필터링
+        const myCertificates = certificatesData.filter(cert => cert.userId === userProfile.id);
+        
+        setCertificates(myCertificates);
+        setLoadingCertificates(false);
+      },
+      (error) => {
+        console.error('성적서 목록 로드 오류:', error);
+        const firebaseError = error as { code?: string; message?: string };
+        setError(`성적서 목록을 불러오는데 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+        setLoadingCertificates(false);
+      }
+    );
 
-  useEffect(() => {
-    if (isAuthenticated && userProfile) {
-      loadCertificates();
-    }
+    // 컴포넌트 언마운트 시 구독 해제
+    return () => {
+      unsubscribeSnapshot();
+    };
   }, [isAuthenticated, userProfile]);
 
   // 검색 필터링
@@ -169,7 +178,7 @@ export default function CertificateListPage() {
     setDeletingId(certificate.id);
     try {
       await deleteDoc(doc(db, 'certificates', certificate.id));
-      await loadCertificates();
+      // 실시간 업데이트로 자동 새로고침됨
     } catch (error) {
       console.error('성적서 삭제 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
@@ -214,7 +223,10 @@ export default function CertificateListPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={loadCertificates}
+                onClick={() => {
+                  // 실시간 업데이트가 작동 중이지만, 사용자 요청에 따라 페이지 새로고침
+                  window.location.reload();
+                }}
                 disabled={loadingCertificates}
               >
                 새로고침

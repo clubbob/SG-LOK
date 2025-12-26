@@ -89,6 +89,22 @@ export default function AdminCertificatePage() {
         
         querySnapshot.forEach((doc) => {
           const data = doc.data();
+          
+          // 성적서 데이터인지 확인
+          // 생산요청 데이터와 구분: productionReason이 있으면 생산요청, 없으면 성적서
+          // 또는 certificateType이 있으면 성적서로 간주
+          if (data.productionReason) {
+            // 생산요청 데이터는 건너뛰기
+            console.warn(`생산요청 데이터가 certificates 컬렉션에 있습니다: ${doc.id}`);
+            return;
+          }
+          
+          // certificateType이 없으면 성적서가 아닐 수 있음 (안전장치)
+          if (!data.certificateType && !data.requestDate) {
+            console.warn(`성적서 형식이 아닌 데이터가 있습니다: ${doc.id}`);
+            return;
+          }
+          
           certificatesData.push({
             id: doc.id,
             userId: data.userId,

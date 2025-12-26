@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
@@ -17,7 +17,7 @@ const CERTIFICATE_TYPES: { value: CertificateType; label: string }[] = [
   { value: 'other', label: '기타' },
 ];
 
-export default function CertificateRequestPage() {
+function CertificateRequestContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -533,6 +533,23 @@ export default function CertificateRequestPage() {
       </main>
       <Footer />
     </div>
+  );
+}
+
+export default function CertificateRequestPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">로딩 중...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <CertificateRequestContent />
+    </Suspense>
   );
 }
 

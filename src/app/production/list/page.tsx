@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
-import { collection, query, orderBy, getDocs, Timestamp, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, Timestamp, doc, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionRequest, ProductionRequestStatus } from '@/types';
 import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
@@ -39,6 +39,7 @@ export default function ProductionRequestListPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<ProductionRequest | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredRequests, setFilteredRequests] = useState<ProductionRequest[]>([]);
 
@@ -50,75 +51,78 @@ export default function ProductionRequestListPage() {
     }
   }, [loading, isAuthenticated, router]);
 
-  // 생산요청 목록 불러오기
-  const loadRequests = async () => {
-    if (!userProfile) return;
-
-    try {
-      setLoadingRequests(true);
-      setError('');
-      
-      const requestsRef = collection(db, 'productionRequests');
-      const q = query(requestsRef, orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
-      
-      const requestsData: ProductionRequest[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        const rawOrderQty = data.orderQuantity ?? data.orderqty ?? data.order_qty;
-        const parsedOrderQty =
-          typeof rawOrderQty === 'number'
-            ? rawOrderQty
-            : rawOrderQty
-            ? Number(rawOrderQty)
-            : undefined;
-        requestsData.push({
-          id: doc.id,
-          userId: data.userId,
-          userName: data.userName,
-          userEmail: data.userEmail,
-          userCompany: data.userCompany,
-          productName: data.productName,
-          quantity: data.quantity,
-          orderQuantity: parsedOrderQty,
-          requestDate: data.requestDate?.toDate() || new Date(),
-          requestedCompletionDate: data.requestedCompletionDate?.toDate() || new Date(),
-          productionReason: data.productionReason,
-          customerName: data.customerName,
-          status: data.status || 'pending_review',
-          itemCode: data.itemCode,
-          itemName: data.itemName,
-          plannedStartDate: data.plannedStartDate?.toDate(),
-          plannedCompletionDate: data.plannedCompletionDate?.toDate(),
-          actualStartDate: data.actualStartDate?.toDate(),
-          actualCompletionDate: data.actualCompletionDate?.toDate(),
-          priority: data.priority,
-          memo: data.memo || '',
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
-          createdBy: data.createdBy,
-          updatedBy: data.updatedBy,
-          history: data.history,
-        });
-      });
-      
-      // Firestore에서 이미 정렬되어 있지만, 안전을 위해 다시 정렬
-      requestsData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      
-      setRequests(requestsData);
-    } catch (error) {
-      console.error('생산요청 목록 로드 오류:', error);
-      const firebaseError = error as { code?: string; message?: string };
-      setError(`생산요청 목록을 불러오는데 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
-    } finally {
-      setLoadingRequests(false);
-    }
-  };
-
+  // 생산요청 목록 불러오기 (실시간 업데이트)
   useEffect(() => {
-    if (isAuthenticated && userProfile) {
-      loadRequests();
-    }
+    if (!isAuthenticated || !userProfile) return;
+
+    setLoadingRequests(true);
+    setError('');
+    
+    const requestsRef = collection(db, 'productionRequests');
+    const q = query(requestsRef, orderBy('createdAt', 'desc'));
+    
+    const unsubscribeSnapshot = onSnapshot(
+      q,
+      (querySnapshot) => {
+        const requestsData: ProductionRequest[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const rawOrderQty = data.orderQuantity ?? data.orderqty ?? data.order_qty;
+          const parsedOrderQty =
+            typeof rawOrderQty === 'number'
+              ? rawOrderQty
+              : rawOrderQty
+              ? Number(rawOrderQty)
+              : undefined;
+          requestsData.push({
+            id: doc.id,
+            userId: data.userId,
+            userName: data.userName,
+            userEmail: data.userEmail,
+            userCompany: data.userCompany,
+            productName: data.productName,
+            quantity: data.quantity,
+            orderQuantity: parsedOrderQty,
+            requestDate: data.requestDate?.toDate() || new Date(),
+            requestedCompletionDate: data.requestedCompletionDate?.toDate() || new Date(),
+            productionReason: data.productionReason,
+            customerName: data.customerName,
+            status: data.status || 'pending_review',
+            itemCode: data.itemCode,
+            itemName: data.itemName,
+            plannedStartDate: data.plannedStartDate?.toDate(),
+            plannedCompletionDate: data.plannedCompletionDate?.toDate(),
+            actualStartDate: data.actualStartDate?.toDate(),
+            actualCompletionDate: data.actualCompletionDate?.toDate(),
+            priority: data.priority,
+            memo: data.memo || '',
+            adminMemo: data.adminMemo || '',
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+            createdBy: data.createdBy,
+            updatedBy: data.updatedBy,
+            history: data.history,
+          });
+        });
+        
+        // Firestore에서 이미 정렬되어 있지만, 안전을 위해 다시 정렬
+        requestsData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        
+        setRequests(requestsData);
+        setLoadingRequests(false);
+      },
+      (error) => {
+        console.error('생산요청 목록 로드 오류:', error);
+        const firebaseError = error as { code?: string; message?: string };
+        setError(`생산요청 목록을 불러오는데 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+        setLoadingRequests(false);
+      }
+    );
+
+    // 컴포넌트 언마운트 시 구독 해제
+    return () => {
+      unsubscribeSnapshot();
+    };
   }, [isAuthenticated, userProfile]);
 
   // 검색 필터링
@@ -168,8 +172,7 @@ export default function ProductionRequestListPage() {
     setDeletingId(request.id);
     try {
       await deleteDoc(doc(db, 'productionRequests', request.id));
-      // 목록 새로고침
-      await loadRequests();
+      // 실시간 업데이트로 자동 새로고침됨
     } catch (error) {
       console.error('생산요청 삭제 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
@@ -277,7 +280,10 @@ export default function ProductionRequestListPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={loadRequests}
+                onClick={() => {
+                  // 실시간 업데이트가 작동 중이지만, 사용자 요청에 따라 버튼 제공
+                  window.location.reload();
+                }}
                 disabled={loadingRequests}
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -498,27 +504,34 @@ export default function ProductionRequestListPage() {
                             </span>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
-                            {userProfile && request.userId === userProfile.id && request.status === 'pending_review' ? (
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => handleEdit(request)}
-                                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                                  disabled={deletingId === request.id}
-                                >
-                                  수정
-                                </button>
-                                <span className="text-gray-300">|</span>
-                                <button
-                                  onClick={() => handleDelete(request)}
-                                  className="text-red-600 hover:text-red-800 text-sm font-medium"
-                                  disabled={deletingId === request.id}
-                                >
-                                  {deletingId === request.id ? '삭제 중...' : '삭제'}
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 text-sm">-</span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setSelectedRequest(request)}
+                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                              >
+                                보기
+                              </button>
+                              {userProfile && request.userId === userProfile.id && request.status === 'pending_review' && (
+                                <>
+                                  <span className="text-gray-300">|</span>
+                                  <button
+                                    onClick={() => handleEdit(request)}
+                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                    disabled={deletingId === request.id}
+                                  >
+                                    수정
+                                  </button>
+                                  <span className="text-gray-300">|</span>
+                                  <button
+                                    onClick={() => handleDelete(request)}
+                                    className="text-red-600 hover:text-red-800 text-sm font-medium"
+                                    disabled={deletingId === request.id}
+                                  >
+                                    {deletingId === request.id ? '삭제 중...' : '삭제'}
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                         );
@@ -598,6 +611,103 @@ export default function ProductionRequestListPage() {
         </div>
       </main>
       <Footer />
+
+      {/* 생산요청 상세 모달 */}
+      {selectedRequest && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setSelectedRequest(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h3 className="text-lg font-semibold text-gray-900">생산요청 상세</h3>
+              <button
+                onClick={() => setSelectedRequest(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">제품명</label>
+                    <p className="text-sm text-gray-900">{selectedRequest.productName}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">생산목적</label>
+                    <p className="text-sm text-gray-900">{selectedRequest.productionReason === 'order' ? '고객 주문' : '재고 준비'}</p>
+                  </div>
+                  {selectedRequest.productionReason === 'order' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">고객사명</label>
+                        <p className="text-sm text-gray-900">{selectedRequest.customerName || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">수주수량</label>
+                        <p className="text-sm text-gray-900">{selectedRequest.orderQuantity ? selectedRequest.orderQuantity.toLocaleString() : '-'}</p>
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">생산수량</label>
+                    <p className="text-sm text-gray-900">{selectedRequest.quantity.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">등록일</label>
+                    <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.requestDate)}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">완료요청일</label>
+                    <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.requestedCompletionDate)}</p>
+                  </div>
+                  {selectedRequest.plannedCompletionDate && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">완료예정일</label>
+                      <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.plannedCompletionDate)}</p>
+                    </div>
+                  )}
+                  {selectedRequest.actualCompletionDate && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">생산완료일</label>
+                      <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.actualCompletionDate)}</p>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">상태</label>
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[selectedRequest.status]}`}>
+                      {STATUS_LABELS[selectedRequest.status]}
+                    </span>
+                  </div>
+                </div>
+                {selectedRequest.memo && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">비고</label>
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap bg-gray-50 p-3 rounded-md">{selectedRequest.memo}</p>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">관리자 비고</label>
+                  {selectedRequest.adminMemo ? (
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap bg-blue-50 p-3 rounded-md border border-blue-200">{selectedRequest.adminMemo}</p>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">관리자 비고가 없습니다.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
+              <Button
+                variant="primary"
+                onClick={() => setSelectedRequest(null)}
+              >
+                닫기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 비고 상세 모달 */}
       {selectedMemo && (

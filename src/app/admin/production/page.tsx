@@ -64,6 +64,7 @@ export default function AdminProductionPage() {
   const [approvalForm, setApprovalForm] = useState({
     plannedCompletionDate: '',
     quantity: '',
+    adminMemo: '',
   });
   const [approving, setApproving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,6 +121,7 @@ export default function AdminProductionPage() {
             actualCompletionDate: data.actualCompletionDate?.toDate(),
           priority: data.priority,
           memo: data.memo || '',
+          adminMemo: data.adminMemo || '',
           createdAt: data.createdAt?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || new Date(),
             createdBy: data.createdBy,
@@ -199,6 +201,7 @@ export default function AdminProductionPage() {
         ? formatDateShort(request.plannedCompletionDate).replace(/\//g, '-')
         : '',
       quantity: request.quantity?.toString() || '',
+      adminMemo: request.adminMemo || '',
     });
   };
 
@@ -227,17 +230,24 @@ export default function AdminProductionPage() {
     try {
       const plannedCompletionDate = Timestamp.fromDate(new Date(approvalForm.plannedCompletionDate));
       
-      await updateDoc(doc(db, 'productionRequests', approvingRequest.id), {
+      const updateData: Record<string, unknown> = {
         status: 'confirmed',
         plannedCompletionDate: plannedCompletionDate,
         quantity: quantityNum,
         updatedAt: Timestamp.now(),
         updatedBy: 'admin',
-      });
+      };
+
+      // 관리자 비고 추가 (빈 문자열이어도 저장하여 기존 값을 유지할 수 있도록)
+      if (approvalForm.adminMemo !== undefined) {
+        updateData.adminMemo = approvalForm.adminMemo.trim() || null;
+      }
+
+      await updateDoc(doc(db, 'productionRequests', approvingRequest.id), updateData);
 
       // 모달 닫기
       setApprovingRequest(null);
-      setApprovalForm({ plannedCompletionDate: '', quantity: '' });
+      setApprovalForm({ plannedCompletionDate: '', quantity: '', adminMemo: '' });
       // 실시간 업데이트로 자동 새로고침됨
     } catch (error) {
       console.error('생산요청 승인 오류:', error);
@@ -706,7 +716,7 @@ export default function AdminProductionPage() {
               <button
                 onClick={() => {
                   setApprovingRequest(null);
-                  setApprovalForm({ plannedCompletionDate: '', quantity: '' });
+                  setApprovalForm({ plannedCompletionDate: '', quantity: '', adminMemo: '' });
                   setError('');
                 }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -722,6 +732,11 @@ export default function AdminProductionPage() {
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             >
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                  <p className="text-sm text-red-600">{error}</p>
+                </div>
+              )}
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-gray-600 mb-2">제품명: <span className="font-medium text-gray-900">{approvingRequest.productName}</span></p>
@@ -744,6 +759,7 @@ export default function AdminProductionPage() {
                       e.stopPropagation();
                       e.nativeEvent.stopImmediatePropagation();
                       setApprovalForm({ ...approvalForm, quantity: e.target.value });
+                      if (error) setError('');
                     }}
                     onMouseDown={(e) => {
                       e.stopPropagation();
@@ -810,6 +826,7 @@ export default function AdminProductionPage() {
                     onChange={(e) => {
                       e.stopPropagation();
                       setApprovalForm({ ...approvalForm, plannedCompletionDate: e.target.value });
+                      if (error) setError('');
                     }}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
@@ -818,6 +835,27 @@ export default function AdminProductionPage() {
                     disabled={approving}
                     required
                   />
+                </div>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <label htmlFor="adminMemo" className="block text-sm font-medium text-gray-700 mb-2">
+                    관리자 비고
+                  </label>
+                  <textarea
+                    id="adminMemo"
+                    name="adminMemo"
+                    rows={4}
+                    value={approvalForm.adminMemo}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setApprovalForm({ ...approvalForm, adminMemo: e.target.value });
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.stopPropagation()}
+                    placeholder="관리자 비고를 입력하세요 (선택사항)"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={approving}
+                  ></textarea>
                 </div>
               </div>
             </div>
@@ -830,7 +868,7 @@ export default function AdminProductionPage() {
                 variant="outline"
                 onClick={() => {
                   setApprovingRequest(null);
-                  setApprovalForm({ plannedCompletionDate: '', quantity: '' });
+                  setApprovalForm({ plannedCompletionDate: '', quantity: '', adminMemo: '' });
                   setError('');
                 }}
                 disabled={approving}

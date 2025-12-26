@@ -92,6 +92,7 @@ export interface ProductionRequest {
   // 우선순위 및 메모
   priority?: number; // 우선순위
   memo?: string; // 메모
+  adminMemo?: string; // 관리자 비고
   
   // 이력 관리
   createdAt: Date;

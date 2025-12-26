@@ -51,6 +51,7 @@ function AdminProductionRequestContent() {
     memo: '',
     plannedCompletionDate: '',
     actualCompletionDate: '',
+    adminMemo: '',
   });
   const [currentStatus, setCurrentStatus] = useState<string>('');
 
@@ -90,6 +91,7 @@ function AdminProductionRequestContent() {
             memo: data.memo || '',
             plannedCompletionDate: data.plannedCompletionDate?.toDate().toISOString().split('T')[0] || '',
             actualCompletionDate: data.actualCompletionDate?.toDate().toISOString().split('T')[0] || '',
+            adminMemo: data.adminMemo || '',
           });
         } else {
           setError('생산요청을 찾을 수 없습니다.');
@@ -301,6 +303,11 @@ function AdminProductionRequestContent() {
           productionRequestData.memo = formData.memo.trim();
         }
 
+        // adminMemo는 값이 있을 때만 추가
+        if (formData.adminMemo.trim()) {
+          productionRequestData.adminMemo = formData.adminMemo.trim();
+        }
+
         // 확정된 경우 또는 완료된 경우 완료예정일 업데이트
         if (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress') {
           if (formData.plannedCompletionDate) {
@@ -373,6 +380,7 @@ function AdminProductionRequestContent() {
         memo: '',
         plannedCompletionDate: '',
         actualCompletionDate: '',
+        adminMemo: '',
       });
 
       // 2초 후 목록 페이지로 이동
@@ -437,6 +445,7 @@ function AdminProductionRequestContent() {
               error={fieldErrors.productName}
               required
               list="productNameList"
+              disabled={isEditMode}
             />
             <datalist id="productNameList">
               {productNameSuggestions.map((name, index) => (
@@ -471,7 +480,8 @@ function AdminProductionRequestContent() {
                 name="productionReason"
                 value={formData.productionReason}
                 onChange={handleChange}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                disabled={isEditMode}
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
               >
                 <option value="order">고객 주문</option>
                 <option value="inventory">재고 준비</option>
@@ -493,6 +503,7 @@ function AdminProductionRequestContent() {
                   error={fieldErrors.customerName}
                   required
                   list="customerNameList"
+                  disabled={isEditMode}
                 />
                 <datalist id="customerNameList">
                   {customerNameSuggestions.map((name, index) => (
@@ -531,6 +542,7 @@ function AdminProductionRequestContent() {
                   error={fieldErrors.orderQuantity}
                   min="1"
                   required
+                  disabled={isEditMode}
                 />
               </div>
             )}
@@ -549,6 +561,7 @@ function AdminProductionRequestContent() {
                 error={fieldErrors.quantity}
                 min="1"
                 required
+                disabled={isEditMode}
               />
             </div>
 
@@ -563,6 +576,7 @@ function AdminProductionRequestContent() {
                 error={fieldErrors.requestedCompletionDate}
                 min={new Date().toISOString().split('T')[0]}
                 required
+                disabled={isEditMode}
               />
             </div>
           </div>
@@ -581,7 +595,8 @@ function AdminProductionRequestContent() {
                     name="plannedCompletionDate"
                     value={formData.plannedCompletionDate}
                     onChange={handleChange}
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    disabled={true}
+                    className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 cursor-not-allowed opacity-50"
                   />
                 </div>
                 <div>
@@ -596,8 +611,12 @@ function AdminProductionRequestContent() {
                     onChange={(e) => {
                       setFormData(prev => ({ ...prev, plannedCompletionDate: e.target.value }));
                     }}
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    disabled={!!formData.actualCompletionDate}
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
                   />
+                  {formData.actualCompletionDate && (
+                    <p className="mt-1 text-xs text-gray-500">생산완료일이 등록되어 있어 완료예정일을 변경할 수 없습니다.</p>
+                  )}
                 </div>
               </div>
               
@@ -628,8 +647,25 @@ function AdminProductionRequestContent() {
               onChange={handleChange}
               rows={4}
               placeholder="비고를 입력하세요"
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 resize-none"
+              disabled={isEditMode}
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 resize-none disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
             />
+          </div>
+
+          <div>
+            <label htmlFor="adminMemo" className="block text-sm font-medium text-gray-700 mb-2">
+              관리자 비고
+            </label>
+            <textarea
+              id="adminMemo"
+              name="adminMemo"
+              rows={4}
+              value={formData.adminMemo}
+              onChange={handleChange}
+              placeholder="관리자 비고를 입력하세요."
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={submitting}
+            ></textarea>
           </div>
 
           <div className="flex justify-end gap-3 pt-4">

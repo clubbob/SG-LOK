@@ -296,7 +296,7 @@ export default function AdminCertificatePage() {
     <div className="p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 whitespace-nowrap">성적서관리</h1>
+          <h1 className="text-2xl font-bold text-gray-900 whitespace-nowrap">성적서 목록</h1>
           <p className="text-gray-600 mt-2">전체 성적서 요청을 확인하고 관리할 수 있습니다</p>
         </div>
         <div className="flex gap-3">
@@ -382,10 +382,10 @@ export default function AdminCertificatePage() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">고객명</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">발주번호</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품명</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품코드</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수량</th>
@@ -407,6 +407,9 @@ export default function AdminCertificatePage() {
                           {rowNumber}
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{certificate.userName}</div>
+                        </td>
+                        <td className="px-3 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">{formatDateShort(certificate.requestDate)}</div>
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap">
@@ -414,12 +417,6 @@ export default function AdminCertificatePage() {
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">{certificate.orderNumber || '-'}</div>
-                        </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{certificate.userName}</div>
-                          {certificate.userCompany && (
-                            <div className="text-xs text-gray-500">{certificate.userCompany}</div>
-                          )}
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">{certificate.productName || '-'}</div>

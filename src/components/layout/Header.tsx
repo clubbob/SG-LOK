@@ -7,11 +7,12 @@ import { Button } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function Header() {
-  const { userProfile, isAuthenticated, signOut } = useAuth();
+  const { userProfile, isAuthenticated, signOut, loading } = useAuth();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isProdMenuOpen, setIsProdMenuOpen] = useState(false);
+  const [isCertMenuOpen, setIsCertMenuOpen] = useState(false);
   
   // 로그인/회원가입 페이지에서는 메뉴를 완전히 숨김
   const isAuthPage = pathname === '/login' || pathname === '/signup';
@@ -73,7 +74,10 @@ export default function Header() {
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setIsProdMenuOpen((prev) => !prev)}
+                  onClick={() => {
+                    setIsProdMenuOpen((prev) => !prev);
+                    setIsCertMenuOpen(false); // 성적서관리 메뉴 닫기
+                  }}
                   className={`px-4 py-2.5 rounded-md text-base font-semibold transition-colors shadow-sm flex items-center gap-2 ${
                     isActivePath('/production')
                       ? 'bg-blue-700 text-white'
@@ -95,9 +99,12 @@ export default function Header() {
                     {/* 배경 클릭 시 메뉴 닫기 */}
                     <div
                       className="fixed inset-0 z-10"
-                      onClick={() => setIsProdMenuOpen(false)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsProdMenuOpen(false);
+                      }}
                     />
-                    <div className="absolute left-0 mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200 z-20">
+                    <div className="absolute left-0 mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200 z-20" onClick={(e) => e.stopPropagation()}>
                       <div className="py-2">
                         <Link
                           href="/production"
@@ -133,22 +140,76 @@ export default function Header() {
                 )}
               </div>
 
-              <Link
-                href="/certificate"
-                className={`px-4 py-2.5 rounded-md text-base font-semibold transition-colors shadow-sm ${
-                  isActivePath('/certificate')
-                    ? 'bg-blue-700 text-white'
-                    : 'text-white hover:bg-blue-600 hover:text-white'
-                }`}
-              >
-                성적서관리
-              </Link>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsCertMenuOpen((prev) => !prev);
+                    setIsProdMenuOpen(false); // 생산관리 메뉴 닫기
+                  }}
+                  className={`px-4 py-2.5 rounded-md text-base font-semibold transition-colors shadow-sm flex items-center gap-2 ${
+                    isActivePath('/certificate')
+                      ? 'bg-blue-700 text-white'
+                      : 'text-white hover:bg-blue-600 hover:text-white'
+                  }`}
+                >
+                  성적서관리
+                  <svg
+                    className={`w-4 h-4 transition-transform ${isCertMenuOpen ? 'rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {isCertMenuOpen && (
+                  <>
+                    {/* 배경 클릭 시 메뉴 닫기 */}
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsCertMenuOpen(false);
+                      }}
+                    />
+                    <div className="absolute left-0 mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200 z-20" onClick={(e) => e.stopPropagation()}>
+                      <div className="py-2">
+                        <Link
+                          href="/certificate"
+                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
+                          onClick={() => setIsCertMenuOpen(false)}
+                        >
+                          성적서관리 메인
+                        </Link>
+                        <Link
+                          href="/certificate/request"
+                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
+                          onClick={() => setIsCertMenuOpen(false)}
+                        >
+                          성적서요청 등록
+                        </Link>
+                        <Link
+                          href="/certificate/list"
+                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
+                          onClick={() => setIsCertMenuOpen(false)}
+                        >
+                          성적서 목록
+                        </Link>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </nav>
           )}
 
           {/* 우측 메뉴 */}
           <div className="flex items-center space-x-4">
-            {isAuthenticated ? (
+            {loading ? (
+              // 로딩 중일 때는 아무것도 표시하지 않음 (깜빡임 방지)
+              <div className="w-8 h-8"></div>
+            ) : isAuthenticated ? (
               <div className="relative">
                 {/* 사용자 메뉴 버튼 */}
                 <button
@@ -335,13 +396,35 @@ export default function Header() {
               <Link
                 href="/certificate"
                 className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
-                  isActivePath('/certificate')
+                  isActivePath('/certificate') && !isActivePath('/certificate/request') && !isActivePath('/certificate/list')
                     ? 'bg-blue-700 text-white'
                     : 'text-white hover:bg-blue-600'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                성적서관리
+                성적서관리 메인
+              </Link>
+              <Link
+                href="/certificate/request"
+                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                  isActivePath('/certificate/request')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                성적서요청 등록
+              </Link>
+              <Link
+                href="/certificate/list"
+                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                  isActivePath('/certificate/list')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                성적서 목록
               </Link>
             </nav>
           </div>

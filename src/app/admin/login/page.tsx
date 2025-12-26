@@ -53,7 +53,7 @@ export default function AdminLoginPage() {
         // 관리자 로그인은 localStorage 기반이므로 Firebase Auth와 무관하게 작동
         
         // 관리자 홈 페이지로 리다이렉트
-        router.push('/admin');
+        router.push('/admin/dashboard');
       } else {
         setError('아이디 또는 비밀번호가 올바르지 않습니다.');
       }

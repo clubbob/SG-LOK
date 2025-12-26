@@ -294,9 +294,9 @@ function CertificateRequestContent() {
         return;
       }
     } catch (error) {
-      console.error('성적서 요청 등록 오류:', error);
+      console.error('성적서요청 등록 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
-      setError(`성적서 요청 등록에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+      setError(`성적서요청 등록에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
     } finally {
       setSubmitting(false);
     }
@@ -323,8 +323,8 @@ function CertificateRequestContent() {
       <main className="flex-1 bg-gray-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {isEditMode ? '성적서 요청 수정' : '성적서 요청 등록'}
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+              {isEditMode ? '성적서요청 수정' : '성적서요청 등록'}
             </h1>
             <p className="text-gray-600">
               {isEditMode ? '성적서 요청 정보를 수정합니다.' : '신규 성적서 요청을 등록합니다.'}

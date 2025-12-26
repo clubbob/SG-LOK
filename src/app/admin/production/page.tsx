@@ -518,6 +518,7 @@ export default function AdminProductionPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품명</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산목적</th>
@@ -529,7 +530,6 @@ export default function AdminProductionPage() {
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산현황</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산완료일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산라인</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">비고</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">상태</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">관리</th>
@@ -543,6 +543,9 @@ export default function AdminProductionPage() {
                     <tr key={request.id} className="hover:bg-gray-50">
                       <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap text-center w-12">
                         {rowNumber}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{request.userName}</div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{formatDateShort(request.requestDate)}</div>
@@ -640,9 +643,6 @@ export default function AdminProductionPage() {
                         <div className="text-sm text-gray-900 whitespace-nowrap">
                           {request.productionLine || <span className="text-gray-400">-</span>}
                         </div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{request.userName}</div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">

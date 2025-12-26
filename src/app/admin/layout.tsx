@@ -43,7 +43,7 @@ const adminMenuItems: MenuItem[] = [
   {
     id: 'home',
     label: '관리자 대시보드',
-    path: '/admin',
+    path: '/admin/dashboard',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -73,6 +73,7 @@ const adminMenuItems: MenuItem[] = [
   {
     id: 'production',
     label: '생산관리',
+    path: '/admin/production',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
@@ -87,12 +88,15 @@ const adminMenuItems: MenuItem[] = [
   {
     id: 'certificate',
     label: '성적서관리',
-    path: '/admin/certificate',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
       </svg>
     ),
+    subItems: [
+      { id: 'certificate-request', label: '성적서요청 등록', path: '/admin/certificate/request' },
+      { id: 'certificate-list', label: '성적서 목록', path: '/admin/certificate' },
+    ],
   },
 ];
 
@@ -134,6 +138,10 @@ export default function AdminLayout({
     // 생산관리 관련 페이지일 때 메뉴 자동 확장
     if (pathname?.startsWith('/admin/production')) {
       setExpandedMenus(prev => new Set(prev).add('production'));
+    }
+    // 성적서관리 관련 페이지일 때 메뉴 자동 확장
+    if (pathname?.startsWith('/admin/certificate')) {
+      setExpandedMenus(prev => new Set(prev).add('certificate'));
     }
   }, [router, pathname]);
 
@@ -196,103 +204,156 @@ export default function AdminLayout({
               const hasSubItems = item.subItems && item.subItems.length > 0;
               const isExpanded = expandedMenus.has(item.id);
               
-              // 서브 메뉴가 있는 경우: 서브 메뉴 중 하나가 활성화되어 있으면 메인 메뉴도 활성화
-              // 서브 메뉴가 없는 경우: 메인 메뉴 경로가 활성화되어 있으면 활성화
+              // 서브 메뉴가 있는 경우: 메인 메뉴 경로가 활성화되어 있거나 서브 메뉴 중 하나가 활성화되어 있으면 메인 메뉴도 활성화
+              // 서브 메뉴가 없는 경우: 메인 메뉴 경로가 정확히 일치하거나 하위 경로일 때 활성화
+              const normalizePath = (path: string | undefined) => path ? path.replace(/\/$/, '') : '';
+              const normalizedItemPath = normalizePath(item.path);
+              const normalizedPathname = normalizePath(pathname);
+              
               const isMainActive = hasSubItems
-                ? item.subItems?.some(subItem => {
+                ? (normalizedItemPath && normalizedPathname && (normalizedPathname === normalizedItemPath || normalizedPathname.startsWith(`${normalizedItemPath}/`))) ||
+                  item.subItems?.some(subItem => {
                     const subPath = subItem.path;
-                    if (!subPath || !pathname) return false;
+                    if (!subPath || !normalizedPathname) return false;
+                    const normalizedSubPath = normalizePath(subPath);
                     // 정확한 경로 일치를 먼저 확인
-                    if (pathname === subPath) return true;
+                    if (normalizedPathname === normalizedSubPath) return true;
                     // /admin/production의 경우, 다른 서브 경로가 아닐 때만 활성화
-                    if (subPath === '/admin/production') {
+                    if (normalizedSubPath === '/admin/production') {
                       const otherSubPaths = item.subItems
                         ?.filter(s => s.path !== subPath)
-                        .map(s => s.path) || [];
+                        .map(s => normalizePath(s.path)) || [];
                       const isOtherSubPath = otherSubPaths.some(otherPath => 
-                        pathname === otherPath || pathname.startsWith(`${otherPath}/`)
+                        normalizedPathname === otherPath || normalizedPathname.startsWith(`${otherPath}/`)
                       );
-                      if (pathname.startsWith(`${subPath}/`) && !isOtherSubPath) {
+                      if (normalizedPathname.startsWith(`${normalizedSubPath}/`) && !isOtherSubPath) {
                         return true;
                       }
                     } else {
                       // 다른 서브 메뉴는 하위 경로일 때만 활성화
-                      if (pathname.startsWith(`${subPath}/`)) {
+                      if (normalizedPathname.startsWith(`${normalizedSubPath}/`)) {
                         return true;
                       }
                     }
                     return false;
                   })
-                : item.path 
-                  ? (pathname === item.path || (item.path && pathname?.startsWith(`${item.path}/`)))
+                : normalizedItemPath 
+                  ? (normalizedPathname === normalizedItemPath || (normalizedItemPath && normalizedPathname?.startsWith(`${normalizedItemPath}/`)))
                   : false;
 
               return (
                 <div key={item.id} className="mb-1">
                   {hasSubItems ? (
                     <>
-                      <button
-                        onClick={() => {
-                          setExpandedMenus(prev => {
-                            const newSet = new Set(prev);
-                            if (newSet.has(item.id)) {
-                              newSet.delete(item.id);
-                            } else {
-                              newSet.add(item.id);
-                            }
-                            return newSet;
-                          });
-                        }}
-                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition-colors ${
-                          isMainActive
-                            ? 'bg-blue-50 text-blue-600 font-semibold'
-                            : 'text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          {item.icon}
-                          <span className="text-sm flex items-center gap-1">
-                            {item.label}
-                            {item.id === 'users' && pendingUserCount > 0 && (
-                              <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold">
-                                {pendingUserCount}
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                        <svg
-                          className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
+                      {item.path ? (
+                        <Link
+                          href={item.path}
+                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition-colors ${
+                            isMainActive
+                              ? 'bg-blue-50 text-blue-600 font-semibold'
+                              : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setExpandedMenus(prev => {
+                              const newSet = new Set(prev);
+                              if (newSet.has(item.id)) {
+                                newSet.delete(item.id);
+                              } else {
+                                newSet.add(item.id);
+                              }
+                              return newSet;
+                            });
+                            router.push(item.path || '#');
+                          }}
                         >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </button>
+                          <div className="flex items-center gap-2">
+                            {item.icon}
+                            <span className="text-sm flex items-center gap-1">
+                              {item.label}
+                              {item.id === 'users' && pendingUserCount > 0 && (
+                                <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold">
+                                  {pendingUserCount}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <svg
+                            className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </Link>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setExpandedMenus(prev => {
+                              const newSet = new Set(prev);
+                              if (newSet.has(item.id)) {
+                                newSet.delete(item.id);
+                              } else {
+                                newSet.add(item.id);
+                              }
+                              return newSet;
+                            });
+                          }}
+                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition-colors ${
+                            isMainActive
+                              ? 'bg-blue-50 text-blue-600 font-semibold'
+                              : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            {item.icon}
+                            <span className="text-sm flex items-center gap-1">
+                              {item.label}
+                              {item.id === 'users' && pendingUserCount > 0 && (
+                                <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold">
+                                  {pendingUserCount}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                          <svg
+                            className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </button>
+                      )}
                       {isExpanded && item.subItems && (
                         <div className="ml-3 mt-1 space-y-1">
                           {item.subItems.map((subItem) => {
                             // 정확한 경로 일치 확인
                             let isSubActive = false;
                             if (subItem.path && pathname) {
+                              const normalizedSubPath = normalizePath(subItem.path);
+                              const normalizedPathname = normalizePath(pathname);
+                              
                               // 정확히 일치하는 경우
-                              if (pathname === subItem.path) {
+                              if (normalizedPathname === normalizedSubPath) {
                                 isSubActive = true;
-                              } else if (subItem.path === '/admin/production') {
-                                // /admin/production의 경우, 정확히 일치하거나 /admin/production/으로 시작하되
-                                // 다른 서브 메뉴 경로(/admin/production/request, /admin/production/calendar)가 아닐 때만 활성화
+                              } else if (subItem.path === '/admin/production' || subItem.path === '/admin/certificate') {
+                                // /admin/production 또는 /admin/certificate의 경우, 정확히 일치하거나 하위 경로로 시작하되
+                                // 다른 서브 메뉴 경로가 아닐 때만 활성화
                                 const otherSubPaths = item.subItems
                                   ?.filter(s => s.path !== subItem.path)
-                                  .map(s => s.path) || [];
+                                  .map(s => normalizePath(s.path)) || [];
                                 const isOtherSubPath = otherSubPaths.some(otherPath => 
-                                  pathname === otherPath || pathname.startsWith(`${otherPath}/`)
+                                  normalizedPathname === otherPath || normalizedPathname.startsWith(`${otherPath}/`)
                                 );
-                                if (pathname.startsWith(`${subItem.path}/`) && !isOtherSubPath) {
+                                if (normalizedPathname.startsWith(`${normalizedSubPath}/`) && !isOtherSubPath) {
                                   isSubActive = true;
                                 }
                               } else {
                                 // 다른 서브 메뉴는 정확히 일치하거나 하위 경로일 때만 활성화
-                                if (pathname.startsWith(`${subItem.path}/`)) {
+                                if (normalizedPathname.startsWith(`${normalizedSubPath}/`)) {
                                   isSubActive = true;
                                 }
                               }

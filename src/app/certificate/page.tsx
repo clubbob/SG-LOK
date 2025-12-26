@@ -51,7 +51,7 @@ export default function CertificatePage() {
                     </svg>
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">성적서 요청 등록</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">성적서요청 등록</h2>
                     <p className="text-sm text-gray-600">신규 성적서 요청을 등록합니다</p>
                   </div>
                 </div>

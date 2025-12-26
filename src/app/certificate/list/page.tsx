@@ -221,7 +221,7 @@ export default function CertificateListPage() {
               </Button>
               <Link href="/certificate/request">
                 <Button variant="primary" size="sm">
-                  성적서 요청 등록
+                  성적서요청 등록
                 </Button>
               </Link>
             </div>
@@ -277,7 +277,7 @@ export default function CertificateListPage() {
               <h3 className="text-lg font-semibold text-gray-900 mb-2">등록된 성적서 요청이 없습니다</h3>
               <p className="text-gray-600 mb-4">새로운 성적서 요청을 등록해보세요.</p>
               <Link href="/certificate/request">
-                <Button variant="primary">성적서 요청 등록</Button>
+                <Button variant="primary">성적서요청 등록</Button>
               </Link>
             </div>
           ) : (

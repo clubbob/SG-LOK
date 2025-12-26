@@ -1,0 +1,560 @@
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { Header, Footer } from '@/components/layout';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui';
+import { collection, query, getDocs, Timestamp, doc, deleteDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { Certificate, CertificateStatus, CertificateType } from '@/types';
+import { formatDateShort } from '@/lib/utils';
+
+const STATUS_LABELS: Record<CertificateStatus, string> = {
+  pending: '대기',
+  in_progress: '진행중',
+  completed: '완료',
+  cancelled: '취소',
+};
+
+const STATUS_COLORS: Record<CertificateStatus, string> = {
+  pending: 'bg-yellow-400 text-white',
+  in_progress: 'bg-blue-500 text-white',
+  completed: 'bg-green-500 text-white',
+  cancelled: 'bg-red-500 text-white',
+};
+
+const CERTIFICATE_TYPE_LABELS: Record<CertificateType, string> = {
+  quality: '품질',
+  safety: '안전',
+  environmental: '환경',
+  other: '기타',
+};
+
+export default function CertificateListPage() {
+  const { isAuthenticated, userProfile, loading } = useAuth();
+  const router = useRouter();
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [loadingCertificates, setLoadingCertificates] = useState(true);
+  const [error, setError] = useState('');
+  const [displayedCertificates, setDisplayedCertificates] = useState<Certificate[]>([]);
+  const [itemsPerPage] = useState(10);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
+  const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filteredCertificates, setFilteredCertificates] = useState<Certificate[]>([]);
+
+  // 인증 확인
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [loading, isAuthenticated, router]);
+
+  // 성적서 목록 불러오기
+  const loadCertificates = async () => {
+    if (!userProfile) return;
+
+    try {
+      setLoadingCertificates(true);
+      setError('');
+      
+      const certificatesRef = collection(db, 'certificates');
+      const q = query(certificatesRef);
+      const querySnapshot = await getDocs(q);
+      
+      const certificatesData: Certificate[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+          certificatesData.push({
+            id: doc.id,
+            userId: data.userId,
+            userName: data.userName,
+            userEmail: data.userEmail,
+            userCompany: data.userCompany,
+            customerName: data.customerName,
+            orderNumber: data.orderNumber,
+            productName: data.productName,
+            productCode: data.productCode,
+            lotNumber: data.lotNumber,
+            quantity: data.quantity,
+            certificateType: data.certificateType || 'quality',
+            requestDate: data.requestDate?.toDate() || new Date(),
+            requestedCompletionDate: data.requestedCompletionDate?.toDate(),
+            status: data.status || 'pending',
+            memo: data.memo || '',
+            attachments: data.attachments || [],
+            certificateFile: data.certificateFile,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+            createdBy: data.createdBy,
+            updatedBy: data.updatedBy,
+            completedAt: data.completedAt?.toDate(),
+            completedBy: data.completedBy,
+          });
+      });
+      
+      // 클라이언트 사이드 정렬 (인덱스 없이 사용)
+      certificatesData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      
+      // 본인이 작성한 성적서만 필터링
+      const myCertificates = certificatesData.filter(cert => cert.userId === userProfile.id);
+      
+      setCertificates(myCertificates);
+    } catch (error) {
+      console.error('성적서 목록 로드 오류:', error);
+      const firebaseError = error as { code?: string; message?: string };
+      setError(`성적서 목록을 불러오는데 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+    } finally {
+      setLoadingCertificates(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated && userProfile) {
+      loadCertificates();
+    }
+  }, [isAuthenticated, userProfile]);
+
+  // 검색 필터링
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredCertificates(certificates);
+      return;
+    }
+
+    const query = searchQuery.toLowerCase().trim();
+    const filtered = certificates.filter((cert) => {
+      const customerName = cert.customerName?.toLowerCase() || '';
+      const orderNumber = cert.orderNumber?.toLowerCase() || '';
+      const productName = cert.productName?.toLowerCase() || '';
+      const productCode = cert.productCode?.toLowerCase() || '';
+      const statusLabel = STATUS_LABELS[cert.status]?.toLowerCase() || cert.status || '';
+
+      return (
+        customerName.includes(query) ||
+        orderNumber.includes(query) ||
+        productName.includes(query) ||
+        productCode.includes(query) ||
+        statusLabel.includes(query) ||
+        cert.status.includes(query)
+      );
+    });
+
+    setFilteredCertificates(filtered);
+    setCurrentPage(1); // 검색 시 첫 페이지로 리셋
+  }, [searchQuery, certificates]);
+
+  // 페이지네이션
+  useEffect(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    setDisplayedCertificates(filteredCertificates.slice(startIndex, endIndex));
+  }, [filteredCertificates, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredCertificates.length / itemsPerPage);
+
+  const handleEdit = (certificate: Certificate) => {
+    router.push(`/certificate/request?id=${certificate.id}`);
+  };
+
+  const handleDelete = async (certificate: Certificate) => {
+    if (!confirm(`정말로 "${certificate.productName || '제품명 없음'}" 성적서 요청을 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    setDeletingId(certificate.id);
+    try {
+      await deleteDoc(doc(db, 'certificates', certificate.id));
+      await loadCertificates();
+    } catch (error) {
+      console.error('성적서 삭제 오류:', error);
+      const firebaseError = error as { code?: string; message?: string };
+      setError(`성적서 삭제에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const handleDownload = (certificate: Certificate) => {
+    if (certificate.certificateFile?.url) {
+      window.open(certificate.certificateFile.url, '_blank');
+    }
+  };
+
+  if (loading || loadingCertificates) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">성적서 목록</h1>
+              <p className="text-gray-600">요청한 성적서를 확인하고 관리할 수 있습니다</p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadCertificates}
+                disabled={loadingCertificates}
+              >
+                새로고침
+              </Button>
+              <Link href="/certificate/request">
+                <Button variant="primary" size="sm">
+                  성적서 요청 등록
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border-2 border-red-400 text-red-800 px-6 py-4 rounded-lg shadow-md mb-6">
+              <div className="flex items-center gap-3">
+                <svg className="w-6 h-6 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="font-semibold">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* 검색 입력 필드 */}
+          <div className="mb-6">
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="고객명, 발주번호, 제품명, 제품코드, 상태 검색..."
+                className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              />
+              <svg
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {certificates.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+              <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">등록된 성적서 요청이 없습니다</h3>
+              <p className="text-gray-600 mb-4">새로운 성적서 요청을 등록해보세요.</p>
+              <Link href="/certificate/request">
+                <Button variant="primary">성적서 요청 등록</Button>
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청일</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">고객명</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">발주번호</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품명</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품코드</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수량</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료일</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">첨부</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">비고</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">상태</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">관리</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {displayedCertificates.map((certificate, idx) => {
+                        const absoluteIndex = (currentPage - 1) * itemsPerPage + idx;
+                        const rowNumber = filteredCertificates.length - absoluteIndex;
+                        return (
+                          <tr key={certificate.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap text-center w-12">
+                              {rowNumber}
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{formatDateShort(certificate.requestDate)}</div>
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{certificate.customerName || '-'}</div>
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{certificate.orderNumber || '-'}</div>
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              <div className="text-sm font-medium text-gray-900">{certificate.productName || '-'}</div>
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{certificate.productCode || '-'}</div>
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{certificate.quantity ? certificate.quantity.toLocaleString() : '-'}</div>
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-'}</div>
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{certificate.completedAt ? formatDateShort(certificate.completedAt) : '-'}</div>
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              {certificate.attachments && certificate.attachments.length > 0 ? (
+                                <button
+                                  onClick={() => setSelectedCertificate(certificate)}
+                                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                >
+                                  파일 ({certificate.attachments.length})
+                                </button>
+                              ) : (
+                                <span className="text-gray-400 text-sm">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              {certificate.memo ? (
+                                <button
+                                  onClick={() => setSelectedMemo({ id: certificate.id, memo: certificate.memo || '' })}
+                                  className="text-blue-600 hover:text-blue-800 text-sm font-medium truncate max-w-[100px]"
+                                  title={certificate.memo}
+                                >
+                                  보기
+                                </button>
+                              ) : (
+                                <span className="text-gray-400 text-sm">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[certificate.status]}`}>
+                                {STATUS_LABELS[certificate.status]}
+                              </span>
+                              {certificate.status === 'completed' && certificate.certificateFile && (
+                                <button
+                                  onClick={() => handleDownload(certificate)}
+                                  className="ml-2 text-blue-600 hover:text-blue-800 text-xs underline"
+                                >
+                                  다운로드
+                                </button>
+                              )}
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                {certificate.status === 'pending' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleEdit(certificate)}
+                                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                      disabled={deletingId === certificate.id}
+                                    >
+                                      수정
+                                    </button>
+                                    <span className="text-gray-300">|</span>
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => handleDelete(certificate)}
+                                  className="text-red-600 hover:text-red-800 text-sm font-medium"
+                                  disabled={deletingId === certificate.id}
+                                >
+                                  {deletingId === certificate.id ? '삭제 중...' : '삭제'}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 페이지네이션 */}
+              {totalPages > 1 && (
+                <div className="mt-6 flex items-center justify-between">
+                  <div className="text-sm text-gray-700">
+                    {searchQuery ? (
+                      <>
+                        검색 결과 <span className="font-medium">{filteredCertificates.length}</span>건 중{' '}
+                        <span className="font-medium">
+                          {(currentPage - 1) * itemsPerPage + 1}
+                        </span>
+                        -
+                        <span className="font-medium">
+                          {Math.min(currentPage * itemsPerPage, filteredCertificates.length)}
+                        </span>
+                        건 표시 (전체 {certificates.length}건)
+                      </>
+                    ) : (
+                      <>
+                        전체 <span className="font-medium">{filteredCertificates.length}</span>건 중{' '}
+                        <span className="font-medium">
+                          {(currentPage - 1) * itemsPerPage + 1}
+                        </span>
+                        -
+                        <span className="font-medium">
+                          {Math.min(currentPage * itemsPerPage, filteredCertificates.length)}
+                        </span>
+                        건 표시
+                      </>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      이전
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`px-3 py-1 text-sm rounded ${
+                            currentPage === page
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-white text-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      다음
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* 첨부 파일 상세 모달 */}
+          {selectedCertificate && selectedCertificate.attachments && selectedCertificate.attachments.length > 0 && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30" onClick={() => setSelectedCertificate(null)}>
+              <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+                  <h3 className="text-lg font-semibold text-gray-900">첨부 파일</h3>
+                  <button
+                    onClick={() => setSelectedCertificate(null)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="px-6 py-4 overflow-y-auto flex-1">
+                  <div className="space-y-2">
+                    {selectedCertificate.attachments.map((file, index) => (
+                      <a
+                        key={index}
+                        href={file.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-between p-3 border border-gray-200 rounded-md hover:bg-gray-50"
+                      >
+                        <div className="flex items-center">
+                          <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <span className="text-sm text-blue-600 hover:underline">{file.name}</span>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {file.size ? `${(file.size / 1024).toFixed(1)} KB` : ''}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+                <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
+                  <Button
+                    variant="primary"
+                    onClick={() => setSelectedCertificate(null)}
+                  >
+                    닫기
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 비고 상세 모달 */}
+          {selectedMemo && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30" onClick={() => setSelectedMemo(null)}>
+              <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+                  <h3 className="text-lg font-semibold text-gray-900">메모</h3>
+                  <button
+                    onClick={() => setSelectedMemo(null)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="px-6 py-4 overflow-y-auto flex-1">
+                  <div className="text-sm text-gray-900 whitespace-pre-wrap break-words">{selectedMemo.memo}</div>
+                </div>
+                <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
+                  <Button
+                    variant="primary"
+                    onClick={() => setSelectedMemo(null)}
+                  >
+                    닫기
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+      <Footer />
+    </div>
+  );
+}
+

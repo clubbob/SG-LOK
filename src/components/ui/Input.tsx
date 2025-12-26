@@ -35,6 +35,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           {...props}
+          value={props.value !== undefined ? props.value : ''}
         />
         {error && (
           <p className="mt-1 text-sm text-red-600">{error}</p>

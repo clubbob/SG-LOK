@@ -114,3 +114,53 @@ export interface ProductionRequestHistory {
   }[];
   memo?: string;
 }
+
+// 성적서 관련 타입
+export type CertificateStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+export type CertificateType = 'quality' | 'safety' | 'environmental' | 'other'; // 품질 / 안전 / 환경 / 기타
+
+export interface Certificate {
+  id: string;
+  userId: string; // 요청자 ID
+  userName: string;
+  userEmail: string;
+  userCompany?: string;
+  
+  // 기본 정보
+  customerName?: string; // 고객명
+  orderNumber?: string; // 발주 번호
+  productName: string; // 제품명
+  productCode?: string; // 제품코드
+  lotNumber?: string; // 로트번호
+  quantity?: number; // 수량
+  certificateType: CertificateType; // 성적서 유형
+  requestDate: Date; // 요청일
+  requestedCompletionDate?: Date; // 완료요청일
+  
+  // 상태 및 관리
+  status: CertificateStatus; // 대기 / 진행중 / 완료 / 취소
+  memo?: string; // 메모
+  
+  // 첨부 파일
+  attachments?: InquiryAttachment[]; // 요청 첨부 파일 (최대 3개)
+  
+  // 성적서 파일
+  certificateFile?: CertificateAttachment; // 성적서 파일 (관리자가 업로드)
+  
+  // 이력 관리
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string; // 생성자 ID
+  updatedBy?: string; // 수정자 ID
+  completedAt?: Date; // 완료일
+  completedBy?: string; // 완료자 ID
+}
+
+export interface CertificateAttachment {
+  name: string; // 파일명
+  url: string; // 다운로드 URL
+  size: number; // 파일 크기 (bytes)
+  type: string; // MIME 타입
+  uploadedAt: Date; // 업로드 일시
+  uploadedBy: string; // 업로드자 ID
+}

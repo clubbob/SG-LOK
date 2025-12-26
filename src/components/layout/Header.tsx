@@ -133,13 +133,16 @@ export default function Header() {
                 )}
               </div>
 
-              <button
-                type="button"
-                onClick={() => alert('성적서관리 기능이 곧 추가될 예정입니다.')}
-                className="px-4 py-2.5 rounded-md text-base font-semibold text-white hover:bg-blue-600 hover:text-white transition-colors shadow-sm"
+              <Link
+                href="/certificate"
+                className={`px-4 py-2.5 rounded-md text-base font-semibold transition-colors shadow-sm ${
+                  isActivePath('/certificate')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white hover:bg-blue-600 hover:text-white'
+                }`}
               >
                 성적서관리
-              </button>
+              </Link>
             </nav>
           )}
 
@@ -329,16 +332,17 @@ export default function Header() {
               >
                 생산일정 캘린더
               </Link>
-              <button
-                type="button"
-                onClick={() => {
-                  alert('성적서관리 기능이 곧 추가될 예정입니다.');
-                  setIsMobileMenuOpen(false);
-                }}
-                className="px-5 py-3 rounded-md text-base font-semibold text-left text-white hover:bg-blue-600"
+              <Link
+                href="/certificate"
+                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                  isActivePath('/certificate')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
               >
                 성적서관리
-              </button>
+              </Link>
             </nav>
           </div>
         )}

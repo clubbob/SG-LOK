@@ -6,7 +6,7 @@ import { Button, Input } from '@/components/ui';
 import { collection, addDoc, Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import { CertificateType, InquiryAttachment } from '@/types';
+import { CertificateType, InquiryAttachment, CertificateAttachment } from '@/types';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -43,6 +43,9 @@ function AdminCertificateRequestContent() {
   const [success, setSuccess] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [certificateFile, setCertificateFile] = useState<File | null>(null);
+  const [uploadingCertificateFile, setUploadingCertificateFile] = useState(false);
+  const [existingCertificateFile, setExistingCertificateFile] = useState<CertificateAttachment | null>(null);
   
   // 오늘 날짜를 YYYY-MM-DD 형식으로 변환
   const today = new Date().toISOString().split('T')[0];
@@ -89,6 +92,17 @@ function AdminCertificateRequestContent() {
             requestedCompletionDate: data.requestedCompletionDate?.toDate().toISOString().split('T')[0] || '',
             memo: data.memo || '',
           });
+          // 기존 성적서 파일 정보 로드
+          if (data.certificateFile) {
+            setExistingCertificateFile({
+              name: data.certificateFile.name,
+              url: data.certificateFile.url,
+              size: data.certificateFile.size,
+              type: data.certificateFile.type,
+              uploadedAt: data.certificateFile.uploadedAt?.toDate() || new Date(),
+              uploadedBy: data.certificateFile.uploadedBy || 'admin',
+            });
+          }
         } else {
           setError('성적서 요청을 찾을 수 없습니다.');
           router.push('/admin/certificate');
@@ -152,6 +166,57 @@ function AdminCertificateRequestContent() {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const handleCertificateFileUpload = async () => {
+    if (!requestId || !certificateFile) {
+      setError('성적서 파일을 선택해주세요.');
+      return;
+    }
+
+    setUploadingCertificateFile(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const timestamp = Date.now();
+      const randomId = Math.random().toString(36).substring(2, 15);
+      const fileName = `certificate_${requestId}_${timestamp}_${randomId}_${certificateFile.name}`;
+      const filePath = `certificates/${requestId}/${fileName}`;
+      
+      const storageRef = ref(storage, filePath);
+      await uploadBytes(storageRef, certificateFile);
+      const downloadURL = await getDownloadURL(storageRef);
+      
+      const certificateAttachment: CertificateAttachment = {
+        name: certificateFile.name,
+        url: downloadURL,
+        size: certificateFile.size,
+        type: certificateFile.type,
+        uploadedAt: new Date(),
+        uploadedBy: 'admin',
+      };
+
+      await updateDoc(doc(db, 'certificates', requestId), {
+        certificateFile: certificateAttachment,
+        status: 'completed',
+        completedAt: Timestamp.now(),
+        completedBy: 'admin',
+        updatedAt: Timestamp.now(),
+        updatedBy: 'admin',
+      });
+
+      setSuccess('성적서 파일이 성공적으로 업로드되었습니다.');
+      setCertificateFile(null);
+      setExistingCertificateFile(certificateAttachment);
+      setCertificateStatus('completed');
+    } catch (error) {
+      console.error('파일 업로드 오류:', error);
+      const firebaseError = error as { code?: string; message?: string };
+      setError(`파일 업로드에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+    } finally {
+      setUploadingCertificateFile(false);
+    }
   };
 
   const validateForm = () => {
@@ -535,12 +600,81 @@ function AdminCertificateRequestContent() {
             />
           </div>
 
+          {/* 성적서 파일 (수정 모드일 때만 표시) */}
+          {isEditMode && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                성적서 파일
+              </label>
+              {existingCertificateFile ? (
+                <div className="mb-3 p-3 bg-gray-50 rounded-md border border-gray-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span className="text-sm text-gray-900">{existingCertificateFile.name}</span>
+                      {existingCertificateFile.size && (
+                        <span className="text-xs text-gray-500">
+                          ({(existingCertificateFile.size / 1024).toFixed(1)} KB)
+                        </span>
+                      )}
+                    </div>
+                    <a
+                      href={existingCertificateFile.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium underline"
+                    >
+                      다운로드
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500 mb-2">업로드된 성적서 파일이 없습니다.</p>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {existingCertificateFile ? '성적서 파일 변경' : '성적서 파일 업로드'}
+                </label>
+                <input
+                  type="file"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setCertificateFile(file);
+                    }
+                  }}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={uploadingCertificateFile || submitting}
+                />
+                {certificateFile && (
+                  <p className="mt-2 text-sm text-gray-600">선택된 파일: {certificateFile.name}</p>
+                )}
+                {certificateFile && (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    className="mt-2"
+                    onClick={handleCertificateFileUpload}
+                    disabled={uploadingCertificateFile || submitting}
+                    loading={uploadingCertificateFile}
+                  >
+                    {existingCertificateFile ? '파일 변경' : '파일 업로드'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={() => router.push('/admin/certificate')}
-              disabled={submitting || uploadingFiles}
+              disabled={submitting || uploadingFiles || uploadingCertificateFile}
             >
               취소
             </Button>
@@ -548,7 +682,7 @@ function AdminCertificateRequestContent() {
               type="submit"
               variant="primary"
               loading={submitting || uploadingFiles}
-              disabled={submitting || uploadingFiles}
+              disabled={submitting || uploadingFiles || uploadingCertificateFile}
             >
               {isEditMode ? '수정' : '등록'}
             </Button>

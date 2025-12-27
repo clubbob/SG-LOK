@@ -200,6 +200,12 @@ export default function AdminCertificatePage() {
 
   const totalPages = Math.ceil(filteredCertificates.length / itemsPerPage);
 
+  const handleDownload = (certificate: Certificate) => {
+    if (certificate.certificateFile?.url) {
+      window.open(certificate.certificateFile.url, '_blank');
+    }
+  };
+
   const handleApprove = (certificate: Certificate) => {
     setApprovingCertificate(certificate);
     // 기존 값이 있으면 설정
@@ -553,6 +559,19 @@ export default function AdminCertificatePage() {
                                   title="승인"
                                 >
                                   승인
+                                </button>
+                                <span className="text-gray-300">|</span>
+                              </>
+                            )}
+                            {certificate.certificateFile && (
+                              <>
+                                <button
+                                  onClick={() => handleDownload(certificate)}
+                                  className="text-green-600 hover:text-green-800 text-sm font-medium"
+                                  disabled={deletingId === certificate.id || updatingStatus || approving}
+                                  title="다운로드"
+                                >
+                                  다운로드
                                 </button>
                                 <span className="text-gray-300">|</span>
                               </>

@@ -385,18 +385,10 @@ export default function CertificateListPage() {
                               <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[certificate.status]}`}>
                                 {STATUS_LABELS[certificate.status]}
                               </span>
-                              {certificate.status === 'completed' && certificate.certificateFile && (
-                                <button
-                                  onClick={() => handleDownload(certificate)}
-                                  className="ml-2 text-blue-600 hover:text-blue-800 text-xs underline"
-                                >
-                                  다운로드
-                                </button>
-                              )}
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-2">
-                                {certificate.status === 'pending' && (
+                                {certificate.status === 'pending' ? (
                                   <>
                                     <button
                                       onClick={() => handleEdit(certificate)}
@@ -414,14 +406,26 @@ export default function CertificateListPage() {
                                       {deletingId === certificate.id ? '삭제 중...' : '삭제'}
                                     </button>
                                   </>
-                                )}
-                                {(certificate.status === 'in_progress' || certificate.status === 'completed') && (
-                                  <button
-                                    onClick={() => setSelectedCertificateForView(certificate)}
-                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                                  >
-                                    보기
-                                  </button>
+                                ) : (
+                                  <>
+                                    {certificate.certificateFile && (
+                                      <>
+                                        <button
+                                          onClick={() => handleDownload(certificate)}
+                                          className="text-green-600 hover:text-green-800 text-sm font-medium"
+                                        >
+                                          다운로드
+                                        </button>
+                                        <span className="text-gray-300">|</span>
+                                      </>
+                                    )}
+                                    <button
+                                      onClick={() => setSelectedCertificateForView(certificate)}
+                                      className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                    >
+                                      보기
+                                    </button>
+                                  </>
                                 )}
                               </div>
                             </td>
@@ -620,6 +624,27 @@ export default function CertificateListPage() {
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">비고</label>
                         <p className="text-sm text-gray-900 whitespace-pre-wrap bg-gray-50 p-3 rounded-md">{selectedCertificateForView.memo}</p>
+                      </div>
+                    )}
+                    {selectedCertificateForView.certificateFile && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">성적서 파일</label>
+                        <a
+                          href={selectedCertificateForView.certificateFile.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-between p-3 border border-gray-200 rounded-md hover:bg-gray-50"
+                        >
+                          <div className="flex items-center">
+                            <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span className="text-sm text-blue-600 hover:underline">{selectedCertificateForView.certificateFile.name}</span>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {selectedCertificateForView.certificateFile.size ? `${(selectedCertificateForView.certificateFile.size / 1024).toFixed(1)} KB` : ''}
+                          </span>
+                        </a>
                       </div>
                     )}
                   </div>

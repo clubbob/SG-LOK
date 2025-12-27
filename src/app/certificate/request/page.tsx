@@ -30,6 +30,9 @@ function CertificateRequestContent() {
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   
+  // 오늘 날짜를 YYYY-MM-DD 형식으로 변환
+  const today = new Date().toISOString().split('T')[0];
+  
   const [formData, setFormData] = useState({
     customerName: '',
     orderNumber: '',
@@ -246,12 +249,13 @@ function CertificateRequestContent() {
         }
 
         await updateDoc(doc(db, 'certificates', requestId), certificateData);
+        setSubmitting(false);
         setSuccess('성적서 요청이 성공적으로 수정되었습니다.');
         
         // 수정 후 목록 페이지로 이동
         setTimeout(() => {
           router.push('/certificate/list');
-        }, 1500);
+        }, 2000);
         return;
       } else {
         // 등록 모드
@@ -285,19 +289,19 @@ function CertificateRequestContent() {
         }
 
         await addDoc(collection(db, 'certificates'), certificateData);
+        setSubmitting(false);
         setSuccess('성적서 요청이 성공적으로 등록되었습니다.');
         
         // 등록 후 목록 페이지로 이동
         setTimeout(() => {
           router.push('/certificate/list');
-        }, 1500);
+        }, 2000);
         return;
       }
     } catch (error) {
       console.error('성적서요청 등록 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
       setError(`성적서요청 등록에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
-    } finally {
       setSubmitting(false);
     }
   };
@@ -424,6 +428,7 @@ function CertificateRequestContent() {
               value={formData.requestedCompletionDate}
               onChange={handleChange}
               error={fieldErrors.requestedCompletionDate}
+              min={today}
             />
 
             {/* 파일 첨부 */}
@@ -509,12 +514,12 @@ function CertificateRequestContent() {
               />
             </div>
 
-            <div className="flex gap-4 pt-4">
+            <div className="flex justify-end gap-3 pt-4">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push('/certificate')}
-                disabled={submitting}
+                onClick={() => router.back()}
+                disabled={submitting || uploadingFiles}
               >
                 취소
               </Button>
@@ -522,10 +527,9 @@ function CertificateRequestContent() {
                 type="submit"
                 variant="primary"
                 loading={submitting || uploadingFiles}
-                disabled={uploadingFiles}
-                className="flex-1"
+                disabled={submitting || uploadingFiles}
               >
-                {uploadingFiles ? '파일 업로드 중...' : isEditMode ? '수정하기' : '등록하기'}
+                {isEditMode ? '수정' : '등록'}
               </Button>
             </div>
           </form>

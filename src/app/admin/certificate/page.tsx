@@ -70,6 +70,14 @@ export default function AdminCertificatePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredCertificates, setFilteredCertificates] = useState<Certificate[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [approvingCertificate, setApprovingCertificate] = useState<Certificate | null>(null);
+  const [approvalForm, setApprovalForm] = useState({
+    requestedCompletionDate: '',
+  });
+  const [approving, setApproving] = useState(false);
+  
+  // 오늘 날짜를 YYYY-MM-DD 형식으로 변환
+  const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
     // 관리자 세션 확인
@@ -191,6 +199,53 @@ export default function AdminCertificatePage() {
   }, [filteredCertificates, currentPage, itemsPerPage]);
 
   const totalPages = Math.ceil(filteredCertificates.length / itemsPerPage);
+
+  const handleApprove = (certificate: Certificate) => {
+    setApprovingCertificate(certificate);
+    // 기존 값이 있으면 설정
+    setApprovalForm({
+      requestedCompletionDate: certificate.requestedCompletionDate
+        ? formatDateShort(certificate.requestedCompletionDate).replace(/\//g, '-')
+        : '',
+    });
+  };
+
+  const handleApproveSubmit = async () => {
+    if (!approvingCertificate) return;
+
+    if (!approvalForm.requestedCompletionDate.trim()) {
+      setError('완료예정일을 입력해주세요.');
+      return;
+    }
+
+    setApproving(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const requestedCompletionDate = Timestamp.fromDate(new Date(approvalForm.requestedCompletionDate));
+      
+      const updateData: Record<string, unknown> = {
+        status: 'in_progress',
+        requestedCompletionDate: requestedCompletionDate,
+        updatedAt: Timestamp.now(),
+        updatedBy: 'admin',
+      };
+
+      await updateDoc(doc(db, 'certificates', approvingCertificate.id), updateData);
+
+      // 모달 닫기
+      setApprovingCertificate(null);
+      setApprovalForm({ requestedCompletionDate: '' });
+      setSuccess('성적서가 성공적으로 승인되었습니다.');
+    } catch (error) {
+      console.error('성적서 승인 오류:', error);
+      const firebaseError = error as { code?: string; message?: string };
+      setError(`성적서 승인에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+    } finally {
+      setApproving(false);
+    }
+  };
 
   const handleStatusChange = async (certificate: Certificate, newStatus: CertificateStatus) => {
     if (!certificate) return;
@@ -406,6 +461,7 @@ export default function AdminCertificatePage() {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품코드</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수량</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">첨부</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">비고</th>
@@ -447,6 +503,13 @@ export default function AdminCertificatePage() {
                           <div className="text-sm text-gray-900">{certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-'}</div>
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {certificate.status === 'in_progress' || certificate.status === 'completed' 
+                              ? (certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-')
+                              : '-'}
+                          </div>
+                        </td>
+                        <td className="px-3 py-4 whitespace-nowrap">
                           <div className="text-sm text-gray-900">{certificate.completedAt ? formatDateShort(certificate.completedAt) : '-'}</div>
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap">
@@ -481,18 +544,33 @@ export default function AdminCertificatePage() {
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-2">
+                            {certificate.status === 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => handleApprove(certificate)}
+                                  className="text-green-600 hover:text-green-800 text-sm font-medium"
+                                  disabled={deletingId === certificate.id || updatingStatus || approving}
+                                  title="승인"
+                                >
+                                  승인
+                                </button>
+                                <span className="text-gray-300">|</span>
+                              </>
+                            )}
                             <button
-                              onClick={() => setSelectedCertificate(certificate)}
+                              onClick={() => router.push(`/admin/certificate/request?id=${certificate.id}`)}
                               className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                              disabled={deletingId === certificate.id || updatingStatus}
+                              disabled={deletingId === certificate.id || updatingStatus || approving}
+                              title="수정"
                             >
-                              상세
+                              수정
                             </button>
                             <span className="text-gray-300">|</span>
                             <button
                               onClick={() => handleDelete(certificate)}
                               className="text-red-600 hover:text-red-800 text-sm font-medium"
-                              disabled={deletingId === certificate.id || updatingStatus}
+                              disabled={deletingId === certificate.id || updatingStatus || approving}
+                              title="삭제"
                             >
                               {deletingId === certificate.id ? '삭제 중...' : '삭제'}
                             </button>
@@ -713,6 +791,107 @@ export default function AdminCertificatePage() {
             </div>
           </div>
       </div>
+      )}
+
+      {/* 승인 모달 */}
+      {approvingCertificate && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30" 
+          onMouseDown={(e) => {
+            // 모달 내부가 아닌 배경만 클릭했을 때만 모달 닫기
+            if (e.target === e.currentTarget) {
+              setApprovingCertificate(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 flex flex-col relative" 
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onMouseUp={(e) => e.stopPropagation()}
+            onMouseMove={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h3 className="text-lg font-semibold text-gray-900">성적서 승인</h3>
+              <button
+                onClick={() => {
+                  setApprovingCertificate(null);
+                  setApprovalForm({ requestedCompletionDate: '' });
+                  setError('');
+                }}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                disabled={approving}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div 
+              className="px-6 py-4 overflow-y-auto flex-1"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                  <p className="text-sm text-red-600">{error}</p>
+                </div>
+              )}
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-2">고객명: <span className="font-medium text-gray-900">{approvingCertificate.customerName || '-'}</span></p>
+                </div>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <label htmlFor="requestedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
+                    완료예정일: *
+                  </label>
+                  <input
+                    type="date"
+                    id="requestedCompletionDate"
+                    value={approvalForm.requestedCompletionDate}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setApprovalForm({ ...approvalForm, requestedCompletionDate: e.target.value });
+                      if (error) setError('');
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.stopPropagation()}
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    disabled={approving}
+                    min={today}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+            <div 
+              className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2 sticky bottom-0 bg-white"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setApprovingCertificate(null);
+                  setApprovalForm({ requestedCompletionDate: '' });
+                  setError('');
+                }}
+                disabled={approving}
+              >
+                취소
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleApproveSubmit}
+                disabled={approving}
+                loading={approving}
+              >
+                저장
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

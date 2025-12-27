@@ -44,6 +44,7 @@ export default function CertificateListPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
+  const [selectedCertificateForView, setSelectedCertificateForView] = useState<Certificate | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredCertificates, setFilteredCertificates] = useState<Certificate[]>([]);
 
@@ -307,6 +308,7 @@ export default function CertificateListPage() {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품코드</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수량</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">첨부</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">비고</th>
@@ -343,6 +345,13 @@ export default function CertificateListPage() {
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap">
                               <div className="text-sm text-gray-900">{certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-'}</div>
+                            </td>
+                            <td className="px-3 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">
+                                {certificate.status === 'in_progress' || certificate.status === 'completed'
+                                  ? (certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-')
+                                  : '-'}
+                              </div>
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap">
                               <div className="text-sm text-gray-900">{certificate.completedAt ? formatDateShort(certificate.completedAt) : '-'}</div>
@@ -397,15 +406,23 @@ export default function CertificateListPage() {
                                       수정
                                     </button>
                                     <span className="text-gray-300">|</span>
+                                    <button
+                                      onClick={() => handleDelete(certificate)}
+                                      className="text-red-600 hover:text-red-800 text-sm font-medium"
+                                      disabled={deletingId === certificate.id}
+                                    >
+                                      {deletingId === certificate.id ? '삭제 중...' : '삭제'}
+                                    </button>
                                   </>
                                 )}
-                                <button
-                                  onClick={() => handleDelete(certificate)}
-                                  className="text-red-600 hover:text-red-800 text-sm font-medium"
-                                  disabled={deletingId === certificate.id}
-                                >
-                                  {deletingId === certificate.id ? '삭제 중...' : '삭제'}
-                                </button>
+                                {(certificate.status === 'in_progress' || certificate.status === 'completed') && (
+                                  <button
+                                    onClick={() => setSelectedCertificateForView(certificate)}
+                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                                  >
+                                    보기
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -526,6 +543,91 @@ export default function CertificateListPage() {
                   <Button
                     variant="primary"
                     onClick={() => setSelectedCertificate(null)}
+                  >
+                    닫기
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 성적서 상세 모달 */}
+          {selectedCertificateForView && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setSelectedCertificateForView(null)}>
+              <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+                  <h3 className="text-lg font-semibold text-gray-900">성적서 상세</h3>
+                  <button
+                    onClick={() => setSelectedCertificateForView(null)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="px-6 py-4 overflow-y-auto flex-1">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">고객명</label>
+                        <p className="text-sm text-gray-900">{selectedCertificateForView.customerName || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">발주번호</label>
+                        <p className="text-sm text-gray-900">{selectedCertificateForView.orderNumber || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">제품명</label>
+                        <p className="text-sm text-gray-900">{selectedCertificateForView.productName || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">제품코드</label>
+                        <p className="text-sm text-gray-900">{selectedCertificateForView.productCode || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">수량</label>
+                        <p className="text-sm text-gray-900">{selectedCertificateForView.quantity ? selectedCertificateForView.quantity.toLocaleString() : '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">요청일</label>
+                        <p className="text-sm text-gray-900">{formatDateShort(selectedCertificateForView.requestDate)}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">완료요청일</label>
+                        <p className="text-sm text-gray-900">{selectedCertificateForView.requestedCompletionDate ? formatDateShort(selectedCertificateForView.requestedCompletionDate) : '-'}</p>
+                      </div>
+                      {(selectedCertificateForView.status === 'in_progress' || selectedCertificateForView.status === 'completed') && selectedCertificateForView.requestedCompletionDate && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">완료예정일</label>
+                          <p className="text-sm text-gray-900">{formatDateShort(selectedCertificateForView.requestedCompletionDate)}</p>
+                        </div>
+                      )}
+                      {selectedCertificateForView.completedAt && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">완료일</label>
+                          <p className="text-sm text-gray-900">{formatDateShort(selectedCertificateForView.completedAt)}</p>
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">상태</label>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[selectedCertificateForView.status]}`}>
+                          {STATUS_LABELS[selectedCertificateForView.status]}
+                        </span>
+                      </div>
+                    </div>
+                    {selectedCertificateForView.memo && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">비고</label>
+                        <p className="text-sm text-gray-900 whitespace-pre-wrap bg-gray-50 p-3 rounded-md">{selectedCertificateForView.memo}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
+                  <Button
+                    variant="primary"
+                    onClick={() => setSelectedCertificateForView(null)}
                   >
                     닫기
                   </Button>

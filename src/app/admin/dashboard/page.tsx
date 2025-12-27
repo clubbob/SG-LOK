@@ -49,6 +49,12 @@ export default function AdminPage() {
     inProgress: 0,
     completed: 0,
   });
+  const [certificateStats, setCertificateStats] = useState({
+    total: 0,
+    pending: 0,
+    inProgress: 0,
+    completed: 0,
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -158,10 +164,57 @@ export default function AdminPage() {
       }
     );
 
+    // 성적서 통계 구독
+    const certificatesRef = collection(db, 'certificates');
+    const unsubscribeCertificates = onSnapshot(
+      certificatesRef,
+      (snapshot) => {
+        let pendingCount = 0;
+        let inProgressCount = 0;
+        let completedCount = 0;
+        let totalCount = 0;
+
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          
+          // 생산요청 데이터 필터링
+          if (data.productionReason) {
+            return;
+          }
+          
+          // 성적서 데이터인지 확인
+          if (!data.certificateType && !data.requestDate) {
+            return;
+          }
+          
+          totalCount++;
+          const status = data.status || 'pending';
+          if (status === 'pending') {
+            pendingCount++;
+          } else if (status === 'in_progress') {
+            inProgressCount++;
+          } else if (status === 'completed') {
+            completedCount++;
+          }
+        });
+
+        setCertificateStats({
+          total: totalCount,
+          pending: pendingCount,
+          inProgress: inProgressCount,
+          completed: completedCount,
+        });
+      },
+      (error) => {
+        console.error('성적서 통계 조회 오류:', error);
+      }
+    );
+
     return () => {
       unsubscribeUsers();
       unsubscribeInquiries();
       unsubscribeProduction();
+      unsubscribeCertificates();
     };
   }, [router]);
 
@@ -369,6 +422,76 @@ export default function AdminPage() {
                 </div>
                 <div className="bg-gray-100 rounded-full p-3">
                   <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </Link>
+        </div>
+      </div>
+
+      {/* 성적서관리 섹션 */}
+      <div className="mb-8 bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <h2 className="text-xl font-bold text-gray-900 mb-4">성적서관리</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <Link href="/admin/certificate" className="block">
+            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-500 hover:shadow-lg transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">전체 요청</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{certificateStats.total}</p>
+                </div>
+                <div className="bg-blue-100 rounded-full p-3">
+                  <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/admin/certificate" className="block">
+            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-yellow-500 hover:shadow-lg transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">대기중</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{certificateStats.pending}</p>
+                </div>
+                <div className="bg-yellow-100 rounded-full p-3">
+                  <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/admin/certificate" className="block">
+            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-blue-400 hover:shadow-lg transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">진행중</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{certificateStats.inProgress}</p>
+                </div>
+                <div className="bg-blue-50 rounded-full p-3">
+                  <svg className="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/admin/certificate" className="block">
+            <div className="bg-white rounded-lg shadow-md p-6 border-l-4 border-green-500 hover:shadow-lg transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">완료</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{certificateStats.completed}</p>
+                </div>
+                <div className="bg-green-100 rounded-full p-3">
+                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </div>

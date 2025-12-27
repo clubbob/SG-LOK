@@ -148,6 +148,9 @@ export interface Certificate {
   // 성적서 파일
   certificateFile?: CertificateAttachment; // 성적서 파일 (관리자가 업로드)
   
+  // MATERIAL TEST CERTIFICATE 내용
+  materialTestCertificate?: MaterialTestCertificate; // 성적서 작성 내용
+  
   // 이력 관리
   createdAt: Date;
   updatedAt: Date;
@@ -164,4 +167,26 @@ export interface CertificateAttachment {
   type: string; // MIME 타입
   uploadedAt: Date; // 업로드 일시
   uploadedBy: string; // 업로드자 ID
+}
+
+// MATERIAL TEST CERTIFICATE 관련 타입
+export interface MaterialTestCertificate {
+  // 입력 항목
+  certificateNo: string;        // CERTIFICATE NO.
+  dateOfIssue: Date;            // DATE OF ISSUE
+  customer: string;             // CUSTOMER
+  poNo: string;                 // PO NO.
+  description: string;          // DESCRIPTION
+  code: string;               // CODE
+  quantity: number;             // Q'TY
+  testResult: string;           // TEST RESULT
+  heatNo: string;              // HEAT NO.
+  
+  // INSPECTION CERTIFICATE 첨부
+  inspectionCertificate?: CertificateAttachment;
+  
+  // 생성 정보
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string; // 생성자 ID (관리자)
 }

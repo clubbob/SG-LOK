@@ -243,11 +243,11 @@ export default function AdminCertificatePage() {
       // 모달 닫기
       setApprovingCertificate(null);
       setApprovalForm({ requestedCompletionDate: '' });
-      setSuccess('성적서가 성공적으로 승인되었습니다.');
+      setSuccess('성적서요청을 확인하였습니다.');
     } catch (error) {
       console.error('성적서 승인 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
-      setError(`성적서 승인에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+      setError(`성적서 확인에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
     } finally {
       setApproving(false);
     }
@@ -556,9 +556,9 @@ export default function AdminCertificatePage() {
                                   onClick={() => handleApprove(certificate)}
                                   className="text-green-600 hover:text-green-800 text-sm font-medium"
                                   disabled={deletingId === certificate.id || updatingStatus || approving}
-                                  title="승인"
+                                  title="확인"
                                 >
-                                  승인
+                                  확인
                                 </button>
                                 <span className="text-gray-300">|</span>
                               </>
@@ -572,6 +572,19 @@ export default function AdminCertificatePage() {
                                   title="다운로드"
                                 >
                                   다운로드
+                                </button>
+                                <span className="text-gray-300">|</span>
+                              </>
+                            )}
+                            {certificate.status !== 'pending' && (
+                              <>
+                                <button
+                                  onClick={() => router.push(`/admin/certificate/create?id=${certificate.id}`)}
+                                  className="text-purple-600 hover:text-purple-800 text-sm font-medium"
+                                  disabled={deletingId === certificate.id || updatingStatus || approving}
+                                  title="성적서 작성"
+                                >
+                                  성적서 작성
                                 </button>
                                 <span className="text-gray-300">|</span>
                               </>
@@ -831,7 +844,7 @@ export default function AdminCertificatePage() {
             onMouseMove={(e) => e.stopPropagation()}
           >
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
-              <h3 className="text-lg font-semibold text-gray-900">성적서 승인</h3>
+              <h3 className="text-lg font-semibold text-gray-900">성적서 확인</h3>
               <button
                 onClick={() => {
                   setApprovingCertificate(null);

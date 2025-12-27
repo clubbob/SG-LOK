@@ -576,7 +576,7 @@ export default function AdminCertificatePage() {
                                 <span className="text-gray-300">|</span>
                               </>
                             )}
-                            {certificate.status !== 'pending' && (
+                            {certificate.status !== 'pending' && !certificate.certificateFile && (
                               <>
                                 <button
                                   onClick={() => router.push(`/admin/certificate/create?id=${certificate.id}`)}

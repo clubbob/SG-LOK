@@ -204,16 +204,6 @@ function MaterialTestCertificateContent() {
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  
-  // 기본 정보 (성적서 요청에서 가져올 정보)
-  const [baseInfo, setBaseInfo] = useState({
-    customerName: '',
-    orderNumber: '',
-    productName: '',
-    productCode: '',
-    quantity: '',
-    lotNumber: '',
-  });
 
   // MATERIAL TEST CERTIFICATE 입력 항목
   const [formData, setFormData] = useState({
@@ -290,16 +280,6 @@ function MaterialTestCertificateContent() {
         const certDoc = await getDoc(doc(db, 'certificates', certificateId));
         if (certDoc.exists()) {
           const data = certDoc.data();
-          
-          // 기본 정보 설정
-          setBaseInfo({
-            customerName: data.customerName || '',
-            orderNumber: data.orderNumber || '',
-            productName: data.productName || '',
-            productCode: data.productCode || '',
-            quantity: data.quantity?.toString() || '',
-            lotNumber: data.lotNumber || '',
-          });
 
           // 기존 MATERIAL TEST CERTIFICATE 내용이 있으면 불러오기
           if (data.materialTestCertificate) {
@@ -356,7 +336,7 @@ function MaterialTestCertificateContent() {
     if (certificateId) {
       loadCertificateData();
     }
-  }, [certificateId]);
+  }, [certificateId, router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -546,7 +526,7 @@ function MaterialTestCertificateContent() {
       };
 
       // Firestore에 저장할 때는 Timestamp로 변환하고 undefined 필드 제거
-      const materialTestCertificateForFirestore: any = {
+      const materialTestCertificateForFirestore: Record<string, unknown> = {
         certificateNo: materialTestCertificate.certificateNo,
         dateOfIssue: Timestamp.fromDate(materialTestCertificate.dateOfIssue),
         customer: materialTestCertificate.customer,
@@ -629,7 +609,7 @@ function MaterialTestCertificateContent() {
         };
 
         // Firestore에 저장할 때는 Timestamp로 변환하고 undefined 필드 제거
-        const materialTestCertificateForFirestore: any = {
+        const materialTestCertificateForFirestore: Record<string, unknown> = {
           certificateNo: materialTestCertificate.certificateNo,
           dateOfIssue: Timestamp.fromDate(materialTestCertificate.dateOfIssue),
           customer: materialTestCertificate.customer,

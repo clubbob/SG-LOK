@@ -198,6 +198,17 @@ export default function AdminCertificatePage() {
     setDisplayedCertificates(filteredCertificates.slice(startIndex, endIndex));
   }, [filteredCertificates, currentPage, itemsPerPage]);
 
+  // 성공 메시지 자동 제거
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess('');
+      }, 3000); // 3초 후 자동으로 사라짐
+      
+      return () => clearTimeout(timer);
+    }
+  }, [success]);
+
   const totalPages = Math.ceil(filteredCertificates.length / itemsPerPage);
 
   const handleDownload = (certificate: Certificate) => {

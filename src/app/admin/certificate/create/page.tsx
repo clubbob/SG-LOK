@@ -561,6 +561,9 @@ function MaterialTestCertificateContent() {
       await updateDoc(doc(db, 'certificates', certificateId), {
         materialTestCertificate: materialTestCertificateForFirestore,
         certificateFile: certificateFileForFirestore,
+        status: 'completed',
+        completedAt: Timestamp.now(),
+        completedBy: 'admin',
         updatedAt: Timestamp.now(),
         updatedBy: 'admin',
       });
@@ -857,15 +860,6 @@ function MaterialTestCertificateContent() {
                 loading={saving}
               >
                 저장
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                onClick={handleGeneratePDF}
-                disabled={saving || generatingPDF || uploadingInspectionFile}
-                loading={generatingPDF}
-              >
-                PDF 생성 및 다운로드
               </Button>
             </div>
           </div>

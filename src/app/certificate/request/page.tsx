@@ -249,8 +249,8 @@ function CertificateRequestContent() {
         }
 
         await updateDoc(doc(db, 'certificates', requestId), certificateData);
-        setSubmitting(false);
         setSuccess('성적서 요청이 성공적으로 수정되었습니다.');
+        setSubmitting(false);
         
         // 수정 후 목록 페이지로 이동
         setTimeout(() => {
@@ -289,8 +289,8 @@ function CertificateRequestContent() {
         }
 
         await addDoc(collection(db, 'certificates'), certificateData);
-        setSubmitting(false);
         setSuccess('성적서 요청이 성공적으로 등록되었습니다.');
+        setSubmitting(false);
         
         // 등록 후 목록 페이지로 이동
         setTimeout(() => {

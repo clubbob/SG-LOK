@@ -3,12 +3,98 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
-import { collection, doc, getDoc, updateDoc, Timestamp, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { CertificateAttachment, MaterialTestCertificate } from '@/types';
 
 const ADMIN_SESSION_KEY = 'admin_session';
+
+// 한글 텍스트를 Canvas 이미지로 변환하여 PDF에 삽입하는 헬퍼 함수
+const renderKoreanText = (
+  doc: any,
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number = 12
+): void => {
+  if (typeof document === 'undefined' || typeof window === 'undefined') {
+    // 브라우저 환경이 아니면 기본 폰트 사용
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(fontSize);
+    doc.text(text, x, y);
+    return;
+  }
+
+  const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(text || '');
+  if (!hasKorean) {
+    // 한글이 없으면 기본 폰트 사용
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(fontSize);
+    doc.text(text, x, y);
+    return;
+  }
+
+  try {
+    // Canvas를 사용하여 한글 텍스트를 이미지로 변환
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(fontSize);
+      doc.text(text, x, y);
+      return;
+    }
+
+    // PDF 폰트 크기를 픽셀로 변환 (1pt = 1.333px at 96 DPI)
+    const fontSizePx = fontSize * 1.333;
+    
+    // 폰트 설정
+    ctx.font = `300 ${fontSizePx}px "Noto Sans KR Light", "Noto Sans KR", "Malgun Gothic", "맑은 고딕", sans-serif`;
+    
+    // 텍스트 크기 측정
+    const textMetrics = ctx.measureText(text);
+    const textWidth = Math.ceil(textMetrics.width) + 4;
+    const textHeight = Math.ceil(fontSizePx * 1.1) + 2;
+    
+    // Canvas 크기 설정 (고해상도)
+    const scale = 2;
+    canvas.width = textWidth * scale;
+    canvas.height = textHeight * scale;
+    ctx.scale(scale, scale);
+    
+    // 배경 투명
+    ctx.clearRect(0, 0, textWidth, textHeight);
+    
+    // 텍스트 렌더링 설정
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
+    // 텍스트 그리기 (두 번 그려서 진하게)
+    ctx.fillStyle = '#000000';
+    ctx.font = `300 ${fontSizePx}px "Noto Sans KR Light", "Noto Sans KR", "Malgun Gothic", "맑은 고딕", sans-serif`;
+    const textX = 2;
+    const textY = textHeight - 2;
+    ctx.fillText(text, textX, textY);
+    ctx.fillText(text, textX + 0.2, textY);
+    
+    // 이미지 데이터로 변환
+    const imgData = canvas.toDataURL('image/png');
+    
+    // PDF에 이미지 삽입
+    const imgWidthMM = textWidth / 3.779527559;
+    const imgHeightMM = textHeight / 3.779527559;
+    doc.addImage(imgData, 'PNG', x, y - imgHeightMM + 0.5, imgWidthMM, imgHeightMM);
+  } catch (error: any) {
+    console.error('한글 텍스트 이미지 변환 실패:', error?.message || error);
+    // 실패 시 기본 폰트 사용
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(fontSize);
+    doc.text(text, x, y);
+  }
+};
 
 // PDF를 Blob으로 생성하는 함수
 const generatePDFBlob = async (
@@ -29,6 +115,93 @@ const generatePDFBlob = async (
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF();
 
+  // 한글 폰트 추가 (Noto Sans KR)
+  // CDN에서 TTF 폰트 로드
+  let koreanFontLoaded = false;
+  
+  // Base64 인코딩 헬퍼 함수 (큰 파일 처리용)
+  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  };
+
+  // 여러 CDN 소스에서 폰트 로드 시도
+  const fontUrls = [
+    'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosanskr/NotoSansKR-Regular.ttf',
+  ];
+
+  for (const fontUrl of fontUrls) {
+    try {
+      const fontResponse = await fetch(fontUrl);
+      if (fontResponse.ok) {
+        const fontArrayBuffer = await fontResponse.arrayBuffer();
+        
+        // 폰트 파일 크기 확인 (너무 크면 건너뛰기)
+        if (fontArrayBuffer.byteLength > 10 * 1024 * 1024) {
+          console.warn('폰트 파일이 너무 큽니다:', fontArrayBuffer.byteLength);
+          continue;
+        }
+        
+        // 빈 파일 체크
+        if (fontArrayBuffer.byteLength === 0) {
+          console.warn('폰트 파일이 비어있습니다');
+          continue;
+        }
+        
+        const fontBase64 = arrayBufferToBase64(fontArrayBuffer);
+        
+        // Base64 문자열이 유효한지 확인
+        if (!fontBase64 || fontBase64.length === 0) {
+          console.warn('폰트 Base64 인코딩 실패');
+          continue;
+        }
+        
+        try {
+          // 폰트를 VFS에 추가
+          doc.addFileToVFS('NotoSansKR-Regular.ttf', fontBase64);
+          
+          // 폰트 등록 (에러 발생 가능성 있음)
+          doc.addFont('NotoSansKR-Regular.ttf', 'NotoSansKR', 'normal');
+          
+          // 폰트가 실제로 작동하는지 테스트
+          try {
+            // 테스트용 임시 위치에 한글 텍스트 출력 시도
+            const testY = -1000; // 화면 밖 위치
+            doc.setFont('NotoSansKR', 'normal');
+            doc.setFontSize(12);
+            doc.text('테스트', 0, testY);
+            
+            // 에러가 발생하지 않으면 폰트가 제대로 등록된 것으로 간주
+            koreanFontLoaded = true;
+            console.log('한글 폰트 로드 및 등록 성공:', fontUrl);
+            break; // 성공하면 루프 종료
+          } catch (testError: any) {
+            console.warn('폰트 테스트 실패:', testError?.message || testError);
+            // 테스트 실패 시 다음 URL 시도
+            continue;
+          }
+        } catch (fontError: any) {
+          console.warn('폰트 등록 실패:', fontError?.message || fontError);
+          // 폰트 등록 실패 시에도 계속 진행 (기본 폰트 사용)
+          // jsPDF 객체는 그대로 유지
+          continue; // 다음 URL 시도
+        }
+      }
+    } catch (error: any) {
+      console.warn(`폰트 로드 실패 (${fontUrl}):`, error?.message || error);
+      continue; // 다음 URL 시도
+    }
+  }
+
+  if (!koreanFontLoaded) {
+    console.warn('한글 폰트 로드 실패 - 기본 폰트로 진행합니다');
+  }
+
   // 페이지 설정
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -39,7 +212,13 @@ const generatePDFBlob = async (
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
   doc.text('MATERIAL TEST CERTIFICATE', pageWidth / 2, yPosition, { align: 'center' });
-  yPosition += 15;
+  yPosition += 10;
+
+  // 표준 규격 텍스트
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('According to DIN 50049 3.1 / EN 10204 3.1 / ISO 10474 3.1', pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 8;
 
   // 구분선
   doc.setLineWidth(0.5);
@@ -56,43 +235,50 @@ const generatePDFBlob = async (
   let leftY = yPosition;
   let rightY = yPosition;
 
-  // 왼쪽 컬럼
+  // 첫 번째 행: CERTIFICATE NO. (왼쪽) | DATE OF ISSUE (오른쪽)
   doc.setFont('helvetica', 'bold');
   doc.text('CERTIFICATE NO.:', leftColumn, leftY);
   doc.setFont('helvetica', 'normal');
   doc.text(formData.certificateNo || '-', leftColumn + 50, leftY);
-  leftY += lineHeight;
-
+  
   doc.setFont('helvetica', 'bold');
-  doc.text('DATE OF ISSUE:', leftColumn, leftY);
+  doc.text('DATE OF ISSUE:', rightColumn, rightY);
   doc.setFont('helvetica', 'normal');
-  doc.text(formData.dateOfIssue || '-', leftColumn + 50, leftY);
+  doc.text(formData.dateOfIssue || '-', rightColumn + 40, rightY);
   leftY += lineHeight;
+  rightY += lineHeight;
 
+  // 두 번째 행: CUSTOMER (왼쪽) | DESCRIPTION (오른쪽)
   doc.setFont('helvetica', 'bold');
   doc.text('CUSTOMER:', leftColumn, leftY);
   doc.setFont('helvetica', 'normal');
-  doc.text(formData.customer || '-', leftColumn + 50, leftY);
+  renderKoreanText(doc, formData.customer || '-', leftColumn + 50, leftY, 12);
   leftY += lineHeight;
 
-  doc.setFont('helvetica', 'bold');
-  doc.text('PO NO.:', leftColumn, leftY);
-  doc.setFont('helvetica', 'normal');
-  doc.text(formData.poNo || '-', leftColumn + 50, leftY);
-  leftY += lineHeight;
-
-  // 오른쪽 컬럼
   doc.setFont('helvetica', 'bold');
   doc.text('DESCRIPTION:', rightColumn, rightY);
   doc.setFont('helvetica', 'normal');
-  const descriptionLines = doc.splitTextToSize(formData.description || '-', 60);
-  doc.text(descriptionLines, rightColumn + 40, rightY);
-  rightY += lineHeight * descriptionLines.length;
+  const descriptionText = formData.description || '-';
+  const descriptionLines = doc.splitTextToSize(descriptionText, 60);
+  // 각 줄에 대해 한글 처리
+  let descY = rightY;
+  descriptionLines.forEach((line: string) => {
+    renderKoreanText(doc, line, rightColumn + 40, descY, 12);
+    descY += lineHeight;
+  });
+  rightY = descY;
 
+  // 세 번째 행: PO NO. (왼쪽) | CODE (오른쪽)
+  doc.setFont('helvetica', 'bold');
+  doc.text('PO NO.:', leftColumn, leftY);
+  doc.setFont('helvetica', 'normal');
+  renderKoreanText(doc, formData.poNo || '-', leftColumn + 50, leftY, 12);
+  
   doc.setFont('helvetica', 'bold');
   doc.text('CODE:', rightColumn, rightY);
   doc.setFont('helvetica', 'normal');
-  doc.text(formData.code || '-', rightColumn + 40, rightY);
+  renderKoreanText(doc, formData.code || '-', rightColumn + 40, rightY, 12);
+  leftY += lineHeight;
   rightY += lineHeight;
 
   doc.setFont('helvetica', 'bold');
@@ -104,7 +290,7 @@ const generatePDFBlob = async (
   doc.setFont('helvetica', 'bold');
   doc.text('HEAT NO.:', rightColumn, rightY);
   doc.setFont('helvetica', 'normal');
-  doc.text(formData.heatNo || '-', rightColumn + 40, rightY);
+  renderKoreanText(doc, formData.heatNo || '-', rightColumn + 40, rightY, 12);
   rightY += lineHeight;
 
   // INSPECTION CERTIFICATE 첨부 정보
@@ -133,14 +319,23 @@ const generatePDFBlob = async (
   }
 
   // 하단 정보 (DEFAULT 고정 내용은 나중에 추가)
-  yPosition = pageHeight - 30;
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'italic');
-  doc.text('* DEFAULT 고정 내용은 추후 추가 예정입니다.', margin, yPosition);
+  // 주석 처리: 사용자가 요청할 때까지 표시하지 않음
+  // yPosition = pageHeight - 30;
+  // doc.setFontSize(8);
+  // doc.setFont('helvetica', 'italic');
+  // doc.text('* DEFAULT 고정 내용은 추후 추가 예정입니다.', margin, yPosition);
 
   // PDF를 Blob으로 변환하여 반환
-  const pdfBlob = doc.output('blob');
-  return pdfBlob;
+  try {
+    const pdfBlob = doc.output('blob');
+    return pdfBlob;
+  } catch (error) {
+    console.error('PDF 생성 오류:', error);
+    // PDF 생성 실패 시 빈 PDF 반환 (에러 방지)
+    const fallbackDoc = new jsPDF();
+    fallbackDoc.text('PDF 생성 중 오류가 발생했습니다.', 20, 20);
+    return fallbackDoc.output('blob');
+  }
 };
 
 // PDF 생성 및 다운로드 함수 (기존 함수 유지)
@@ -198,7 +393,9 @@ function MaterialTestCertificateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const certificateId = searchParams.get('id'); // 기존 성적서 요청 ID
+  const copyFromId = searchParams.get('copyFrom'); // 복사할 성적서 ID
   const [isEditMode, setIsEditMode] = useState(false);
+  const [isCopyMode, setIsCopyMode] = useState(false);
   const [loadingCertificate, setLoadingCertificate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatingPDF, setGeneratingPDF] = useState(false);
@@ -264,10 +461,12 @@ function MaterialTestCertificateContent() {
     }
   }, [router]);
 
-  // 성적서 요청 정보 불러오기 (certificateId 필수)
+  // 성적서 요청 정보 불러오기 (certificateId 또는 copyFromId 필수)
   useEffect(() => {
     const loadCertificateData = async () => {
-      if (!certificateId) {
+      const targetId = copyFromId || certificateId;
+      
+      if (!targetId) {
         setError('성적서 요청 ID가 필요합니다. 성적서 목록에서 성적서 작성 버튼을 클릭해주세요.');
         setTimeout(() => {
           router.push('/admin/certificate');
@@ -277,11 +476,59 @@ function MaterialTestCertificateContent() {
 
       setLoadingCertificate(true);
       try {
-        const certDoc = await getDoc(doc(db, 'certificates', certificateId));
+        const certDoc = await getDoc(doc(db, 'certificates', targetId));
         if (certDoc.exists()) {
           const data = certDoc.data();
 
-          // 기존 MATERIAL TEST CERTIFICATE 내용이 있으면 불러오기
+          // 복사 모드인 경우
+          if (copyFromId) {
+            setIsCopyMode(true);
+            // 기존 성적서 데이터를 복사하되, 새로운 성적서 번호 생성
+            if (data.materialTestCertificate) {
+              const mtc = data.materialTestCertificate;
+              const newCertificateNo = await generateCertificateNo();
+              setFormData({
+                certificateNo: newCertificateNo,
+                dateOfIssue: new Date().toISOString().split('T')[0], // 오늘 날짜로 설정
+                customer: mtc.customer || '',
+                poNo: mtc.poNo || '',
+                description: mtc.description || '',
+                code: mtc.code || '',
+                quantity: mtc.quantity?.toString() || '',
+                testResult: mtc.testResult || '',
+                heatNo: mtc.heatNo || '',
+              });
+              
+              if (mtc.inspectionCertificate) {
+                setExistingInspectionFile({
+                  name: mtc.inspectionCertificate.name,
+                  url: mtc.inspectionCertificate.url,
+                  size: mtc.inspectionCertificate.size,
+                  type: mtc.inspectionCertificate.type,
+                  uploadedAt: mtc.inspectionCertificate.uploadedAt?.toDate() || new Date(),
+                  uploadedBy: mtc.inspectionCertificate.uploadedBy || 'admin',
+                });
+              }
+            } else {
+              // 기존 성적서가 없으면 기본 정보로 자동 채움
+              const newCertificateNo = await generateCertificateNo();
+              setFormData({
+                certificateNo: newCertificateNo,
+                dateOfIssue: new Date().toISOString().split('T')[0],
+                customer: data.customerName || '',
+                poNo: data.orderNumber || '',
+                description: data.productName || '',
+                code: data.productCode || '',
+                quantity: data.quantity?.toString() || '',
+                testResult: '',
+                heatNo: '',
+              });
+            }
+            setLoadingCertificate(false);
+            return;
+          }
+
+          // 기존 MATERIAL TEST CERTIFICATE 내용이 있으면 불러오기 (수정 모드)
           if (data.materialTestCertificate) {
             setIsEditMode(true);
             const mtc = data.materialTestCertificate;
@@ -333,10 +580,10 @@ function MaterialTestCertificateContent() {
       }
     };
 
-    if (certificateId) {
+    if (copyFromId || certificateId) {
       loadCertificateData();
     }
-  }, [certificateId, router]);
+  }, [certificateId, copyFromId, router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -471,7 +718,14 @@ function MaterialTestCertificateContent() {
   };
 
   const handleSave = async () => {
-    if (!certificateId) {
+    // 복사 모드인 경우 새로운 성적서 요청을 생성해야 함
+    if (isCopyMode && !copyFromId) {
+      setError('복사할 성적서 ID가 없습니다.');
+      return;
+    }
+
+    // 일반 모드인 경우 certificateId가 필요
+    if (!isCopyMode && !certificateId) {
       setError('성적서 ID가 없습니다.');
       return;
     }
@@ -496,7 +750,7 @@ function MaterialTestCertificateContent() {
         testResult: formData.testResult.trim(),
         heatNo: formData.heatNo.trim() || '',
         inspectionCertificate: existingInspectionFile || undefined,
-        createdAt: isEditMode ? new Date() : new Date(), // 기존 데이터가 있으면 유지
+        createdAt: new Date(),
         updatedAt: new Date(),
         createdBy: 'admin',
       };
@@ -505,11 +759,64 @@ function MaterialTestCertificateContent() {
       const pdfBlob = await generatePDFBlob(formData, existingInspectionFile);
       const fileName = `MATERIAL_TEST_CERTIFICATE_${formData.certificateNo || 'CERT'}_${new Date().toISOString().split('T')[0]}.pdf`;
       
+      let targetCertificateId: string;
+      
+      if (!certificateId && !isCopyMode) {
+        setError('성적서 ID가 없습니다.');
+        setSaving(false);
+        return;
+      }
+      
+      targetCertificateId = certificateId || '';
+      
+      // 복사 모드인 경우 새로운 성적서 요청 생성
+      if (isCopyMode && copyFromId) {
+        const sourceDoc = await getDoc(doc(db, 'certificates', copyFromId));
+        if (!sourceDoc.exists()) {
+          setError('원본 성적서를 찾을 수 없습니다.');
+          setSaving(false);
+          return;
+        }
+        
+        const sourceData = sourceDoc.data();
+        // 원본 성적서 요청의 기본 정보를 복사하여 새로운 요청 생성
+        const newCertificateData: Record<string, unknown> = {
+          userId: sourceData.userId || 'admin',
+          userName: sourceData.userName || '관리자',
+          userEmail: sourceData.userEmail || 'admin@sglok.com',
+          customerName: formData.customer.trim(),
+          orderNumber: formData.poNo.trim() || null,
+          productName: formData.description.trim() || null,
+          productCode: formData.code.trim() || null,
+          quantity: formData.quantity.trim() ? parseInt(formData.quantity, 10) : null,
+          certificateType: sourceData.certificateType || 'quality',
+          requestDate: Timestamp.now(),
+          requestedCompletionDate: sourceData.requestedCompletionDate || Timestamp.now(),
+          status: 'completed', // 바로 완료 상태로 설정
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          createdBy: 'admin',
+        };
+        
+        // memo 복사
+        if (sourceData.memo) {
+          newCertificateData.memo = sourceData.memo;
+        }
+        
+        // 첨부 파일 복사
+        if (sourceData.attachments) {
+          newCertificateData.attachments = sourceData.attachments;
+        }
+        
+        const newDocRef = await addDoc(collection(db, 'certificates'), newCertificateData);
+        targetCertificateId = newDocRef.id;
+      }
+      
       // Storage에 PDF 업로드
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substring(2, 15);
-      const storageFileName = `certificate_${certificateId}_${timestamp}_${randomId}_${fileName}`;
-      const filePath = `certificates/${certificateId}/${storageFileName}`;
+      const storageFileName = `certificate_${targetCertificateId}_${timestamp}_${randomId}_${fileName}`;
+      const filePath = `certificates/${targetCertificateId}/${storageFileName}`;
       
       const storageRef = ref(storage, filePath);
       await uploadBytes(storageRef, pdfBlob);
@@ -558,7 +865,7 @@ function MaterialTestCertificateContent() {
         uploadedAt: Timestamp.fromDate(certificateFile.uploadedAt),
       };
 
-      await updateDoc(doc(db, 'certificates', certificateId), {
+      await updateDoc(doc(db, 'certificates', targetCertificateId), {
         materialTestCertificate: materialTestCertificateForFirestore,
         certificateFile: certificateFileForFirestore,
         status: 'completed',
@@ -568,7 +875,7 @@ function MaterialTestCertificateContent() {
         updatedBy: 'admin',
       });
 
-      setSuccess('성적서 내용이 저장되었고 PDF 파일이 업로드되었습니다.');
+      setSuccess(isCopyMode ? '기존 성적서를 복사하여 새로운 성적서가 생성되었습니다.' : '성적서 내용이 저장되었고 PDF 파일이 업로드되었습니다.');
       setIsEditMode(true);
       
       // 2초 후 목록 페이지로 이동

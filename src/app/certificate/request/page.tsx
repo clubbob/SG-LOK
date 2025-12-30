@@ -98,11 +98,19 @@ function CertificateRequestContent() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    // 고객명, 발주번호, 제품명, 제품코드는 영문을 대문자로 변환
-    const fieldsToUpperCase = ['customerName', 'orderNumber', 'productName', 'productCode'];
-    const processedValue = fieldsToUpperCase.includes(name) ? value.toUpperCase() : value;
     
-    setFormData(prev => ({ ...prev, [name]: processedValue }));
+    // 수량 필드는 숫자만 허용
+    if (name === 'quantity') {
+      // 숫자만 허용 (빈 문자열도 허용)
+      const numericValue = value.replace(/[^0-9]/g, '');
+      setFormData(prev => ({ ...prev, [name]: numericValue }));
+    } else {
+      // 고객명, 발주번호, 제품명, 제품코드는 영문을 대문자로 변환
+      const fieldsToUpperCase = ['customerName', 'orderNumber', 'productName', 'productCode'];
+      const processedValue = fieldsToUpperCase.includes(name) ? value.toUpperCase() : value;
+      setFormData(prev => ({ ...prev, [name]: processedValue }));
+    }
+    
     // 필드 에러 초기화
     if (fieldErrors[name]) {
       setFieldErrors(prev => {
@@ -410,12 +418,13 @@ function CertificateRequestContent() {
               <Input
                 id="quantity"
                 name="quantity"
-                type="number"
+                type="text"
+                inputMode="numeric"
                 label="수량"
                 value={formData.quantity}
                 onChange={handleChange}
                 placeholder="수량을 입력하세요 (선택사항)"
-                min="1"
+                pattern="[0-9]*"
               />
             </div>
 

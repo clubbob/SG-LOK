@@ -95,6 +95,7 @@ const adminMenuItems: MenuItem[] = [
     subItems: [
       { id: 'certificate-request', label: '성적서요청 등록', path: '/admin/certificate/request' },
       { id: 'certificate-list', label: '성적서 목록', path: '/admin/certificate' },
+      { id: 'inspection-certi', label: 'Inspection Certi 등록', path: '/admin/certificate/inspection' },
     ],
   },
 ];
@@ -361,6 +362,16 @@ export default function AdminLayout({
                               <Link
                                 key={subItem.id}
                                 href={subItem.path}
+                                onClick={(e) => {
+                                  if (subItem.id === 'inspection-certi') {
+                                    e.preventDefault();
+                                    alert('준비 중입니다');
+                                    // 페이지로 이동하여 버튼이 파란색으로 선택되도록
+                                    setTimeout(() => {
+                                      router.push(subItem.path);
+                                    }, 100);
+                                  }
+                                }}
                                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
                                   isSubActive
                                     ? 'bg-blue-50 text-blue-600 font-semibold'

@@ -75,6 +75,7 @@ export default function AdminCertificatePage() {
     requestedCompletionDate: '',
   });
   const [approving, setApproving] = useState(false);
+  const [memoModalCertificate, setMemoModalCertificate] = useState<Certificate | null>(null);
   
   // 오늘 날짜를 YYYY-MM-DD 형식으로 변환
   const today = new Date().toISOString().split('T')[0];
@@ -431,7 +432,7 @@ export default function AdminCertificatePage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="고객명, 발주번호, 제품명, 제품코드, 로트번호, 요청자, 성적서 유형, 상태 검색..."
+            placeholder="고객명, 발주번호, 제품명, 제품코드, 상태 검색..."
             className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
           />
           <svg
@@ -466,24 +467,24 @@ export default function AdminCertificatePage() {
         <>
           <div className="bg-white rounded-lg shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="w-full divide-y divide-gray-200 table-auto">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청일</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">고객명</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">발주번호</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품명</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품코드</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수량</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료일</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">첨부</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">비고</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">상태</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">관리</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[80px]">요청자</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">요청일</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[80px]">고객명</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">발주번호</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품명</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품코드</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">수량</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료요청일</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료예정일</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료일</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">첨부</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">비고</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[60px]">상태</th>
+                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[180px]">관리</th>
                       </tr>
                     </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -492,126 +493,144 @@ export default function AdminCertificatePage() {
                     const rowNumber = filteredCertificates.length - absoluteIndex;
                     return (
                       <tr key={certificate.id} className="hover:bg-gray-50">
-                        <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap text-center w-12">
+                        <td className="px-2 py-2 text-xs text-gray-900 text-center w-12">
                           {rowNumber}
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{certificate.userName}</div>
+                        <td className="px-2 py-2 min-w-[80px]">
+                          <div className="text-xs text-gray-900 truncate" title={certificate.userName}>{certificate.userName}</div>
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{formatDateShort(certificate.requestDate)}</div>
+                        <td className="px-2 py-2 w-20">
+                          <div className="text-xs text-gray-900">{formatDateShort(certificate.requestDate)}</div>
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{certificate.customerName || '-'}</div>
+                        <td className="px-2 py-2 min-w-[80px]">
+                          <div className="text-xs text-gray-900 truncate" title={certificate.customerName || '-'}>{certificate.customerName || '-'}</div>
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{certificate.orderNumber || '-'}</div>
+                        <td className="px-2 py-2 min-w-[100px]">
+                          <div className="text-xs text-gray-900 truncate" title={certificate.orderNumber || '-'}>{certificate.orderNumber || '-'}</div>
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{certificate.productName || '-'}</div>
+                        <td className="px-2 py-2 min-w-[100px]">
+                          <div className="text-xs font-medium text-gray-900 truncate" title={certificate.productName || '-'}>{certificate.productName || '-'}</div>
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{certificate.productCode || '-'}</div>
+                        <td className="px-2 py-2 min-w-[100px]">
+                          <div className="text-xs text-gray-900 truncate" title={certificate.productCode || '-'}>{certificate.productCode || '-'}</div>
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{certificate.quantity ? certificate.quantity.toLocaleString() : '-'}</div>
+                        <td className="px-2 py-2 w-16">
+                          <div className="text-xs text-gray-900 text-center">{certificate.quantity ? certificate.quantity.toLocaleString() : '-'}</div>
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-'}</div>
+                        <td className="px-2 py-2 w-20">
+                          <div className="text-xs text-gray-900">{certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-'}</div>
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">
+                        <td className="px-2 py-2 w-20">
+                          <div className="text-xs text-gray-900">
                             {certificate.status === 'in_progress' || certificate.status === 'completed' 
                               ? (certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-')
                               : '-'}
                           </div>
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{certificate.completedAt ? formatDateShort(certificate.completedAt) : '-'}</div>
+                        <td className="px-2 py-2 w-20">
+                          <div className="text-xs text-gray-900">{certificate.completedAt ? formatDateShort(certificate.completedAt) : '-'}</div>
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
+                        <td className="px-2 py-2 w-16">
                           {certificate.attachments && certificate.attachments.length > 0 ? (
                             <button
                               onClick={() => setSelectedCertificate(certificate)}
-                              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                              className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                             >
                               파일 ({certificate.attachments.length})
                             </button>
                           ) : (
-                            <span className="text-gray-400 text-sm">-</span>
+                            <span className="text-gray-400 text-xs">-</span>
                           )}
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
+                        <td className="px-2 py-2 w-16">
                           {certificate.memo ? (
                             <button
-                              onClick={() => setSelectedCertificate(certificate)}
-                              className="text-blue-600 hover:text-blue-800 text-sm font-medium truncate max-w-[100px]"
+                              onClick={() => setMemoModalCertificate(certificate)}
+                              className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                               title={certificate.memo}
                             >
                               보기
                             </button>
                           ) : (
-                            <span className="text-gray-400 text-sm">-</span>
+                            <span className="text-gray-400 text-xs">-</span>
                           )}
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[certificate.status]}`}>
+                        <td className="px-2 py-2 min-w-[60px]">
+                          <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full whitespace-nowrap ${STATUS_COLORS[certificate.status]}`}>
                             {STATUS_LABELS[certificate.status]}
                           </span>
                         </td>
-                        <td className="px-3 py-4 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
+                        <td className="px-2 py-2 min-w-[180px]">
+                          <div className="flex items-center gap-1 whitespace-nowrap">
                             {certificate.status === 'pending' && (
                               <>
                                 <button
                                   onClick={() => handleApprove(certificate)}
-                                  className="text-green-600 hover:text-green-800 text-sm font-medium"
+                                  className="text-green-600 hover:text-green-800 text-xs font-medium"
                                   disabled={deletingId === certificate.id || updatingStatus || approving}
                                   title="확인"
                                 >
                                   확인
                                 </button>
-                                <span className="text-gray-300">|</span>
+                                <span className="text-gray-300 text-xs">|</span>
                               </>
                             )}
                             {certificate.certificateFile && (
                               <>
                                 <button
                                   onClick={() => handleDownload(certificate)}
-                                  className="text-green-600 hover:text-green-800 text-sm font-medium"
+                                  className="text-green-600 hover:text-green-800 text-xs font-medium"
                                   disabled={deletingId === certificate.id || updatingStatus || approving}
                                   title="다운로드"
                                 >
                                   다운로드
                                 </button>
-                                <span className="text-gray-300">|</span>
+                                <span className="text-gray-300 text-xs">|</span>
                               </>
                             )}
                             {certificate.status !== 'pending' && !certificate.certificateFile && (
                               <>
                                 <button
                                   onClick={() => router.push(`/admin/certificate/create?id=${certificate.id}`)}
-                                  className="text-purple-600 hover:text-purple-800 text-sm font-medium"
+                                  className="text-purple-600 hover:text-purple-800 text-xs font-medium"
                                   disabled={deletingId === certificate.id || updatingStatus || approving}
                                   title="성적서 작성"
                                 >
                                   성적서 작성
                                 </button>
-                                <span className="text-gray-300">|</span>
+                                <span className="text-gray-300 text-xs">|</span>
                               </>
                             )}
-                            <button
-                              onClick={() => router.push(`/admin/certificate/request?id=${certificate.id}`)}
-                              className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                              disabled={deletingId === certificate.id || updatingStatus || approving}
-                              title="수정"
-                            >
-                              수정
-                            </button>
-                            <span className="text-gray-300">|</span>
+                            {certificate.certificateFile && (
+                              <>
+                                <button
+                                  onClick={() => router.push(`/admin/certificate/create?copyFrom=${certificate.id}`)}
+                                  className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                                  disabled={deletingId === certificate.id || updatingStatus || approving}
+                                  title="기존 성적서 복사하여 새로 작성"
+                                >
+                                  수정
+                                </button>
+                                <span className="text-gray-300 text-xs">|</span>
+                              </>
+                            )}
+                            {!certificate.certificateFile && (
+                              <>
+                                <button
+                                  onClick={() => router.push(`/admin/certificate/request?id=${certificate.id}`)}
+                                  className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                                  disabled={deletingId === certificate.id || updatingStatus || approving}
+                                  title="수정"
+                                >
+                                  수정
+                                </button>
+                                <span className="text-gray-300 text-xs">|</span>
+                              </>
+                            )}
+                            <span className="text-gray-300 text-xs">|</span>
                             <button
                               onClick={() => handleDelete(certificate)}
-                              className="text-red-600 hover:text-red-800 text-sm font-medium"
+                              className="text-red-600 hover:text-red-800 text-xs font-medium"
                               disabled={deletingId === certificate.id || updatingStatus || approving}
                               title="삭제"
                             >
@@ -625,7 +644,7 @@ export default function AdminCertificatePage() {
                 </tbody>
               </table>
             </div>
-          </div>
+      </div>
 
           {/* 페이지네이션 */}
           {totalPages > 1 && (
@@ -836,6 +855,46 @@ export default function AdminCertificatePage() {
       </div>
       )}
 
+      {/* 비고 모달 */}
+      {memoModalCertificate && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30" 
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setMemoModalCertificate(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col relative" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h3 className="text-lg font-semibold text-gray-900">비고</h3>
+              <button
+                onClick={() => setMemoModalCertificate(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              <div className="text-sm text-gray-900 whitespace-pre-wrap break-words">{memoModalCertificate.memo}</div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
+              <Button
+                variant="primary"
+                onClick={() => setMemoModalCertificate(null)}
+              >
+                닫기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 승인 모달 */}
       {approvingCertificate && (
         <div 
@@ -933,7 +992,7 @@ export default function AdminCertificatePage() {
                 저장
               </Button>
             </div>
-          </div>
+      </div>
         </div>
       )}
     </div>

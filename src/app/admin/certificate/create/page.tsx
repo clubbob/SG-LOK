@@ -10,9 +10,17 @@ import { CertificateAttachment, MaterialTestCertificate } from '@/types';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
+// jsPDF 타입 정의 (필요한 메서드만 포함)
+interface JSPDFDocument {
+  addImage: (imgData: string, format: string, x: number, y: number, width: number, height: number) => void;
+  setFont: (fontName: string, fontStyle?: string) => void;
+  setFontSize: (size: number) => void;
+  text: (text: string | string[], x: number, y: number) => void;
+}
+
 // 한글 텍스트를 Canvas 이미지로 변환하여 PDF에 삽입하는 헬퍼 함수
 const renderKoreanText = (
-  doc: any,
+  doc: JSPDFDocument,
   text: string,
   x: number,
   y: number,
@@ -87,8 +95,9 @@ const renderKoreanText = (
     const imgWidthMM = textWidth / 3.779527559;
     const imgHeightMM = textHeight / 3.779527559;
     doc.addImage(imgData, 'PNG', x, y - imgHeightMM + 0.5, imgWidthMM, imgHeightMM);
-  } catch (error: any) {
-    console.error('한글 텍스트 이미지 변환 실패:', error?.message || error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('한글 텍스트 이미지 변환 실패:', errorMessage);
     // 실패 시 기본 폰트 사용
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(fontSize);
@@ -180,20 +189,23 @@ const generatePDFBlob = async (
             koreanFontLoaded = true;
             console.log('한글 폰트 로드 및 등록 성공:', fontUrl);
             break; // 성공하면 루프 종료
-          } catch (testError: any) {
-            console.warn('폰트 테스트 실패:', testError?.message || testError);
+          } catch (testError: unknown) {
+            const errorMessage = testError instanceof Error ? testError.message : String(testError);
+            console.warn('폰트 테스트 실패:', errorMessage);
             // 테스트 실패 시 다음 URL 시도
             continue;
           }
-        } catch (fontError: any) {
-          console.warn('폰트 등록 실패:', fontError?.message || fontError);
+        } catch (fontError: unknown) {
+          const errorMessage = fontError instanceof Error ? fontError.message : String(fontError);
+          console.warn('폰트 등록 실패:', errorMessage);
           // 폰트 등록 실패 시에도 계속 진행 (기본 폰트 사용)
           // jsPDF 객체는 그대로 유지
           continue; // 다음 URL 시도
         }
       }
-    } catch (error: any) {
-      console.warn(`폰트 로드 실패 (${fontUrl}):`, error?.message || error);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn(`폰트 로드 실패 (${fontUrl}):`, errorMessage);
       continue; // 다음 URL 시도
     }
   }

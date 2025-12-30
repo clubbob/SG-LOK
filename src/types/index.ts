@@ -173,6 +173,7 @@ export interface CertificateAttachment {
   type: string; // MIME 타입
   uploadedAt: Date; // 업로드 일시
   uploadedBy: string; // 업로드자 ID
+  base64?: string; // Base64 인코딩된 이미지 데이터 (이미지 파일인 경우)
 }
 
 // 성적서 제품 정보 (여러 제품 지원)

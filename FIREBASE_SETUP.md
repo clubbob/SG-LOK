@@ -163,7 +163,50 @@ service cloud.firestore {
 
 자세한 내용은 `FIRESTORE_SECURITY_RULES.md` 파일을 참고하세요.
 
-## 8. 개발 서버 재시작
+## 8. Firebase Storage 보안 규칙 설정
+
+**중요**: "storage/unauthorized" 오류가 발생하면 Storage 보안 규칙을 설정해야 합니다.
+
+1. Firebase Console > Storage > **"규칙"** 탭 클릭
+2. 다음 보안 규칙을 복사하여 붙여넣고 **"게시"** 클릭:
+
+```javascript
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // certificates 폴더: 성적서 관련 파일
+    match /certificates/{certificateId}/{allPaths=**} {
+      // 모든 사용자가 읽을 수 있음 (관리자 페이지 접근 및 다운로드)
+      // 프로덕션에서는 더 엄격한 규칙 적용 권장
+      allow read: if true;
+      
+      // 모든 사용자가 쓸 수 있음 (관리자 파일 업로드를 위해)
+      // 프로덕션에서는 관리자 권한 체크 추가 권장
+      allow write: if true;
+    }
+    
+    // 기타 파일들도 허용 (필요에 따라 추가)
+    match /{allPaths=**} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+**개발 환경용 간단한 규칙** (테스트용, 프로덕션에서는 사용하지 마세요):
+
+```javascript
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+## 9. 개발 서버 재시작
 
 환경 변수를 변경한 후에는 개발 서버를 재시작해야 합니다:
 

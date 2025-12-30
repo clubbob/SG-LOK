@@ -604,10 +604,10 @@ export default function AdminCertificatePage() {
                             {certificate.certificateFile && (
                               <>
                                 <button
-                                  onClick={() => router.push(`/admin/certificate/create?copyFrom=${certificate.id}`)}
+                                  onClick={() => router.push(`/admin/certificate/create?id=${certificate.id}`)}
                                   className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                                   disabled={deletingId === certificate.id || updatingStatus || approving}
-                                  title="기존 성적서 복사하여 새로 작성"
+                                  title="성적서 수정"
                                 >
                                   수정
                                 </button>

@@ -130,10 +130,16 @@ export interface Certificate {
   // 기본 정보
   customerName?: string; // 고객명
   orderNumber?: string; // 발주 번호
-  productName: string; // 제품명
-  productCode?: string; // 제품코드
-  lotNumber?: string; // 로트번호
-  quantity?: number; // 수량
+  
+  // 제품 정보 (여러 제품 지원)
+  products?: CertificateProduct[]; // 제품 배열
+  
+  // 기존 단일 제품 필드 (하위 호환성 유지, products가 없을 때 사용)
+  productName?: string; // 제품명 (deprecated: products 사용)
+  productCode?: string; // 제품코드 (deprecated: products 사용)
+  lotNumber?: string; // 로트번호 (deprecated: products 사용)
+  quantity?: number; // 수량 (deprecated: products 사용)
+  
   certificateType: CertificateType; // 성적서 유형
   requestDate: Date; // 요청일
   requestedCompletionDate?: Date; // 완료요청일
@@ -169,6 +175,16 @@ export interface CertificateAttachment {
   uploadedBy: string; // 업로드자 ID
 }
 
+// 성적서 제품 정보 (여러 제품 지원)
+export interface CertificateProduct {
+  productName: string;         // 제품명
+  productCode?: string;         // 제품코드
+  quantity?: number;            // 수량
+  lotNumber?: string;           // 로트번호
+  heatNo?: string;              // HEAT NO.
+  inspectionCertificate?: CertificateAttachment; // 제품별 Inspection Certi
+}
+
 // MATERIAL TEST CERTIFICATE 관련 타입
 export interface MaterialTestCertificate {
   // 입력 항목
@@ -176,13 +192,18 @@ export interface MaterialTestCertificate {
   dateOfIssue: Date;            // DATE OF ISSUE
   customer: string;             // CUSTOMER
   poNo: string;                 // PO NO.
-  description: string;          // DESCRIPTION
-  code: string;               // CODE
-  quantity: number;             // Q'TY
-  testResult: string;           // TEST RESULT
-  heatNo: string;              // HEAT NO.
   
-  // INSPECTION CERTIFICATE 첨부
+  // 제품 정보 (여러 제품 지원)
+  products: CertificateProduct[]; // 제품 배열
+  
+  // 기존 단일 제품 필드 (하위 호환성 유지, 사용 중단 예정)
+  description?: string;          // DESCRIPTION (deprecated: products 사용)
+  code?: string;                 // CODE (deprecated: products 사용)
+  quantity?: number;             // Q'TY (deprecated: products 사용)
+  testResult?: string;           // TEST RESULT
+  heatNo?: string;              // HEAT NO. (deprecated: products 사용)
+  
+  // INSPECTION CERTIFICATE 첨부 (하위 호환성 유지, 제품별로는 products[].inspectionCertificate 사용)
   inspectionCertificate?: CertificateAttachment;
   
   // 생성 정보

@@ -8,7 +8,7 @@ import { Button, Input } from '@/components/ui';
 import { collection, addDoc, Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import { CertificateType, InquiryAttachment } from '@/types';
+import { CertificateType, InquiryAttachment, CertificateProduct, CertificateAttachment } from '@/types';
 
 const CERTIFICATE_TYPES: { value: CertificateType; label: string }[] = [
   { value: 'quality', label: '품질' },
@@ -36,12 +36,16 @@ function CertificateRequestContent() {
   const [formData, setFormData] = useState({
     customerName: '',
     orderNumber: '',
-    productName: '',
-    productCode: '',
-    quantity: '',
     requestedCompletionDate: '',
     memo: '',
   });
+
+  // 제품 배열 (제품명, 제품코드, 수량 셋트)
+  const [products, setProducts] = useState<Array<{
+    productName: string;
+    productCode: string;
+    quantity: string;
+  }>>([{ productName: '', productCode: '', quantity: '' }]);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -73,12 +77,25 @@ function CertificateRequestContent() {
           setFormData({
             customerName: data.customerName || '',
             orderNumber: data.orderNumber || '',
-            productName: data.productName || '',
-            productCode: data.productCode || '',
-            quantity: data.quantity?.toString() || '',
             requestedCompletionDate: data.requestedCompletionDate?.toDate().toISOString().split('T')[0] || '',
             memo: data.memo || '',
           });
+          
+          // 제품 데이터 로드 (products 배열이 있으면 사용, 없으면 기존 단일 제품 필드 사용)
+          if (data.products && Array.isArray(data.products) && data.products.length > 0) {
+            setProducts(data.products.map((p: CertificateProduct) => ({
+              productName: p.productName || '',
+              productCode: p.productCode || '',
+              quantity: p.quantity?.toString() || '',
+            })));
+          } else if (data.productName || data.productCode || data.quantity) {
+            // 기존 단일 제품 데이터를 배열로 변환
+            setProducts([{
+              productName: data.productName || '',
+              productCode: data.productCode || '',
+              quantity: data.quantity?.toString() || '',
+            }]);
+          }
         } else {
           setError('성적서 요청을 찾을 수 없습니다.');
           router.push('/certificate/list');
@@ -99,17 +116,10 @@ function CertificateRequestContent() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
-    // 수량 필드는 숫자만 허용
-    if (name === 'quantity') {
-      // 숫자만 허용 (빈 문자열도 허용)
-      const numericValue = value.replace(/[^0-9]/g, '');
-      setFormData(prev => ({ ...prev, [name]: numericValue }));
-    } else {
-      // 고객명, 발주번호, 제품명, 제품코드는 영문을 대문자로 변환
-      const fieldsToUpperCase = ['customerName', 'orderNumber', 'productName', 'productCode'];
-      const processedValue = fieldsToUpperCase.includes(name) ? value.toUpperCase() : value;
-      setFormData(prev => ({ ...prev, [name]: processedValue }));
-    }
+    // 고객명, 발주번호는 영문을 대문자로 변환
+    const fieldsToUpperCase = ['customerName', 'orderNumber'];
+    const processedValue = fieldsToUpperCase.includes(name) ? value.toUpperCase() : value;
+    setFormData(prev => ({ ...prev, [name]: processedValue }));
     
     // 필드 에러 초기화
     if (fieldErrors[name]) {
@@ -120,6 +130,42 @@ function CertificateRequestContent() {
       });
     }
     if (error) setError('');
+  };
+
+  // 제품 필드 변경 핸들러
+  const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity', value: string) => {
+    setProducts(prev => {
+      const newProducts = [...prev];
+      if (field === 'quantity') {
+        // 수량은 숫자만 허용
+        newProducts[index] = { ...newProducts[index], [field]: value.replace(/[^0-9]/g, '') };
+      } else {
+        // 제품명, 제품코드는 대문자로 변환
+        newProducts[index] = { ...newProducts[index], [field]: value.toUpperCase() };
+      }
+      return newProducts;
+    });
+  };
+
+  // 제품 추가 (이전 제품 내용 복사)
+  const handleAddProduct = () => {
+    setProducts(prev => {
+      const lastProduct = prev[prev.length - 1];
+      // 마지막 제품의 내용을 복사
+      const newProduct = {
+        productName: lastProduct?.productName || '',
+        productCode: lastProduct?.productCode || '',
+        quantity: lastProduct?.quantity || '',
+      };
+      return [...prev, newProduct];
+    });
+  };
+
+  // 제품 삭제
+  const handleRemoveProduct = (index: number) => {
+    if (products.length > 1) {
+      setProducts(prev => prev.filter((_, i) => i !== index));
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -164,6 +210,7 @@ function CertificateRequestContent() {
     if (!formData.requestedCompletionDate.trim()) {
       errors.requestedCompletionDate = '완료요청일을 선택해주세요.';
     }
+
 
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -229,14 +276,29 @@ function CertificateRequestContent() {
         }
       }
 
+      // 제품 데이터 준비
+      const productsData: CertificateProduct[] = [];
+      for (let i = 0; i < products.length; i++) {
+        const product = products[i];
+        if (!product.productName.trim() && !product.productCode.trim() && !product.quantity.trim()) {
+          continue; // 빈 제품은 제외
+        }
+
+        const productData: CertificateProduct = {
+          productName: product.productName.trim(),
+          productCode: product.productCode.trim() || undefined,
+          quantity: product.quantity.trim() ? parseInt(product.quantity, 10) : undefined,
+        };
+
+        productsData.push(productData);
+      }
+
       if (isEditMode && requestId) {
         // 수정 모드
         const certificateData: Record<string, unknown> = {
           customerName: formData.customerName.trim(),
           orderNumber: formData.orderNumber.trim() || null,
-          productName: formData.productName.trim() || null,
-          productCode: formData.productCode.trim() || null,
-          quantity: formData.quantity.trim() ? parseInt(formData.quantity, 10) : null,
+          products: productsData,
           certificateType: 'quality', // 기본값으로 품질 설정
           requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
           updatedAt: Timestamp.now(),
@@ -274,9 +336,7 @@ function CertificateRequestContent() {
           userCompany: userProfile.company,
           customerName: formData.customerName.trim(),
           orderNumber: formData.orderNumber.trim() || null,
-          productName: formData.productName.trim() || null,
-          productCode: formData.productCode.trim() || null,
-          quantity: formData.quantity.trim() ? parseInt(formData.quantity, 10) : null,
+          products: productsData,
           certificateType: 'quality', // 기본값으로 품질 설정
           requestDate: Timestamp.now(),
           requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
@@ -392,40 +452,77 @@ function CertificateRequestContent() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Input
-                id="productName"
-                name="productName"
-                type="text"
-                label="제품명"
-                value={formData.productName}
-                onChange={handleChange}
-                placeholder="제품명을 입력하세요 (선택사항)"
-                style={{ textTransform: 'uppercase' }}
-              />
+            {/* 제품 정보 섹션 */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="block text-sm font-medium text-gray-700">
+                  제품 정보
+                </label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleAddProduct}
+                  disabled={submitting || uploadingFiles}
+                  className="text-sm"
+                >
+                  + 제품 추가
+                </Button>
+              </div>
+              
+              {fieldErrors.products && (
+                <p className="text-sm text-red-600">{fieldErrors.products}</p>
+              )}
 
-              <Input
-                id="productCode"
-                name="productCode"
-                type="text"
-                label="제품코드"
-                value={formData.productCode}
-                onChange={handleChange}
-                placeholder="제품코드를 입력하세요 (선택사항)"
-                style={{ textTransform: 'uppercase' }}
-              />
+              {products.map((product, index) => (
+                <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-4 bg-gray-50">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-medium text-gray-700">제품 {index + 1}</h3>
+                    {products.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveProduct(index)}
+                        disabled={submitting || uploadingFiles}
+                        className="text-red-600 hover:text-red-800 text-sm font-medium"
+                      >
+                        삭제
+                      </button>
+                    )}
+                  </div>
 
-              <Input
-                id="quantity"
-                name="quantity"
-                type="text"
-                inputMode="numeric"
-                label="수량"
-                value={formData.quantity}
-                onChange={handleChange}
-                placeholder="수량을 입력하세요 (선택사항)"
-                pattern="[0-9]*"
-              />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Input
+                      type="text"
+                      label="제품명"
+                      value={product.productName}
+                      onChange={(e) => handleProductChange(index, 'productName', e.target.value)}
+                      placeholder="제품명을 입력하세요"
+                      style={{ textTransform: 'uppercase' }}
+                      disabled={submitting || uploadingFiles}
+                    />
+
+                    <Input
+                      type="text"
+                      label="제품코드"
+                      value={product.productCode}
+                      onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
+                      placeholder="제품코드를 입력하세요"
+                      style={{ textTransform: 'uppercase' }}
+                      disabled={submitting || uploadingFiles}
+                    />
+
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      label="수량"
+                      value={product.quantity}
+                      onChange={(e) => handleProductChange(index, 'quantity', e.target.value)}
+                      placeholder="수량을 입력하세요"
+                      pattern="[0-9]*"
+                      disabled={submitting || uploadingFiles}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
 
             <Input

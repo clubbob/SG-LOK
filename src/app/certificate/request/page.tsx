@@ -100,14 +100,33 @@ function CertificateRequestContent() {
           
           // 기존 첨부 파일 로드
           if (data.attachments && Array.isArray(data.attachments) && data.attachments.length > 0) {
-            setExistingAttachments(data.attachments.map((att: InquiryAttachment) => ({
-              name: att.name,
-              url: att.url,
-              size: att.size,
-              type: att.type,
-              uploadedAt: att.uploadedAt?.toDate ? att.uploadedAt.toDate() : (att.uploadedAt instanceof Date ? att.uploadedAt : new Date()),
-              uploadedBy: att.uploadedBy || '',
-            })));
+            setExistingAttachments(data.attachments.map((att) => {
+              const attachment = att as InquiryAttachment & { 
+                uploadedAt?: Date | { toDate: () => Date }; 
+                uploadedBy?: string;
+              };
+              let uploadedAtDate: Date;
+              if (attachment.uploadedAt) {
+                if (attachment.uploadedAt instanceof Date) {
+                  uploadedAtDate = attachment.uploadedAt;
+                } else if (typeof attachment.uploadedAt === 'object' && 'toDate' in attachment.uploadedAt && typeof attachment.uploadedAt.toDate === 'function') {
+                  uploadedAtDate = attachment.uploadedAt.toDate();
+                } else {
+                  uploadedAtDate = new Date();
+                }
+              } else {
+                uploadedAtDate = new Date();
+              }
+              
+              return {
+                name: attachment.name,
+                url: attachment.url,
+                size: attachment.size,
+                type: attachment.type,
+                uploadedAt: uploadedAtDate,
+                uploadedBy: attachment.uploadedBy || '',
+              };
+            }));
           }
         } else {
           setError('성적서 요청을 찾을 수 없습니다.');

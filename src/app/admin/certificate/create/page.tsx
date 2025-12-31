@@ -1104,9 +1104,14 @@ function MaterialTestCertificateContent() {
             if (uploadedAt) {
               if (uploadedAt instanceof Date) {
                 uploadedAtTimestamp = Timestamp.fromDate(uploadedAt);
-              } else if (uploadedAt && typeof uploadedAt === 'object' && 'toDate' in uploadedAt && typeof (uploadedAt as any).toDate === 'function') {
+              } else if (uploadedAt && typeof uploadedAt === 'object' && 'toDate' in uploadedAt) {
                 // 이미 Timestamp 객체인 경우
-                uploadedAtTimestamp = uploadedAt as Timestamp;
+                const timestampObj = uploadedAt as { toDate?: () => Date };
+                if (typeof timestampObj.toDate === 'function') {
+                  uploadedAtTimestamp = uploadedAt as Timestamp;
+                } else {
+                  uploadedAtTimestamp = Timestamp.fromDate(new Date());
+                }
               } else {
                 // 다른 형태인 경우 현재 시간 사용
                 uploadedAtTimestamp = Timestamp.fromDate(new Date());

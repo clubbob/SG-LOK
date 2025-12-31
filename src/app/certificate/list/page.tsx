@@ -78,18 +78,22 @@ export default function CertificateListPage() {
             return;
           }
           
+          // products 배열이 있으면 첫 번째 제품 정보를 단일 필드로 매핑 (하위 호환성)
+          const firstProduct = data.products && data.products.length > 0 ? data.products[0] : null;
+          
           certificatesData.push({
             id: doc.id,
-            userId: data.userId,
-            userName: data.userName,
-            userEmail: data.userEmail,
-            userCompany: data.userCompany,
+            userId: data.userId || 'admin',
+            userName: data.userName || '관리자',
+            userEmail: data.userEmail || '',
+            userCompany: data.userCompany || '',
             customerName: data.customerName,
             orderNumber: data.orderNumber,
-            productName: data.productName,
-            productCode: data.productCode,
-            lotNumber: data.lotNumber,
-            quantity: data.quantity,
+            products: data.products || [],
+            productName: firstProduct?.productName || data.productName,
+            productCode: firstProduct?.productCode || data.productCode,
+            lotNumber: firstProduct?.lotNumber || data.lotNumber,
+            quantity: firstProduct?.quantity || data.quantity,
             certificateType: data.certificateType || 'quality',
             requestDate: data.requestDate?.toDate() || new Date(),
             requestedCompletionDate: data.requestedCompletionDate?.toDate(),
@@ -97,6 +101,7 @@ export default function CertificateListPage() {
             memo: data.memo || '',
             attachments: data.attachments || [],
             certificateFile: data.certificateFile,
+            materialTestCertificate: data.materialTestCertificate,
             createdAt: data.createdAt?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || new Date(),
             createdBy: data.createdBy,
@@ -109,10 +114,8 @@ export default function CertificateListPage() {
         // 클라이언트 사이드 정렬 (인덱스 없이 사용)
         certificatesData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         
-        // 본인이 작성한 성적서만 필터링
-        const myCertificates = certificatesData.filter(cert => cert.userId === userProfile.id);
-        
-        setCertificates(myCertificates);
+        // 모든 성적서 표시 (필터링 제거)
+        setCertificates(certificatesData);
         setLoadingCertificates(false);
       },
       (error) => {
@@ -142,6 +145,7 @@ export default function CertificateListPage() {
       const orderNumber = cert.orderNumber?.toLowerCase() || '';
       const productName = cert.productName?.toLowerCase() || '';
       const productCode = cert.productCode?.toLowerCase() || '';
+      const userName = cert.userName?.toLowerCase() || '';
       const statusLabel = STATUS_LABELS[cert.status]?.toLowerCase() || cert.status || '';
 
       return (
@@ -149,6 +153,7 @@ export default function CertificateListPage() {
         orderNumber.includes(query) ||
         productName.includes(query) ||
         productCode.includes(query) ||
+        userName.includes(query) ||
         statusLabel.includes(query) ||
         cert.status.includes(query)
       );
@@ -258,7 +263,7 @@ export default function CertificateListPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="고객명, 발주번호, 제품명, 제품코드, 상태 검색..."
+                placeholder="고객명, 발주번호, 제품명, 제품코드, 요청자, 상태 검색..."
                 className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               />
               <svg
@@ -300,20 +305,21 @@ export default function CertificateListPage() {
                   <table className="w-full divide-y divide-gray-200 table-auto">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">번호</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">요청일</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">고객명</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">발주번호</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">제품명</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">제품코드</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">수량</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">완료요청일</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">완료예정일</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">완료일</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">첨부</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">비고</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">상태</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">관리</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">번호</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">요청자</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">요청일</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">고객명</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">발주번호</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">제품명</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">제품코드</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">수량</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">완료요청일</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">완료예정일</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">완료일</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">첨부</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">비고</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">상태</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">관리</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -322,53 +328,56 @@ export default function CertificateListPage() {
                         const rowNumber = filteredCertificates.length - absoluteIndex;
                         return (
                           <tr key={certificate.id} className="hover:bg-gray-50">
-                            <td className="px-2 py-2 text-xs text-gray-900 text-center w-12">
+                            <td className="px-1 py-2 text-xs text-gray-900 text-center w-12">
                               {rowNumber}
                             </td>
-                            <td className="px-2 py-2 w-20">
-                              <div className="text-xs text-gray-900">{formatDateShort(certificate.requestDate)}</div>
+                            <td className="px-1 py-2 min-w-[80px]">
+                              <div className="text-xs text-gray-900 truncate" title={certificate.userName || '-'}>{certificate.userName || '-'}</div>
                             </td>
-                            <td className="px-2 py-2 min-w-[80px]">
+                            <td className="px-1 py-2 w-20">
+                              <div className="text-xs text-gray-900 whitespace-nowrap">{formatDateShort(certificate.requestDate)}</div>
+                            </td>
+                            <td className="px-1 py-2 min-w-[80px]">
                               <div className="text-xs text-gray-900 truncate" title={certificate.customerName || '-'}>{certificate.customerName || '-'}</div>
                             </td>
-                            <td className="px-2 py-2 min-w-[100px]">
+                            <td className="px-1 py-2 min-w-[100px]">
                               <div className="text-xs text-gray-900 truncate" title={certificate.orderNumber || '-'}>{certificate.orderNumber || '-'}</div>
                             </td>
-                            <td className="px-2 py-2 min-w-[100px]">
+                            <td className="px-1 py-2 min-w-[100px]">
                               <div className="text-xs font-medium text-gray-900 truncate" title={certificate.productName || '-'}>{certificate.productName || '-'}</div>
                             </td>
-                            <td className="px-2 py-2 min-w-[100px]">
+                            <td className="px-1 py-2 min-w-[100px]">
                               <div className="text-xs text-gray-900 truncate" title={certificate.productCode || '-'}>{certificate.productCode || '-'}</div>
                             </td>
-                            <td className="px-2 py-2 w-16">
+                            <td className="px-1 py-2 w-16">
                               <div className="text-xs text-gray-900 text-center">{certificate.quantity ? certificate.quantity.toLocaleString() : '-'}</div>
                             </td>
-                            <td className="px-2 py-2 w-20">
-                              <div className="text-xs text-gray-900">{certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-'}</div>
+                            <td className="px-1 py-2 w-20">
+                              <div className="text-xs text-gray-900 whitespace-nowrap">{certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-'}</div>
                             </td>
-                            <td className="px-2 py-2 w-20">
-                              <div className="text-xs text-gray-900">
+                            <td className="px-1 py-2 w-20">
+                              <div className="text-xs text-gray-900 whitespace-nowrap">
                                 {certificate.status === 'in_progress' || certificate.status === 'completed'
                                   ? (certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-')
                                   : '-'}
                               </div>
                             </td>
-                            <td className="px-2 py-2 w-20">
-                              <div className="text-xs text-gray-900">{certificate.completedAt ? formatDateShort(certificate.completedAt) : '-'}</div>
+                            <td className="px-1 py-2 w-20">
+                              <div className="text-xs text-gray-900 whitespace-nowrap">{certificate.completedAt ? formatDateShort(certificate.completedAt) : '-'}</div>
                             </td>
-                            <td className="px-2 py-2 w-16">
+                            <td className="px-1 py-2 w-16">
                               {certificate.attachments && certificate.attachments.length > 0 ? (
                                 <button
                                   onClick={() => setSelectedCertificate(certificate)}
                                   className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                                 >
-                                  파일 ({certificate.attachments.length})
+                                  파일
                                 </button>
                               ) : (
                                 <span className="text-gray-400 text-xs">-</span>
                               )}
                             </td>
-                            <td className="px-2 py-2 w-16">
+                            <td className="px-1 py-2 w-16">
                               {certificate.memo ? (
                                 <button
                                   onClick={() => setSelectedMemo({ id: certificate.id, memo: certificate.memo || '' })}
@@ -381,12 +390,12 @@ export default function CertificateListPage() {
                                 <span className="text-gray-400 text-xs">-</span>
                               )}
                             </td>
-                            <td className="px-2 py-2 w-16">
+                            <td className="px-1 py-2 w-16">
                               <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${STATUS_COLORS[certificate.status]}`}>
                                 {STATUS_LABELS[certificate.status]}
                               </span>
                             </td>
-                            <td className="px-2 py-2 min-w-[80px]">
+                            <td className="px-1 py-2 min-w-[80px]">
                               <div className="flex items-center gap-1 flex-wrap">
                                 {certificate.status === 'pending' ? (
                                   <>

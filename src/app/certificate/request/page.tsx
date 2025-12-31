@@ -28,6 +28,7 @@ function CertificateRequestContent() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [existingAttachments, setExistingAttachments] = useState<InquiryAttachment[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState(false);
   
   // 오늘 날짜를 YYYY-MM-DD 형식으로 변환
@@ -95,6 +96,18 @@ function CertificateRequestContent() {
               productCode: data.productCode || '',
               quantity: data.quantity?.toString() || '',
             }]);
+          }
+          
+          // 기존 첨부 파일 로드
+          if (data.attachments && Array.isArray(data.attachments) && data.attachments.length > 0) {
+            setExistingAttachments(data.attachments.map((att: InquiryAttachment) => ({
+              name: att.name,
+              url: att.url,
+              size: att.size,
+              type: att.type,
+              uploadedAt: att.uploadedAt?.toDate ? att.uploadedAt.toDate() : (att.uploadedAt instanceof Date ? att.uploadedAt : new Date()),
+              uploadedBy: att.uploadedBy || '',
+            })));
           }
         } else {
           setError('성적서 요청을 찾을 수 없습니다.');
@@ -190,6 +203,10 @@ function CertificateRequestContent() {
 
   const removeFile = (index: number) => {
     setAttachedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExistingAttachment = (index: number) => {
+    setExistingAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const formatFileSize = (bytes: number) => {
@@ -309,13 +326,10 @@ function CertificateRequestContent() {
           certificateData.memo = formData.memo.trim();
         }
 
-        // 첨부 파일이 있으면 추가
-        if (attachments.length > 0) {
-          // 기존 첨부 파일과 병합
-          const requestDoc = await getDoc(doc(db, 'certificates', requestId));
-          const existingData = requestDoc.data();
-          const existingAttachments = existingData?.attachments || [];
-          certificateData.attachments = [...existingAttachments, ...attachments];
+        // 첨부 파일 처리: 기존 첨부 파일 + 새로 업로드한 파일
+        const allAttachments = [...existingAttachments, ...attachments];
+        if (allAttachments.length > 0) {
+          certificateData.attachments = allAttachments;
         }
 
         await updateDoc(doc(db, 'certificates', requestId), certificateData);
@@ -542,15 +556,77 @@ function CertificateRequestContent() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 파일 첨부 (최대 3개)
               </label>
+              
+              {/* 기존 첨부 파일 표시 */}
+              {existingAttachments.length > 0 && (
+                <div className="mb-3 space-y-2">
+                  <p className="text-xs text-gray-600 mb-2">기존 첨부 파일:</p>
+                  {existingAttachments.map((file, index) => (
+                    <div
+                      key={`existing-${index}`}
+                      className="flex items-center justify-between bg-blue-50 rounded-md px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <svg
+                          className="w-5 h-5 text-blue-600 flex-shrink-0"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                          />
+                        </svg>
+                        <a
+                          href={file.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline truncate"
+                        >
+                          {file.name}
+                        </a>
+                        <span className="text-xs text-gray-500 flex-shrink-0">
+                          ({file.size ? formatFileSize(file.size) : ''})
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeExistingAttachment(index)}
+                        disabled={uploadingFiles || submitting}
+                        className="ml-2 text-red-600 hover:text-red-800 flex-shrink-0"
+                      >
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
               <input
                 type="file"
                 multiple
                 onChange={handleFileChange}
-                disabled={attachedFiles.length >= 3 || uploadingFiles || submitting}
+                disabled={(existingAttachments.length + attachedFiles.length) >= 3 || uploadingFiles || submitting}
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
               />
               {attachedFiles.length > 0 && (
                 <div className="mt-3 space-y-2">
+                  <p className="text-xs text-gray-600 mb-2">새로 추가할 파일:</p>
                   {attachedFiles.map((file, index) => (
                     <div
                       key={index}
@@ -599,7 +675,7 @@ function CertificateRequestContent() {
                   ))}
                 </div>
               )}
-              {attachedFiles.length >= 3 && (
+              {(existingAttachments.length + attachedFiles.length) >= 3 && (
                 <p className="mt-2 text-xs text-gray-500">최대 3개까지 첨부할 수 있습니다.</p>
               )}
             </div>

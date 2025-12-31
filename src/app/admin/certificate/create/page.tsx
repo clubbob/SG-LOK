@@ -1098,12 +1098,29 @@ function MaterialTestCertificateContent() {
           
           // inspectionCertificate가 있으면 추가
           if (p.inspectionCertificate) {
+            // uploadedAt 처리: Date 객체면 Timestamp로 변환, 이미 Timestamp면 그대로 사용, 없으면 현재 시간 사용
+            let uploadedAtTimestamp: Timestamp;
+            const uploadedAt = p.inspectionCertificate.uploadedAt;
+            if (uploadedAt) {
+              if (uploadedAt instanceof Date) {
+                uploadedAtTimestamp = Timestamp.fromDate(uploadedAt);
+              } else if (uploadedAt && typeof uploadedAt === 'object' && 'toDate' in uploadedAt && typeof (uploadedAt as any).toDate === 'function') {
+                // 이미 Timestamp 객체인 경우
+                uploadedAtTimestamp = uploadedAt as Timestamp;
+              } else {
+                // 다른 형태인 경우 현재 시간 사용
+                uploadedAtTimestamp = Timestamp.fromDate(new Date());
+              }
+            } else {
+              uploadedAtTimestamp = Timestamp.fromDate(new Date());
+            }
+            
             productForFirestore.inspectionCertificate = {
               name: p.inspectionCertificate.name,
               url: p.inspectionCertificate.url,
               size: p.inspectionCertificate.size,
               type: p.inspectionCertificate.type,
-              uploadedAt: Timestamp.fromDate(p.inspectionCertificate.uploadedAt),
+              uploadedAt: uploadedAtTimestamp,
               uploadedBy: p.inspectionCertificate.uploadedBy,
               // Base64 데이터도 저장 (이미지 파일인 경우)
               ...(p.inspectionCertificate.base64 && { base64: p.inspectionCertificate.base64 }),

@@ -79,6 +79,7 @@ export default function AdminProductionCalendarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [hideCompleted, setHideCompleted] = useState(false);
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date; end: Date }>(() => {
     const today = new Date();
     // 한국 시간 기준으로 날짜 생성
@@ -202,7 +203,7 @@ export default function AdminProductionCalendarPage() {
             req.requestedCompletionDate ||
             (requestStart ? new Date(requestStart.getTime() + 30 * 24 * 60 * 60 * 1000) : new Date());
           endDate = normalizeToKST(plannedEnd);
-          productionLine = req.productionLine || '미지정';
+          productionLine = req.productionLine || '생산요청 리스트';
         } else if (req.status === 'completed') {
           // 생산완료: 등록일 ~ 생산완료일
           const requestStart = req.requestDate || req.createdAt || new Date();
@@ -212,7 +213,7 @@ export default function AdminProductionCalendarPage() {
             req.requestedCompletionDate ||
             (requestStart ? new Date(requestStart.getTime() + 30 * 24 * 60 * 60 * 1000) : new Date());
           endDate = normalizeToKST(actualEnd);
-          productionLine = req.productionLine || '미지정';
+          productionLine = req.productionLine || '생산요청 리스트';
         } else {
           // 그 외 상태: 기존 로직 유지
           const plannedEnd = req.plannedCompletionDate || 
@@ -229,7 +230,7 @@ export default function AdminProductionCalendarPage() {
           // 한국 시간 기준으로 정규화
           startDate = normalizeToKST(plannedStart);
           endDate = normalizeToKST(plannedEnd);
-          productionLine = req.productionLine || '미지정';
+          productionLine = req.productionLine || '생산요청 리스트';
         }
 
         return {
@@ -250,7 +251,8 @@ export default function AdminProductionCalendarPage() {
   // 라인별로 그룹화
   const groupByLine = (tasks: GanttTask[]): Record<string, GanttTask[]> => {
     return tasks.reduce((acc, task) => {
-      const line = task.productionLine;
+      // "검토 대기"를 "생산요청 리스트"로 통합
+      const line = task.productionLine === '검토 대기' ? '생산요청 리스트' : task.productionLine;
       if (!acc[line]) {
         acc[line] = [];
       }
@@ -408,7 +410,10 @@ export default function AdminProductionCalendarPage() {
     });
   }, [searchQuery, requests]);
 
-  const tasks = convertToGanttTasks(filteredRequests);
+  const allTasks = convertToGanttTasks(filteredRequests);
+  const tasks = hideCompleted 
+    ? allTasks.filter(task => task.status !== 'completed')
+    : allTasks;
   const tasksByLine = groupByLine(tasks);
   const lines = Object.keys(tasksByLine).sort();
 
@@ -537,23 +542,35 @@ export default function AdminProductionCalendarPage() {
 
       {/* 범례 */}
       <div className="mb-4 bg-white rounded-lg shadow-sm p-4">
-        <h3 className="text-sm font-semibold text-gray-900 mb-3">상태 범례</h3>
-        <div className="flex flex-wrap gap-4">
-          <div className="flex items-center gap-2">
-            <div className={`w-4 h-4 rounded ${STATUS_COLORS['pending_review']}`}></div>
-            <span className="text-sm text-gray-700">{STATUS_LABELS['pending_review']}</span>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">상태 범례</h3>
+            <div className="flex flex-wrap gap-4">
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS['pending_review']}`}></div>
+                <span className="text-sm text-gray-700">{STATUS_LABELS['pending_review']}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS['confirmed']}`}></div>
+                <span className="text-sm text-gray-700">{STATUS_LABELS['confirmed']}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded ${STATUS_COLORS['completed']}`}></div>
+                <span className="text-sm text-gray-700">{STATUS_LABELS['completed']}</span>
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className={`w-4 h-4 rounded ${STATUS_COLORS['confirmed']}`}></div>
-            <span className="text-sm text-gray-700">{STATUS_LABELS['confirmed']}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className={`w-4 h-4 rounded ${STATUS_COLORS['in_progress']}`}></div>
-            <span className="text-sm text-gray-700">{STATUS_LABELS['in_progress']}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className={`w-4 h-4 rounded ${STATUS_COLORS['completed']}`}></div>
-            <span className="text-sm text-gray-700">{STATUS_LABELS['completed']}</span>
+            <input
+              type="checkbox"
+              id="hideCompleted"
+              checked={hideCompleted}
+              onChange={(e) => setHideCompleted(e.target.checked)}
+              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <label htmlFor="hideCompleted" className="text-sm text-gray-700 cursor-pointer">
+              생산 완료 감추기
+            </label>
           </div>
         </div>
       </div>
@@ -684,7 +701,13 @@ export default function AdminProductionCalendarPage() {
                     <div className="flex relative" style={{ minHeight: `${Math.max(60, lineTasks.length * 50 + 16)}px` }}>
                       {/* 라인 이름 */}
                       <div className="w-24 border-r border-gray-200 px-3 py-2 bg-gray-50 flex items-center sticky left-0 z-20">
-                        <span className="font-semibold text-sm text-gray-900 whitespace-nowrap">{line}</span>
+                        {line === '생산요청 리스트' ? (
+                          <span className="text-sm text-gray-900 leading-tight">
+                            생산요청<br />리스트
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-900 whitespace-nowrap">{line}</span>
+                        )}
                       </div>
 
                       {/* 태스크 바 영역 */}
@@ -723,9 +746,7 @@ export default function AdminProductionCalendarPage() {
                               }}
                             >
                               <div
-                                className={`${taskColor} text-white rounded px-2 py-2 text-xs shadow-sm hover:shadow-md transition-shadow cursor-pointer ${
-                                  isOverdue ? 'ring-2 ring-red-500' : ''
-                                }`}
+                                className={`${taskColor} text-white rounded px-2 py-2 text-xs shadow-sm hover:shadow-md transition-shadow cursor-pointer`}
                                 title={tooltipText}
                               >
                                 <div className="font-semibold truncate whitespace-nowrap">
@@ -734,10 +755,6 @@ export default function AdminProductionCalendarPage() {
                                 {productionStatusLabel ? (
                                   <div className="text-xs mt-0.5 opacity-90 truncate whitespace-nowrap">
                                     {productionStatusLabel}
-                                  </div>
-                                ) : task.status === 'pending_review' ? (
-                                  <div className="text-xs mt-0.5 opacity-90 truncate whitespace-nowrap">
-                                    검토 대기
                                   </div>
                                 ) : null}
                               </div>

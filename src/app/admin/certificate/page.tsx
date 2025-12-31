@@ -76,6 +76,7 @@ export default function AdminCertificatePage() {
   });
   const [approving, setApproving] = useState(false);
   const [memoModalCertificate, setMemoModalCertificate] = useState<Certificate | null>(null);
+  const [attachmentModalCertificate, setAttachmentModalCertificate] = useState<Certificate | null>(null);
   
   // 오늘 날짜를 YYYY-MM-DD 형식으로 변환
   const today = new Date().toISOString().split('T')[0];
@@ -114,6 +115,9 @@ export default function AdminCertificatePage() {
             return;
           }
           
+          // products 배열이 있으면 첫 번째 제품 정보를 단일 필드로 매핑 (하위 호환성)
+          const firstProduct = data.products && data.products.length > 0 ? data.products[0] : null;
+          
           certificatesData.push({
             id: doc.id,
             userId: data.userId,
@@ -122,10 +126,11 @@ export default function AdminCertificatePage() {
             userCompany: data.userCompany,
             customerName: data.customerName,
             orderNumber: data.orderNumber,
-            productName: data.productName,
-            productCode: data.productCode,
-            lotNumber: data.lotNumber,
-            quantity: data.quantity,
+            products: data.products || [],
+            productName: firstProduct?.productName || data.productName,
+            productCode: firstProduct?.productCode || data.productCode,
+            lotNumber: firstProduct?.lotNumber || data.lotNumber,
+            quantity: firstProduct?.quantity || data.quantity,
             certificateType: data.certificateType || 'quality',
             requestDate: data.requestDate?.toDate() || new Date(),
             requestedCompletionDate: data.requestedCompletionDate?.toDate(),
@@ -133,6 +138,7 @@ export default function AdminCertificatePage() {
             memo: data.memo || '',
             attachments: data.attachments || [],
             certificateFile: data.certificateFile,
+            materialTestCertificate: data.materialTestCertificate,
             createdAt: data.createdAt?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || new Date(),
             createdBy: data.createdBy,
@@ -533,10 +539,10 @@ export default function AdminCertificatePage() {
                         <td className="px-2 py-2 w-16">
                           {certificate.attachments && certificate.attachments.length > 0 ? (
                             <button
-                              onClick={() => setSelectedCertificate(certificate)}
+                              onClick={() => setAttachmentModalCertificate(certificate)}
                               className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                             >
-                              파일 ({certificate.attachments.length})
+                              파일
                             </button>
                           ) : (
                             <span className="text-gray-400 text-xs">-</span>
@@ -601,7 +607,7 @@ export default function AdminCertificatePage() {
                                 <span className="text-gray-300 text-xs">|</span>
                               </>
                             )}
-                            {certificate.certificateFile && (
+                            {certificate.certificateFile && certificate.status !== 'completed' && (
                               <>
                                 <button
                                   onClick={() => router.push(`/admin/certificate/create?id=${certificate.id}`)}
@@ -853,6 +859,56 @@ export default function AdminCertificatePage() {
             </div>
           </div>
       </div>
+      )}
+
+      {/* 첨부 파일 모달 */}
+      {attachmentModalCertificate && attachmentModalCertificate.attachments && attachmentModalCertificate.attachments.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30" onClick={() => setAttachmentModalCertificate(null)}>
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h3 className="text-lg font-semibold text-gray-900">첨부 파일</h3>
+              <button
+                onClick={() => setAttachmentModalCertificate(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              <div className="space-y-2">
+                {attachmentModalCertificate.attachments.map((file, index) => (
+                  <a
+                    key={index}
+                    href={file.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-3 border border-gray-200 rounded-md hover:bg-gray-50"
+                  >
+                    <div className="flex items-center">
+                      <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span className="text-sm text-blue-600 hover:underline">{file.name}</span>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      {file.size ? `${(file.size / 1024).toFixed(1)} KB` : ''}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
+              <Button
+                variant="primary"
+                onClick={() => setAttachmentModalCertificate(null)}
+              >
+                닫기
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 비고 모달 */}

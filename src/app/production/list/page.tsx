@@ -38,7 +38,7 @@ export default function ProductionRequestListPage() {
   const [itemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
+  const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string; adminMemo?: string } | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<ProductionRequest | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredRequests, setFilteredRequests] = useState<ProductionRequest[]>([]);
@@ -137,11 +137,13 @@ export default function ProductionRequestListPage() {
       const productName = request.productName?.toLowerCase() || '';
       const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const customerName = request.customerName?.toLowerCase() || '';
+      const userName = request.userName?.toLowerCase() || '';
       const statusLabel = STATUS_LABELS[request.status]?.toLowerCase() || request.status || '';
       return (
         productName.includes(query) ||
         productionReason.includes(query) ||
         customerName.includes(query) ||
+        userName.includes(query) ||
         statusLabel.includes(query) ||
         request.status.includes(query)
       );
@@ -196,6 +198,7 @@ export default function ProductionRequestListPage() {
 
     const headers = [
       '번호',
+      '요청자',
       '등록일',
       '제품명',
       '생산목적',
@@ -221,6 +224,7 @@ export default function ProductionRequestListPage() {
 
       const cols = [
         rowNumber,
+        request.userName || '',
         requestDateStr,
         request.productName,
         productionReasonLabel,
@@ -379,6 +383,7 @@ export default function ProductionRequestListPage() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품명</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산목적</th>
@@ -401,6 +406,9 @@ export default function ProductionRequestListPage() {
                         <tr key={request.id} className="hover:bg-gray-50">
                           <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap text-center w-12">
                             {rowNumber}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{request.userName || '-'}</div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">{formatDateShort(request.requestDate)}</div>
@@ -486,16 +494,16 @@ export default function ProductionRequestListPage() {
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              {request.memo ? (
-                                <button
-                                  onClick={() => setSelectedMemo({ id: request.id, memo: request.memo || '' })}
-                                  className="text-left hover:text-blue-600 transition-colors cursor-pointer whitespace-nowrap"
-                                >
-                                  {request.memo.length > 2 ? `${request.memo.substring(0, 2)}...` : request.memo}
-                                </button>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
+                              <button
+                                onClick={() => setSelectedMemo({ 
+                                  id: request.id, 
+                                  memo: request.memo || '', 
+                                  adminMemo: request.adminMemo 
+                                })}
+                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                              >
+                                보기
+                              </button>
                             </div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
@@ -505,15 +513,8 @@ export default function ProductionRequestListPage() {
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => setSelectedRequest(request)}
-                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                              >
-                                보기
-                              </button>
-                              {userProfile && request.userId === userProfile.id && request.status === 'pending_review' && (
+                              {userProfile && request.userId === userProfile.id && request.status === 'pending_review' ? (
                                 <>
-                                  <span className="text-gray-300">|</span>
                                   <button
                                     onClick={() => handleEdit(request)}
                                     className="text-blue-600 hover:text-blue-800 text-sm font-medium"
@@ -530,6 +531,8 @@ export default function ProductionRequestListPage() {
                                     {deletingId === request.id ? '삭제 중...' : '삭제'}
                                   </button>
                                 </>
+                              ) : (
+                                <span className="text-gray-400">-</span>
                               )}
                             </div>
                           </td>
@@ -724,8 +727,25 @@ export default function ProductionRequestListPage() {
                 </svg>
               </button>
             </div>
-            <div className="px-6 py-4 overflow-y-auto flex-1">
-              <div className="text-sm text-gray-900 whitespace-pre-wrap">{selectedMemo.memo}</div>
+            <div className="px-6 py-4 overflow-y-auto flex-1 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">비고</label>
+                {selectedMemo.memo ? (
+                  <div className="text-sm text-gray-900 whitespace-pre-wrap bg-gray-50 p-3 rounded-md">
+                    {selectedMemo.memo}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">비고가 없습니다.</p>
+                )}
+              </div>
+              {selectedMemo.adminMemo && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">관리자 비고</label>
+                  <div className="text-sm text-gray-900 whitespace-pre-wrap bg-blue-50 p-3 rounded-md border border-blue-200">
+                    {selectedMemo.adminMemo}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
               <Button

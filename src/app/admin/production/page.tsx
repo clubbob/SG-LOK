@@ -59,7 +59,7 @@ export default function AdminProductionPage() {
   const [itemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
+  const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string; adminMemo?: string } | null>(null);
   const [approvingRequest, setApprovingRequest] = useState<ProductionRequest | null>(null);
   const [approvalForm, setApprovalForm] = useState({
     plannedCompletionDate: '',
@@ -569,16 +569,16 @@ export default function AdminProductionPage() {
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {request.memo ? (
-                            <button
-                              onClick={() => setSelectedMemo({ id: request.id, memo: request.memo || '' })}
-                              className="text-left hover:text-blue-600 transition-colors cursor-pointer whitespace-nowrap"
-                            >
-                              {request.memo.length > 2 ? `${request.memo.substring(0, 2)}...` : request.memo}
-                            </button>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
+                          <button
+                            onClick={() => setSelectedMemo({ 
+                              id: request.id, 
+                              memo: request.memo || '', 
+                              adminMemo: request.adminMemo 
+                            })}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                          >
+                            보기
+                          </button>
                         </div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
@@ -903,8 +903,25 @@ export default function AdminProductionPage() {
                 </svg>
               </button>
             </div>
-            <div className="px-6 py-4 overflow-y-auto flex-1">
-              <div className="text-sm text-gray-900 whitespace-pre-wrap break-words">{selectedMemo.memo}</div>
+            <div className="px-6 py-4 overflow-y-auto flex-1 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">비고</label>
+                {selectedMemo.memo ? (
+                  <div className="text-sm text-gray-900 whitespace-pre-wrap bg-gray-50 p-3 rounded-md">
+                    {selectedMemo.memo}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">비고가 없습니다.</p>
+                )}
+              </div>
+              {selectedMemo.adminMemo && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">관리자 비고</label>
+                  <div className="text-sm text-gray-900 whitespace-pre-wrap bg-blue-50 p-3 rounded-md border border-blue-200">
+                    {selectedMemo.adminMemo}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
               <Button

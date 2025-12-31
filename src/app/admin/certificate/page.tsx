@@ -247,7 +247,15 @@ export default function AdminCertificatePage() {
     setSuccess('');
 
     try {
-      const requestedCompletionDate = Timestamp.fromDate(new Date(approvalForm.requestedCompletionDate));
+      // 날짜 유효성 검사
+      const dateObj = new Date(approvalForm.requestedCompletionDate);
+      if (isNaN(dateObj.getTime())) {
+        setError('유효하지 않은 날짜 형식입니다.');
+        setApproving(false);
+        return;
+      }
+      
+      const requestedCompletionDate = Timestamp.fromDate(dateObj);
       
       const updateData: Record<string, unknown> = {
         status: 'in_progress',
@@ -999,6 +1007,11 @@ export default function AdminCertificatePage() {
                 <div>
                   <p className="text-sm text-gray-600 mb-2">고객명: <span className="font-medium text-gray-900">{approvingCertificate.customerName || '-'}</span></p>
                 </div>
+                {approvingCertificate.requestedCompletionDate && (
+                  <div>
+                    <p className="text-sm text-gray-600 mb-2">완료요청일: <span className="font-medium text-gray-900">{formatDateShort(approvingCertificate.requestedCompletionDate)}</span></p>
+                  </div>
+                )}
                 <div onClick={(e) => e.stopPropagation()}>
                   <label htmlFor="requestedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
                     완료예정일: *

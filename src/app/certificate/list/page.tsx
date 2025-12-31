@@ -55,6 +55,20 @@ export default function CertificateListPage() {
     }
   }, [loading, isAuthenticated, router]);
 
+  // 페이지 진입 시 자동 새로고침 (한 번만 실행)
+  useEffect(() => {
+    if (isAuthenticated && !loading) {
+      // sessionStorage를 사용하여 이 세션에서 이미 새로고침했는지 확인
+      const refreshKey = 'certificate_list_auto_refresh';
+      const hasRefreshed = sessionStorage.getItem(refreshKey);
+      
+      if (!hasRefreshed) {
+        sessionStorage.setItem(refreshKey, 'true');
+        window.location.reload();
+      }
+    }
+  }, [isAuthenticated, loading]);
+
   // 성적서 목록 불러오기 (실시간 업데이트)
   useEffect(() => {
     if (!isAuthenticated || !userProfile) return;

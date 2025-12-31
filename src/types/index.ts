@@ -52,6 +52,8 @@ export interface InquiryAttachment {
   url: string; // 다운로드 URL
   size: number; // 파일 크기 (bytes)
   type: string; // MIME 타입
+  uploadedAt?: Date | { toDate: () => Date }; // 업로드 일시 (Firebase Timestamp 또는 Date)
+  uploadedBy?: string; // 업로드자 ID
 }
 
 // 생산요청 관련 타입
@@ -169,6 +171,7 @@ export interface Certificate {
 export interface CertificateAttachment {
   name: string; // 파일명
   url: string; // 다운로드 URL
+  storagePath?: string; // Firebase Storage 경로 (getBlob 사용 시 필요)
   size: number; // 파일 크기 (bytes)
   type: string; // MIME 타입
   uploadedAt: Date; // 업로드 일시

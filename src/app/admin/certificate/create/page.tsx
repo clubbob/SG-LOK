@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, getBlob } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, getBlob, getMetadata } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { CertificateAttachment, MaterialTestCertificate, CertificateProduct } from '@/types';
 
@@ -115,7 +115,7 @@ const generatePDFBlobWithProducts = async (
     testResult: string;
   },
   products: CertificateProduct[]
-): Promise<Blob> => {
+): Promise<{ blob: Blob; failedImageCount: number }> => {
   // 동적 import로 jsPDF 로드
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF();
@@ -315,7 +315,7 @@ const generatePDFBlobWithProducts = async (
     yPosition = Math.max(descY, yPosition + 5) + 3;
   });
 
-  // INSPECTION CERTIFICATE 첨부 정보 (제품별)
+  // INSPECTION CERTIFICATE 첨부 정보 (제품별) - 표지 페이지에 파일 정보 표시
   yPosition += 10;
   console.log('[PDF 생성] 제품 개수:', products.length);
   for (let index = 0; index < products.length; index++) {
@@ -326,6 +326,7 @@ const generatePDFBlobWithProducts = async (
       inspectionCertiUrl: product.inspectionCertificate?.url,
     });
     if (product.inspectionCertificate) {
+      // 표지 페이지에 파일 정보 표시 (페이지 넘김 체크)
       if (yPosition > pageHeight - 50) {
         doc.addPage();
         yPosition = margin + 10;
@@ -344,17 +345,51 @@ const generatePDFBlobWithProducts = async (
         doc.text(`Size: ${(product.inspectionCertificate.size / 1024).toFixed(1)} KB`, margin, yPosition);
         yPosition += 5;
       }
-      
-      // 이미지 파일인 경우 별도 페이지에 이미지 삽입
-      const inspectionCert = product.inspectionCertificate;
-      if (inspectionCert?.base64) {
-        try {
-          const base64Data = inspectionCert.base64; // undefined 체크 완료
+    }
+  }
+
+  // 표지 다음 페이지부터 각 제품의 INSPECTION CERTIFICATE 이미지를 순서대로 삽입
+  console.log('[PDF 생성] Inspection Certificate 이미지 추가 시작, 제품 개수:', products.length);
+  let failedImageCount = 0; // 실패한 이미지 개수 추적
+  for (let index = 0; index < products.length; index++) {
+    const product = products[index];
+    const inspectionCert = product.inspectionCertificate;
+    
+    console.log(`[PDF 생성] 제품 ${index + 1} 처리 중:`, {
+      hasInspectionCert: !!inspectionCert,
+      url: inspectionCert?.url,
+      name: inspectionCert?.name,
+      type: inspectionCert?.type,
+    });
+    
+    if (inspectionCert?.url) {
+      try {
+        // Inspection Certificate는 이미지 파일이므로 바로 처리
+        const fileType = inspectionCert.type || '';
+        const fileName = inspectionCert.name.toLowerCase();
+        
+        console.log(`[PDF 생성] 제품 ${index + 1} 이미지 처리 시작:`, {
+          fileType,
+          fileName,
+          url: inspectionCert.url,
+        });
+        
+        // PNG 이미지 다운로드 및 base64 변환
+        let base64ImageData: string;
+        let imageFormat: 'PNG' = 'PNG';
+        let img: HTMLImageElement;
+        
+        if (inspectionCert.base64) {
+          // base64 데이터가 있으면 직접 사용
+          console.log('[PDF 생성] base64 데이터 사용');
+          const base64Data = inspectionCert.base64.includes(',') 
+            ? inspectionCert.base64 
+            : `data:image/png;base64,${inspectionCert.base64}`;
           
-          // Base64 이미지를 Image 객체로 로드하여 크기 확인
-          const img = new Image();
+          img = new Image();
+          img.src = base64Data;
           await new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('이미지 로드 타임아웃')), 3000);
+            const timeout = setTimeout(() => reject(new Error('이미지 로드 타임아웃 (30초)')), 30000);
             img.onload = () => {
               clearTimeout(timeout);
               resolve();
@@ -363,50 +398,203 @@ const generatePDFBlobWithProducts = async (
               clearTimeout(timeout);
               reject(new Error('이미지 로드 실패'));
             };
-            img.src = base64Data;
           });
           
-          // 이미지 비율 확인 (가로가 더 길면 landscape 모드 사용)
-          const imgAspectRatio = img.width / img.height;
-          const isLandscape = img.width > img.height;
+          base64ImageData = base64Data.includes(',') 
+            ? base64Data.split(',')[1] 
+            : inspectionCert.base64;
+        } else {
+          // 이미지 다운로드
+          console.log('[PDF 생성] 이미지 다운로드 시작, URL:', inspectionCert.url, 'storagePath:', inspectionCert.storagePath);
           
-          // 새로운 페이지 추가 (이미지 비율에 따라 portrait 또는 landscape)
-          if (isLandscape) {
-            doc.addPage('landscape');
-          } else {
-            doc.addPage();
+          let blob: Blob;
+          let downloadSuccess = false;
+          
+          // 방법 1: storagePath가 있으면 getBlob 사용 (재시도 로직 포함)
+          if (inspectionCert.storagePath) {
+            const maxRetries = 3;
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+              try {
+                console.log(`[PDF 생성] getBlob 시도 ${attempt}/${maxRetries}, storagePath:`, inspectionCert.storagePath);
+                const storageRef = ref(storage, inspectionCert.storagePath);
+                
+                // getBlob으로 다운로드 (타임아웃 60초)
+                blob = await Promise.race([
+                  getBlob(storageRef),
+                  new Promise<Blob>((_, reject) => 
+                    setTimeout(() => reject(new Error(`getBlob 타임아웃 (60초) - 시도 ${attempt}/${maxRetries}`)), 60000)
+                  )
+                ]);
+                
+                console.log('[PDF 생성] getBlob 다운로드 완료, 크기:', blob.size);
+                downloadSuccess = true;
+                break; // 성공하면 루프 종료
+              } catch (getBlobError) {
+                console.error(`[PDF 생성] getBlob 시도 ${attempt}/${maxRetries} 실패:`, getBlobError);
+                if (attempt === maxRetries) {
+                  // 마지막 시도 실패 시 URL로 재시도
+                  console.log('[PDF 생성] 모든 getBlob 시도 실패, URL로 재시도');
+                } else {
+                  // 재시도 전 잠시 대기
+                  await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                }
+              }
+            }
           }
-          yPosition = margin + 10;
           
-          // 제목 표시
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(12);
-          doc.text(`INSPECTION CERTIFICATE (Product ${index + 1})`, margin, yPosition);
-          yPosition += 10;
+          // 방법 2: getBlob 실패했거나 storagePath가 없으면 URL로 다운로드
+          if (!downloadSuccess) {
+            try {
+              console.log('[PDF 생성] URL로 다운로드 시도:', inspectionCert.url);
+              // CORS 문제를 피하기 위해 mode: 'no-cors' 사용하지 않음 (blob을 받을 수 없음)
+              // 대신 직접 fetch 시도
+              const response = await fetch(inspectionCert.url, {
+                method: 'GET',
+                headers: {
+                  'Accept': 'image/*',
+                },
+              });
+              
+              if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+              }
+              
+              blob = await response.blob();
+              console.log('[PDF 생성] URL 다운로드 완료, 크기:', blob.size);
+              downloadSuccess = true;
+            } catch (fetchError) {
+              console.error('[PDF 생성] URL 다운로드 실패:', fetchError);
+              throw new Error(`이미지 다운로드 실패: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+            }
+          }
           
-          // 이미지 크기 계산 (페이지에 맞게 조정)
-          const pageWidth = doc.internal.pageSize.getWidth();
-          const pageHeight = doc.internal.pageSize.getHeight();
-          const availableWidth = pageWidth - (margin * 2);
-          const availableHeight = pageHeight - yPosition - margin - 20;
+          // Blob을 base64로 변환
+          const base64Data = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              if (typeof reader.result === 'string') {
+                resolve(reader.result);
+              } else {
+                reject(new Error('FileReader result is not a string'));
+              }
+            };
+            reader.onerror = () => reject(new Error('FileReader error'));
+            reader.readAsDataURL(blob);
+          });
           
-          const ratio = Math.min(availableWidth / img.width, availableHeight / img.height, 1);
-          const imgWidthMM = img.width * ratio * 0.264583;
-          const imgHeightMM = img.height * ratio * 0.264583;
+          base64ImageData = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+          console.log('[PDF 생성] base64 변환 완료, 길이:', base64ImageData.length);
           
-          // 이미지를 페이지 중앙에 배치
-          const imgX = (pageWidth - imgWidthMM) / 2;
-          const imgY = yPosition;
-          
-          doc.addImage(base64Data, 'PNG', imgX, imgY, imgWidthMM, imgHeightMM);
-          
-        } catch (error) {
-          // 이미지 로드 실패 시 조용히 건너뛰기
-          console.warn(`제품 ${index + 1}의 이미지 로드 실패:`, error);
+          // 이미지 크기 확인
+          img = new Image();
+          img.src = base64Data;
+          await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('이미지 로드 타임아웃 (30초)')), 30000);
+            img.onload = () => {
+              clearTimeout(timeout);
+              console.log('[PDF 생성] 이미지 크기 확인 완료:', img.width, 'x', img.height);
+              resolve();
+            };
+            img.onerror = () => {
+              clearTimeout(timeout);
+              reject(new Error('이미지 로드 실패'));
+            };
+          });
         }
+        
+        // Inspection Certificate 이미지는 항상 landscape(가로) 모드로 표시
+        // 새로운 페이지 추가 (A4 landscape 크기: 297mm x 210mm)
+        doc.addPage([297, 210], 'landscape');
+        
+        // 이미지 페이지는 여백을 최소화 (가로 여백 5mm)
+        const imageMargin = 5;
+        yPosition = imageMargin + 5;
+        
+        // 제목 표시
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.text(`INSPECTION CERTIFICATE (Product ${index + 1})`, imageMargin, yPosition);
+        yPosition += 10;
+        
+        // 이미지 크기 계산 (가로 여백 최소화)
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const availableWidth = pageWidth - (imageMargin * 2);
+        const availableHeight = pageHeight - yPosition - imageMargin - 5;
+        
+        // 가로 사이즈를 페이지 너비에 맞추고, 세로는 비율에 맞게 조정
+        const imgWidthMM = availableWidth;
+        const imgHeightMM = (img.height / img.width) * availableWidth;
+        
+        // 세로가 페이지를 넘어가면 세로 기준으로 조정
+        let finalWidthMM = imgWidthMM;
+        let finalHeightMM = imgHeightMM;
+        if (imgHeightMM > availableHeight) {
+          finalHeightMM = availableHeight;
+          finalWidthMM = (img.width / img.height) * availableHeight;
+        }
+        
+        // 이미지를 페이지 중앙에 배치 (가로 여백 최소화)
+        const imgX = imageMargin;
+        const imgY = yPosition;
+        
+        console.log(`[PDF 생성] 제품 ${index + 1} 이미지 추가 시도:`, {
+          imageFormat,
+          imgWidthMM: finalWidthMM,
+          imgHeightMM: finalHeightMM,
+          imgX,
+          imgY,
+          base64Length: base64ImageData.length,
+          imgWidth: img.width,
+          imgHeight: img.height,
+        });
+        
+        // 이미지 추가
+        try {
+          doc.addImage(base64ImageData, imageFormat, imgX, imgY, finalWidthMM, finalHeightMM);
+          console.log(`[PDF 생성] 제품 ${index + 1} 이미지 추가 완료 - 페이지 번호: ${doc.getNumberOfPages()}`);
+        } catch (addImageError) {
+          console.error(`[PDF 생성] doc.addImage 실패:`, addImageError);
+          throw new Error(`이미지를 PDF에 추가하는데 실패했습니다: ${addImageError instanceof Error ? addImageError.message : String(addImageError)}`);
+        }
+        
+      } catch (error) {
+        // 이미지 로드 실패 시 에러 로그 출력
+        failedImageCount++;
+        
+        // 에러 정보 수집
+        const errorInfo: Record<string, unknown> = {
+          url: inspectionCert.url,
+          name: inspectionCert.name,
+          type: inspectionCert.type,
+        };
+        
+        if (error instanceof Error) {
+          errorInfo.errorMessage = error.message;
+          errorInfo.errorName = error.name;
+          errorInfo.errorStack = error.stack;
+        } else if (error) {
+          errorInfo.errorString = String(error);
+          errorInfo.errorType = typeof error;
+          errorInfo.errorKeys = Object.keys(error as Record<string, unknown>);
+        } else {
+          errorInfo.error = '알 수 없는 에러 (null/undefined)';
+        }
+        
+        console.error(`제품 ${index + 1}의 이미지 로드 실패:`, error);
+        console.error('에러 상세:', errorInfo);
+        
+        // 에러가 발생해도 다음 제품 계속 처리
+        console.warn(`⚠️ 제품 ${index + 1} (${product.productName || '이름 없음'})의 Inspection Certificate 이미지를 PDF에 추가하지 못했습니다. (실패한 이미지: ${failedImageCount}개)`);
+        // 에러가 발생해도 PDF 생성은 계속 진행 (이미지 없이)
+        continue; // 이 제품의 이미지는 건너뛰고 다음 제품으로
       }
+    } else {
+      console.log(`[PDF 생성] 제품 ${index + 1}에는 Inspection Certificate가 없습니다.`);
     }
   }
+  
+  console.log(`[PDF 생성] 모든 이미지 처리 완료. 총 페이지 수: ${doc.getNumberOfPages()}, 실패한 이미지: ${failedImageCount}개`);
 
   // 페이지 넘김 체크
   if (yPosition > pageHeight - 30) {
@@ -424,13 +612,14 @@ const generatePDFBlobWithProducts = async (
   // PDF를 Blob으로 변환하여 반환
   try {
     const pdfBlob = doc.output('blob');
-    return pdfBlob;
+    console.log(`[PDF 생성] 완료. 실패한 이미지: ${failedImageCount}개`);
+    return { blob: pdfBlob, failedImageCount };
   } catch (error) {
     console.error('PDF 생성 오류:', error);
     // PDF 생성 실패 시 빈 PDF 반환 (에러 방지)
     const fallbackDoc = new jsPDF();
     fallbackDoc.text('PDF 생성 중 오류가 발생했습니다.', 20, 20);
-    return fallbackDoc.output('blob');
+    return { blob: fallbackDoc.output('blob'), failedImageCount };
   }
 };
 
@@ -452,11 +641,11 @@ const generateAndDownloadPDF = async (
   // 제품 데이터 준비
   const productsDataForDownload: CertificateProduct[] = [];
   // inspectionCertificate는 더 이상 단일 파일이 아니라 제품별로 처리되므로 빈 배열로 처리
-  const pdfBlob = await generatePDFBlobWithProducts(formData, productsDataForDownload);
+  const result = await generatePDFBlobWithProducts(formData, productsDataForDownload);
   const fileName = `MATERIAL_TEST_CERTIFICATE_${formData.certificateNo || 'CERT'}_${new Date().toISOString().split('T')[0]}.pdf`;
   
   // Blob을 다운로드
-  const url = URL.createObjectURL(pdfBlob);
+  const url = URL.createObjectURL(result.blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = fileName;
@@ -899,61 +1088,78 @@ function MaterialTestCertificateContent() {
         // 제품별 Inspection Certi 파일 업로드
         if (product.inspectionCertiFile) {
           try {
+            console.log(`[저장] 제품 ${i + 1} Inspection Certi 파일 업로드 시작:`, {
+              fileName: product.inspectionCertiFile.name,
+              fileSize: product.inspectionCertiFile.size,
+              fileType: product.inspectionCertiFile.type,
+            });
+            
             const timestamp = Date.now();
             const randomId = Math.random().toString(36).substring(2, 15);
             const fileName = `inspection_certi_${certificateId || 'temp'}_${timestamp}_${randomId}_${product.inspectionCertiFile.name}`;
             const filePath = `certificates/${certificateId || 'temp'}/inspection_certi/${fileName}`;
             
+            console.log(`[저장] Storage 경로:`, filePath);
             const storageRef = ref(storage, filePath);
+            
+            console.log(`[저장] uploadBytes 시작...`);
             await uploadBytes(storageRef, product.inspectionCertiFile);
+            console.log(`[저장] uploadBytes 완료`);
+            
+            console.log(`[저장] getDownloadURL 시작...`);
             const downloadURL = await getDownloadURL(storageRef);
+            console.log(`[저장] getDownloadURL 완료, URL:`, downloadURL);
             
-            // 이미지 파일인 경우 Base64로 변환
-            let base64Data: string | undefined;
-            const fileType = product.inspectionCertiFile.type || '';
-            const fileNameLower = product.inspectionCertiFile.name.toLowerCase();
-            const isImage = fileType.startsWith('image/') || 
-                           fileNameLower.endsWith('.jpg') || 
-                           fileNameLower.endsWith('.jpeg') || 
-                           fileNameLower.endsWith('.png') || 
-                           fileNameLower.endsWith('.gif') || 
-                           fileNameLower.endsWith('.bmp');
-            
-            if (isImage) {
-              try {
-                base64Data = await new Promise<string>((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => {
-                    if (typeof reader.result === 'string') {
-                      resolve(reader.result);
-                    } else {
-                      reject(new Error('FileReader result is not a string'));
-                    }
-                  };
-                  reader.onerror = () => reject(new Error('FileReader error'));
-                  reader.readAsDataURL(product.inspectionCertiFile!);
-                });
-              } catch (base64Error) {
-                console.warn(`이미지 Base64 변환 실패 (계속 진행):`, base64Error);
-                // Base64 변환 실패해도 계속 진행
-              }
+            // 로컬 File 객체를 base64로 변환 (PDF 생성 시 즉시 사용)
+            const fileToConvert = product.inspectionCertiFile;
+            if (!fileToConvert) {
+              throw new Error('inspectionCertiFile이 null입니다');
             }
+            const base64Data = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                if (typeof reader.result === 'string') {
+                  resolve(reader.result);
+                } else {
+                  reject(new Error('FileReader result is not a string'));
+                }
+              };
+              reader.onerror = () => reject(new Error('FileReader error'));
+              reader.readAsDataURL(fileToConvert);
+            });
             
             productData.inspectionCertificate = {
               name: product.inspectionCertiFile.name,
               url: downloadURL,
+              storagePath: filePath, // Storage 경로 저장 (getBlob 사용 시 필요)
               size: product.inspectionCertiFile.size,
               type: product.inspectionCertiFile.type,
               uploadedAt: new Date(),
               uploadedBy: 'admin',
-              base64: base64Data, // Base64 데이터 추가
+              base64: base64Data, // 로컬 File 객체를 base64로 변환하여 PDF 생성 시 즉시 사용 (Firestore에는 저장하지 않음)
             };
+            
+            console.log(`[저장] 제품 ${i + 1} Inspection Certi 파일 업로드 완료, base64 길이:`, base64Data.length);
           } catch (fileError) {
-            console.error(`Inspection Certi 파일 "${product.inspectionCertiFile.name}" 업로드 오류:`, fileError);
+            console.error(`[저장] 제품 ${i + 1} Inspection Certi 파일 업로드 오류:`, fileError);
+            const errorInfo: Record<string, unknown> = {
+              fileName: product.inspectionCertiFile.name,
+              fileSize: product.inspectionCertiFile.size,
+              fileType: product.inspectionCertiFile.type,
+            };
+            if (fileError instanceof Error) {
+              errorInfo.errorMessage = fileError.message;
+              errorInfo.errorName = fileError.name;
+              errorInfo.errorStack = fileError.stack;
+            } else {
+              errorInfo.errorString = String(fileError);
+            }
+            console.error('[저장] 에러 상세:', errorInfo);
             throw fileError;
           }
         } else if (product.existingInspectionCerti) {
           // 기존 Inspection Certi가 있으면 그대로 사용
+          console.log(`[저장] 제품 ${i + 1} 기존 Inspection Certi 사용:`, product.existingInspectionCerti.url);
           productData.inspectionCertificate = product.existingInspectionCerti;
         }
 
@@ -988,17 +1194,24 @@ function MaterialTestCertificateContent() {
         createdBy: createdBy,
       };
 
-      // PDF 생성 (products 배열 전달) - 전체 타임아웃 30초
+      // PDF 생성 (products 배열 전달) - 전체 타임아웃 120초 (이미지 다운로드 시간 고려)
       let pdfBlob: Blob;
+      let failedImageCount = 0;
       try {
-        pdfBlob = await Promise.race([
+        const result = await Promise.race([
           generatePDFBlobWithProducts(formData, productsData),
-          new Promise<Blob>((_, reject) => {
+          new Promise<{ blob: Blob; failedImageCount: number }>((_, reject) => {
             setTimeout(() => {
-              reject(new Error('PDF 생성 타임아웃 (30초)'));
-            }, 30000);
+              reject(new Error('PDF 생성 타임아웃 (120초)'));
+            }, 120000); // 2분으로 증가
           })
         ]);
+        pdfBlob = result.blob;
+        failedImageCount = result.failedImageCount;
+        
+        if (failedImageCount > 0) {
+          console.warn(`⚠️ ${failedImageCount}개의 이미지를 PDF에 포함하지 못했습니다.`);
+        }
       } catch (pdfError) {
         console.error('PDF 생성 오류:', pdfError);
         // PDF 생성 실패해도 계속 진행 (이미지 로드 실패 등)
@@ -1007,6 +1220,7 @@ function MaterialTestCertificateContent() {
         const fallbackDoc = new jsPDF();
         fallbackDoc.text('PDF 생성 중 오류가 발생했습니다.', 20, 20);
         pdfBlob = fallbackDoc.output('blob');
+        failedImageCount = productsData.length; // 모든 이미지 실패로 간주
       }
       const fileName = `MATERIAL_TEST_CERTIFICATE_${formData.certificateNo || 'CERT'}_${new Date().toISOString().split('T')[0]}.pdf`;
       
@@ -1123,12 +1337,13 @@ function MaterialTestCertificateContent() {
             productForFirestore.inspectionCertificate = {
               name: p.inspectionCertificate.name,
               url: p.inspectionCertificate.url,
+              storagePath: p.inspectionCertificate.storagePath || null, // Storage 경로 저장 (PDF 생성 시 getBlob 사용)
               size: p.inspectionCertificate.size,
               type: p.inspectionCertificate.type,
               uploadedAt: uploadedAtTimestamp,
               uploadedBy: p.inspectionCertificate.uploadedBy,
-              // Base64 데이터도 저장 (이미지 파일인 경우)
-              ...(p.inspectionCertificate.base64 && { base64: p.inspectionCertificate.base64 }),
+              // base64 데이터는 Firestore 문서 크기 제한을 피하기 위해 저장하지 않음
+              // PDF 생성 시 Storage 경로(storagePath)를 사용하여 getBlob으로 다운로드
             };
           }
           
@@ -1157,7 +1372,15 @@ function MaterialTestCertificateContent() {
 
       // 수정 모드인지 복사 모드인지 확인
       const isActuallyCopyMode = !certificateId && isCopyMode && copyFromId;
-      setSuccess(isActuallyCopyMode ? '기존 성적서를 복사하여 새로운 성적서가 생성되었습니다.' : '성적서 내용이 저장되었고 PDF 파일이 업로드되었습니다.');
+      let successMessage = isActuallyCopyMode 
+        ? '기존 성적서를 복사하여 새로운 성적서가 생성되었습니다.' 
+        : '성적서 내용이 저장되었고 PDF 파일이 업로드되었습니다.';
+      
+      if (failedImageCount > 0) {
+        successMessage += ` (참고: ${failedImageCount}개의 이미지를 PDF에 포함하지 못했습니다. 네트워크 문제일 수 있습니다.)`;
+      }
+      
+      setSuccess(successMessage);
       setIsEditMode(true);
       
       // 저장 완료 후 2초 뒤 목록 페이지로 이동
@@ -1232,16 +1455,79 @@ function MaterialTestCertificateContent() {
           createdAt: Timestamp.fromDate(materialTestCertificate.createdAt),
           updatedAt: Timestamp.fromDate(materialTestCertificate.updatedAt),
           createdBy: materialTestCertificate.createdBy,
+          products: productsDataForGenerate.map(p => {
+            const productForFirestore: Record<string, unknown> = {
+              productName: p.productName,
+              productCode: p.productCode || null,
+              quantity: p.quantity || null,
+              heatNo: p.heatNo || null,
+            };
+            
+            // inspectionCertificate가 있으면 추가
+            if (p.inspectionCertificate) {
+              // uploadedAt 처리
+              let uploadedAtTimestamp: Timestamp;
+              const uploadedAt = p.inspectionCertificate.uploadedAt;
+              if (uploadedAt) {
+                if (uploadedAt instanceof Date) {
+                  uploadedAtTimestamp = Timestamp.fromDate(uploadedAt);
+                } else if (uploadedAt && typeof uploadedAt === 'object' && 'toDate' in uploadedAt) {
+                  const timestampObj = uploadedAt as { toDate?: () => Date };
+                  if (typeof timestampObj.toDate === 'function') {
+                    uploadedAtTimestamp = uploadedAt as Timestamp;
+                  } else {
+                    uploadedAtTimestamp = Timestamp.fromDate(new Date());
+                  }
+                } else {
+                  uploadedAtTimestamp = Timestamp.fromDate(new Date());
+                }
+              } else {
+                uploadedAtTimestamp = Timestamp.fromDate(new Date());
+              }
+              
+              productForFirestore.inspectionCertificate = {
+                name: p.inspectionCertificate.name,
+                url: p.inspectionCertificate.url,
+                storagePath: p.inspectionCertificate.storagePath || null, // Storage 경로 저장
+                size: p.inspectionCertificate.size,
+                type: p.inspectionCertificate.type,
+                uploadedAt: uploadedAtTimestamp,
+                uploadedBy: p.inspectionCertificate.uploadedBy,
+              };
+            }
+            
+            return productForFirestore;
+          }),
         };
         
-        // inspectionCertificate가 있으면 추가 (undefined인 경우 필드 자체를 추가하지 않음)
+        // inspectionCertificate가 있으면 추가 (undefined인 경우 필드 자체를 추가하지 않음) - 단일 제품 필드용 (하위 호환성)
         if (materialTestCertificate.inspectionCertificate) {
+          let uploadedAtTimestamp: Timestamp;
+          const uploadedAt = materialTestCertificate.inspectionCertificate.uploadedAt;
+          if (uploadedAt) {
+            if (uploadedAt instanceof Date) {
+              uploadedAtTimestamp = Timestamp.fromDate(uploadedAt);
+            } else if (uploadedAt && typeof uploadedAt === 'object' && 'toDate' in uploadedAt) {
+              const timestampObj = uploadedAt as { toDate?: () => Date };
+              if (typeof timestampObj.toDate === 'function') {
+                uploadedAtTimestamp = uploadedAt as Timestamp;
+              } else {
+                uploadedAtTimestamp = Timestamp.fromDate(new Date());
+              }
+            } else {
+              uploadedAtTimestamp = Timestamp.fromDate(new Date());
+            }
+          } else {
+            uploadedAtTimestamp = Timestamp.fromDate(new Date());
+          }
+          
           materialTestCertificateForFirestore.inspectionCertificate = {
             name: materialTestCertificate.inspectionCertificate.name,
             url: materialTestCertificate.inspectionCertificate.url,
+            storagePath: materialTestCertificate.inspectionCertificate.storagePath || null, // Storage 경로 저장
             size: materialTestCertificate.inspectionCertificate.size,
             type: materialTestCertificate.inspectionCertificate.type,
-            uploadedAt: Timestamp.fromDate(materialTestCertificate.inspectionCertificate.uploadedAt),
+            uploadedAt: uploadedAtTimestamp,
             uploadedBy: materialTestCertificate.inspectionCertificate.uploadedBy,
           };
         }
@@ -1283,6 +1569,7 @@ function MaterialTestCertificateContent() {
             productData.inspectionCertificate = {
               name: product.inspectionCertiFile.name,
               url: downloadURL,
+              storagePath: filePath, // Storage 경로 저장 (PDF 생성 시 필요)
               size: product.inspectionCertiFile.size,
               type: product.inspectionCertiFile.type,
               uploadedAt: new Date(),
@@ -1303,12 +1590,20 @@ function MaterialTestCertificateContent() {
         productsDataForDownload.push(productData);
       }
 
+      // PDF 생성 전에 제품 데이터 확인
+      console.log('[PDF 생성] 전달되는 제품 데이터:', productsDataForDownload.map(p => ({
+        productName: p.productName,
+        hasInspectionCert: !!p.inspectionCertificate,
+        inspectionCertUrl: p.inspectionCertificate?.url,
+        inspectionCertName: p.inspectionCertificate?.name,
+      })));
+
       // PDF 생성 및 다운로드
-      const pdfBlob = await generatePDFBlobWithProducts(formData, productsDataForDownload);
+      const result = await generatePDFBlobWithProducts(formData, productsDataForDownload);
       const fileName = `MATERIAL_TEST_CERTIFICATE_${formData.certificateNo || 'CERT'}_${new Date().toISOString().split('T')[0]}.pdf`;
       
       // Blob을 다운로드
-      const url = URL.createObjectURL(pdfBlob);
+      const url = URL.createObjectURL(result.blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = fileName;

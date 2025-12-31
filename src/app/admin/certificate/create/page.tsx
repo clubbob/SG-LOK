@@ -366,8 +366,16 @@ const generatePDFBlobWithProducts = async (
             img.src = base64Data;
           });
           
-          // 새로운 페이지 추가
-          doc.addPage();
+          // 이미지 비율 확인 (가로가 더 길면 landscape 모드 사용)
+          const imgAspectRatio = img.width / img.height;
+          const isLandscape = img.width > img.height;
+          
+          // 새로운 페이지 추가 (이미지 비율에 따라 portrait 또는 landscape)
+          if (isLandscape) {
+            doc.addPage('landscape');
+          } else {
+            doc.addPage();
+          }
           yPosition = margin + 10;
           
           // 제목 표시

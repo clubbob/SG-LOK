@@ -121,8 +121,8 @@ export default function AdminLayout({
       return;
     }
 
-    // 로그인 페이지에서는 인증 체크 안 함
-    if (pathname === '/admin/login' || pathname.startsWith('/admin/login')) {
+    // 로그인 페이지나 /admin 루트 경로에서는 인증 체크 안 함 (page.tsx에서 처리)
+    if (pathname === '/admin/login' || pathname.startsWith('/admin/login') || pathname === '/admin') {
       setLoading(false);
       return;
     }

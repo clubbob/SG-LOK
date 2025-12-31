@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, getBlob, getMetadata } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, getBlob } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { CertificateAttachment, MaterialTestCertificate, CertificateProduct } from '@/types';
 
@@ -280,7 +280,6 @@ const generatePDFBlobWithProducts = async (
   // 제품 테이블 헤더
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  const tableStartY = yPosition;
   doc.text('No.', margin, yPosition);
   doc.text('DESCRIPTION', margin + 15, yPosition);
   doc.text('CODE', margin + 80, yPosition);
@@ -376,7 +375,7 @@ const generatePDFBlobWithProducts = async (
         
         // PNG 이미지 다운로드 및 base64 변환
         let base64ImageData: string;
-        let imageFormat: 'PNG' = 'PNG';
+        const imageFormat = 'PNG' as const;
         let img: HTMLImageElement;
         
         if (inspectionCert.base64) {

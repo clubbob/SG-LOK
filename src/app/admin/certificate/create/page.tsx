@@ -256,19 +256,18 @@ const generatePDFBlobWithProducts = async (
   leftY += lineHeight;
   rightY += lineHeight;
 
-  // 두 번째 행: CUSTOMER (왼쪽)
+  // 두 번째 행: CUSTOMER (왼쪽) | PO NO. (오른쪽)
   doc.setFont('helvetica', 'bold');
   doc.text('CUSTOMER:', leftColumn, leftY);
   doc.setFont('helvetica', 'normal');
   renderKoreanText(doc, formData.customer || '-', leftColumn + 50, leftY, 12);
-  leftY += lineHeight;
-
-  // 세 번째 행: PO NO. (왼쪽)
+  
   doc.setFont('helvetica', 'bold');
-  doc.text('PO NO.:', leftColumn, leftY);
+  doc.text('PO NO.:', rightColumn, rightY);
   doc.setFont('helvetica', 'normal');
-  renderKoreanText(doc, formData.poNo || '-', leftColumn + 50, leftY, 12);
+  renderKoreanText(doc, formData.poNo || '-', rightColumn + 40, rightY, 12);
   leftY += lineHeight;
+  rightY += lineHeight;
 
   // 제품 정보 테이블
   yPosition = leftY + 10;

@@ -155,19 +155,29 @@ export default function CertificateListPage() {
 
     const query = searchQuery.toLowerCase().trim();
     const filtered = certificates.filter((cert) => {
-      const customerName = cert.customerName?.toLowerCase() || '';
-      const orderNumber = cert.orderNumber?.toLowerCase() || '';
-      const productName = cert.productName?.toLowerCase() || '';
-      const productCode = cert.productCode?.toLowerCase() || '';
+      // 요청자
       const userName = cert.userName?.toLowerCase() || '';
+      // 고객명
+      const customerName = cert.customerName?.toLowerCase() || '';
+      // 발주번호
+      const orderNumber = cert.orderNumber?.toLowerCase() || '';
+      // 제품명 (기존 필드 및 products 배열)
+      const productName = cert.productName?.toLowerCase() || '';
+      const productsProductNames = cert.products?.map(p => p.productName?.toLowerCase() || '').join(' ') || '';
+      // 제품코드 (기존 필드 및 products 배열)
+      const productCode = cert.productCode?.toLowerCase() || '';
+      const productsProductCodes = cert.products?.map(p => p.productCode?.toLowerCase() || '').join(' ') || '';
+      // 상태
       const statusLabel = STATUS_LABELS[cert.status]?.toLowerCase() || cert.status || '';
 
       return (
+        userName.includes(query) ||
         customerName.includes(query) ||
         orderNumber.includes(query) ||
         productName.includes(query) ||
+        productsProductNames.includes(query) ||
         productCode.includes(query) ||
-        userName.includes(query) ||
+        productsProductCodes.includes(query) ||
         statusLabel.includes(query) ||
         cert.status.includes(query)
       );
@@ -277,7 +287,7 @@ export default function CertificateListPage() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="고객명, 발주번호, 제품명, 제품코드, 요청자, 상태 검색..."
+                placeholder="요청자, 고객명, 발주번호, 제품명, 제품코드, 상태 검색..."
                 className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               />
               <svg

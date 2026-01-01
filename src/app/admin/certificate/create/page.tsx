@@ -213,19 +213,74 @@ const generatePDFBlobWithProducts = async (
   // 페이지 설정
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 20;
+  const margin = 12; // 상단 여백 줄임 (20 → 12)
   let yPosition = margin;
 
-  // 제목: MATERIAL TEST CERTIFICATE
+  // 제목: MATERIAL TEST CERTIFICATE (로고와 같은 높이에 배치하기 위해 먼저 yPosition 계산)
+  const titleYPosition = margin + 6; // 타이틀 y 위치 (로고와 같은 높이, 여백 줄임)
+  
+  // 로고 이미지 추가 (타이틀 왼쪽에 배치)
+  let logoWidthMM = 0;
+  let logoHeightMM = 0;
+  try {
+    // 로고 이미지 경로 (public 폴더 기준)
+    const logoPath = '/samwon-green-logo.png'; // 삼원그린 로고 이미지
+    
+    // 로고 이미지를 base64로 로드
+    const logoImg = new Image();
+    logoImg.crossOrigin = 'anonymous';
+    
+    // 로고 이미지 로드 (public 폴더의 이미지 사용)
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('로고 이미지 로드 타임아웃')), 5000);
+      logoImg.onload = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+      logoImg.onerror = () => {
+        clearTimeout(timeout);
+        reject(new Error('로고 이미지 로드 실패'));
+      };
+      // Next.js public 폴더의 이미지는 절대 경로로 접근
+      logoImg.src = logoPath.startsWith('http') ? logoPath : `${window.location.origin}${logoPath}`;
+    });
+
+    // Canvas로 base64 변환
+    const canvas = document.createElement('canvas');
+    canvas.width = logoImg.width;
+    canvas.height = logoImg.height;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(logoImg, 0, 0);
+      const logoBase64 = canvas.toDataURL('image/png');
+      
+      // 로고 크기 설정 (높이 14mm로 설정하여 조금 크게)
+      logoHeightMM = 14;
+      logoWidthMM = (logoImg.width / logoImg.height) * logoHeightMM;
+      
+      // PDF에 로고 추가 (왼쪽, 타이틀과 같은 높이)
+      const logoY = titleYPosition - (logoHeightMM / 2); // 타이틀 중앙에 맞추기 위해 조정
+      doc.addImage(logoBase64, 'PNG', margin, logoY, logoWidthMM, logoHeightMM);
+    }
+  } catch (error) {
+    console.warn('로고 이미지 로드 실패, 로고 없이 진행:', error);
+  }
+
+  // 제목: MATERIAL TEST CERTIFICATE (로고 오른쪽에 배치)
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('MATERIAL TEST CERTIFICATE', pageWidth / 2, yPosition, { align: 'center' });
-  yPosition += 10;
+  doc.text('MATERIAL TEST CERTIFICATE', pageWidth / 2, titleYPosition, { align: 'center' });
+  yPosition = titleYPosition + 10;
 
-  // 표준 규격 텍스트
-  doc.setFontSize(10);
+  // 회사 정보
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text('According to DIN 50049 3.1 / EN 10204 3.1 / ISO 10474 3.1', pageWidth / 2, yPosition, { align: 'center' });
+  doc.text('Samwongreen Corporation', pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 5;
+  doc.setFontSize(8);
+  doc.text('101, Mayu-ro 20beon-gil, Siheung-si, Gyeonggi-do, Korea (Zip 15115)', pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 4;
+  doc.text('Tel. +82 31 431 3452 / Fax. +82 31 431 3460 / E-Mail. sglok@sglok.com', pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 8;
 
   // 구분선
@@ -289,7 +344,7 @@ const generatePDFBlobWithProducts = async (
   // 구분선
   doc.setLineWidth(0.3);
   doc.line(margin, yPosition, pageWidth - margin, yPosition);
-  yPosition += 5;
+  yPosition += 8; // 구분선과 데이터 행 사이 간격 증가 (5mm → 8mm)
 
   // 제품 데이터 행
   doc.setFont('helvetica', 'normal');
@@ -313,18 +368,24 @@ const generatePDFBlobWithProducts = async (
     yPosition = Math.max(descY, yPosition + 5) + 3;
   });
 
-  // INSPECTION CERTIFICATE 첨부 정보 (제품별) - 표지 페이지에 파일 정보 표시
+  // 기본 인증 문구 추가
+  yPosition += 10;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10); // 9pt → 10pt로 한 단계 크게
+  const certificationText = 'We hereby certify that all items are strictly compiled with the purchase order, purchase specification, contractual requirement and applicable code & standard, and are supplied with all qualified verification documents hear with.';
+  const certificationLines = doc.splitTextToSize(certificationText, pageWidth - (margin * 2));
+  certificationLines.forEach((line: string) => {
+    doc.text(line, margin, yPosition);
+    yPosition += 5;
+  });
+
+  // INSPECTION CERTIFICATE 제목 표시 (제품별) - File/Size 정보는 제외
   yPosition += 10;
   console.log('[PDF 생성] 제품 개수:', products.length);
   for (let index = 0; index < products.length; index++) {
     const product = products[index];
-    console.log(`[PDF 생성] 제품 ${index + 1}:`, {
-      productName: product.productName,
-      hasInspectionCerti: !!product.inspectionCertificate,
-      inspectionCertiUrl: product.inspectionCertificate?.url,
-    });
     if (product.inspectionCertificate) {
-      // 표지 페이지에 파일 정보 표시 (페이지 넘김 체크)
+      // 표지 페이지에 제목만 표시 (페이지 넘김 체크)
       if (yPosition > pageHeight - 50) {
         doc.addPage();
         yPosition = margin + 10;
@@ -333,18 +394,85 @@ const generatePDFBlobWithProducts = async (
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.text(`INSPECTION CERTIFICATE (Product ${index + 1}):`, margin, yPosition);
-      yPosition += 6;
-      
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.text(`File: ${product.inspectionCertificate.name}`, margin, yPosition);
-      yPosition += 5;
-      if (product.inspectionCertificate.size) {
-        doc.text(`Size: ${(product.inspectionCertificate.size / 1024).toFixed(1)} KB`, margin, yPosition);
-        yPosition += 5;
-      }
+      yPosition += 8;
+      // File과 Size 정보는 표시하지 않음
     }
   }
+
+  // 페이지 하단 우측 끝에 승인 정보 추가
+  const approvalSectionX = pageWidth - margin; // 우측 끝 (margin만큼 여백)
+  
+  // 승인 섹션의 총 높이 계산
+  const signatureHeight = 15; // 사인 이미지 높이 공간 (더 크게)
+  const sectionHeight = 8 + 6 + signatureHeight + 5 + 8 + 8; // 제목(2줄) + 사인 + 구분선 + 날짜 + 여유 공간
+  const approvalSectionY = pageHeight - margin - sectionHeight; // 하단에서 섹션 높이만큼 위로
+  
+  // Approved by (첫 번째 줄)
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text('Approved by', approvalSectionX, approvalSectionY, { align: 'right' });
+  
+  // Quality Representative (두 번째 줄)
+  const qualityRepY = approvalSectionY + 6;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text('Quality Representative', approvalSectionX, qualityRepY, { align: 'right' });
+  
+  // 사인 이미지 추가
+  const signatureY = qualityRepY + 8;
+  try {
+    // 사인 이미지 경로 (public 폴더 기준)
+    const signaturePath = '/quality-sign.png';
+    
+    // 사인 이미지를 base64로 로드
+    const signatureImg = new Image();
+    signatureImg.crossOrigin = 'anonymous';
+    
+    // 사인 이미지 로드 (public 폴더의 이미지 사용)
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('사인 이미지 로드 타임아웃')), 5000);
+      signatureImg.onload = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+      signatureImg.onerror = () => {
+        clearTimeout(timeout);
+        reject(new Error('사인 이미지 로드 실패'));
+      };
+      // Next.js public 폴더의 이미지는 절대 경로로 접근
+      signatureImg.src = signaturePath.startsWith('http') ? signaturePath : `${window.location.origin}${signaturePath}`;
+    });
+
+    // Canvas로 base64 변환
+    const canvas = document.createElement('canvas');
+    canvas.width = signatureImg.width;
+    canvas.height = signatureImg.height;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.drawImage(signatureImg, 0, 0);
+      const signatureBase64 = canvas.toDataURL('image/png');
+      
+      // 사인 크기 설정 (높이 8mm 기준으로 비율 유지)
+      const signatureWidthMM = (signatureImg.width / signatureImg.height) * signatureHeight;
+      
+      // PDF에 사인 추가 (우측 정렬)
+      const signatureX = approvalSectionX - signatureWidthMM; // 우측 정렬
+      doc.addImage(signatureBase64, 'PNG', signatureX, signatureY, signatureWidthMM, signatureHeight);
+    }
+  } catch (error) {
+    console.warn('사인 이미지 로드 실패, 사인 없이 진행:', error);
+  }
+  
+  // 구분선 (길이 줄임: 60mm → 40mm)
+  const lineY = signatureY + signatureHeight + 5;
+  doc.setLineWidth(0.3);
+  doc.line(approvalSectionX - 40, lineY, approvalSectionX, lineY);
+  
+  // Date: 성적서 발행일자
+  const dateY = lineY + 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`Date: ${formData.dateOfIssue || '-'}`, approvalSectionX, dateY, { align: 'right' });
 
   // 표지 다음 페이지부터 각 제품의 INSPECTION CERTIFICATE 이미지를 순서대로 삽입
   console.log('[PDF 생성] Inspection Certificate 이미지 추가 시작, 제품 개수:', products.length);

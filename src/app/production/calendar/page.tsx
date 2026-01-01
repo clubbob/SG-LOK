@@ -408,22 +408,23 @@ function ProductionCalendarContent() {
       
       if (direction === 'prev') {
         newDisplayMonth -= 1;
-        if (newDisplayMonth < 0) {
-          newDisplayMonth = 11;
+        if (newDisplayMonth < 1) {
+          newDisplayMonth = 12;
           newDisplayYear -= 1;
         }
       } else {
         newDisplayMonth += 1;
-        if (newDisplayMonth > 11) {
-          newDisplayMonth = 0;
+        if (newDisplayMonth > 12) {
+          newDisplayMonth = 1;
           newDisplayYear += 1;
         }
       }
       
-      // 한국 시간 기준으로 날짜 설정
-      // 선택한 달의 전 달 1일부터 다음 달 마지막 날까지 (3개월 범위)로 설정하여 차트가 잘리지 않도록 함
-      const start = new Date(newDisplayYear, newDisplayMonth - 1, 1, 0, 0, 0, 0);
-      const end = new Date(newDisplayYear, newDisplayMonth + 2, 0, 23, 59, 59, 999);
+      // 표시할 월의 전 달 1일부터 다음 달 마지막 날까지 (3개월 범위)
+      // newDisplayMonth는 1-12 범위 (표시할 월)
+      // 예: 10월을 표시하려면 start는 9월 1일 (newDisplayMonth - 1 = 10 - 1 = 9 = 9월, 0-based)
+      const start = new Date(newDisplayYear, newDisplayMonth - 1, 1, 0, 0, 0, 0); // 전 달 1일
+      const end = new Date(newDisplayYear, newDisplayMonth + 1, 0, 23, 59, 59, 999); // 다음 달 마지막 날
       return { start, end };
     });
   };

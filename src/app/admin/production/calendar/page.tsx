@@ -83,7 +83,8 @@ export default function AdminProductionCalendarPage() {
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date; end: Date }>(() => {
     const today = new Date();
     // 한국 시간 기준으로 날짜 생성
-    const start = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0, 0); // 이번 달 1일
+    // 선택한 달의 전 달 1일부터 다음 달 마지막 날까지 (3개월 범위)로 설정하여 차트가 잘리지 않도록 함
+    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1, 0, 0, 0, 0); // 전 달 1일
     const end = new Date(today.getFullYear(), today.getMonth() + 2, 0, 23, 59, 59, 999); // 다음 달 마지막 날
     return { start, end };
   });
@@ -330,17 +331,22 @@ export default function AdminProductionCalendarPage() {
       return dateIndex * cellWidth;
     }
     
-    // 날짜를 찾을 수 없으면 0 반환 (디버깅용)
-    console.warn('날짜를 찾을 수 없음:', {
-      target: `${targetYear}-${targetMonth + 1}-${targetDay}`,
-      firstHeader: dateHeaders[0] ? `${normalizeToKST(dateHeaders[0]).getFullYear()}-${normalizeToKST(dateHeaders[0]).getMonth() + 1}-${normalizeToKST(dateHeaders[0]).getDate()}` : 'none',
-      lastHeader: dateHeaders[dateHeaders.length - 1] ? `${normalizeToKST(dateHeaders[dateHeaders.length - 1]).getFullYear()}-${normalizeToKST(dateHeaders[dateHeaders.length - 1]).getMonth() + 1}-${normalizeToKST(dateHeaders[dateHeaders.length - 1]).getDate()}` : 'none',
-    });
+    // 날짜를 찾을 수 없으면 범위 내로 제한
+    const normalizedStart = normalizeToKST(selectedDateRange.start);
+    const normalizedEnd = normalizeToKST(selectedDateRange.end);
     
-    // 날짜를 찾을 수 없으면 기존 방식으로 계산
+    // 범위보다 이전이면 0으로, 이후면 마지막 위치로
+    if (normalizedDate.getTime() < normalizedStart.getTime()) {
+      return 0;
+    }
+    if (normalizedDate.getTime() > normalizedEnd.getTime()) {
+      return containerWidth;
+    }
+    
+    // 범위 내이지만 헤더에 없는 경우 (이론적으로는 발생하지 않아야 함)
     const daysBetween = getDaysBetween(selectedDateRange.start, selectedDateRange.end);
     const daysFromStart = getDaysBetween(selectedDateRange.start, normalizedDate);
-    return (daysFromStart / daysBetween) * containerWidth;
+    return Math.max(0, Math.min(containerWidth, (daysFromStart / daysBetween) * containerWidth));
   };
 
   // 날짜 폭 계산
@@ -348,13 +354,23 @@ export default function AdminProductionCalendarPage() {
     // 시작일과 종료일을 한국 시간 기준으로 정규화
     const normalizedStart = normalizeToKST(start);
     const normalizedEnd = normalizeToKST(end);
+    const normalizedRangeStart = normalizeToKST(selectedDateRange.start);
+    const normalizedRangeEnd = normalizeToKST(selectedDateRange.end);
     
-    const startYear = normalizedStart.getFullYear();
-    const startMonth = normalizedStart.getMonth();
-    const startDay = normalizedStart.getDate();
-    const endYear = normalizedEnd.getFullYear();
-    const endMonth = normalizedEnd.getMonth();
-    const endDay = normalizedEnd.getDate();
+    // 범위를 벗어나는 경우 처리
+    const effectiveStart = normalizedStart.getTime() < normalizedRangeStart.getTime() 
+      ? normalizedRangeStart 
+      : normalizedStart;
+    const effectiveEnd = normalizedEnd.getTime() > normalizedRangeEnd.getTime() 
+      ? normalizedRangeEnd 
+      : normalizedEnd;
+    
+    const startYear = effectiveStart.getFullYear();
+    const startMonth = effectiveStart.getMonth();
+    const startDay = effectiveStart.getDate();
+    const endYear = effectiveEnd.getFullYear();
+    const endMonth = effectiveEnd.getMonth();
+    const endDay = effectiveEnd.getDate();
     
     // 시작일과 종료일의 인덱스 찾기
     let startIndex = -1;
@@ -387,8 +403,8 @@ export default function AdminProductionCalendarPage() {
     
     // 날짜를 찾을 수 없으면 기존 방식으로 계산
     const daysBetween = getDaysBetween(selectedDateRange.start, selectedDateRange.end);
-    const taskDays = getDaysBetween(normalizedStart, normalizedEnd) + 1; // 종료일 포함
-    return (taskDays / daysBetween) * containerWidth;
+    const taskDays = getDaysBetween(effectiveStart, effectiveEnd) + 1; // 종료일 포함
+    return Math.max(cellWidth, Math.min(containerWidth, (taskDays / daysBetween) * containerWidth));
   };
 
   // 검색 필터링 (제품명, 요청자, 상태로 검색)
@@ -430,15 +446,32 @@ export default function AdminProductionCalendarPage() {
   // 이전/다음 달 이동
   const moveMonth = (direction: 'prev' | 'next') => {
     setSelectedDateRange((prev) => {
-      const newStart = new Date(prev.start);
+      // 현재 표시 중인 월 계산 (prev.start는 전 달 1일이므로 +1)
+      const currentDisplayMonth = prev.start.getMonth() + 1;
+      const currentDisplayYear = prev.start.getFullYear();
+      
+      // 새로운 표시 월 계산
+      let newDisplayMonth = currentDisplayMonth;
+      let newDisplayYear = currentDisplayYear;
+      
       if (direction === 'prev') {
-        newStart.setMonth(newStart.getMonth() - 1);
+        newDisplayMonth -= 1;
+        if (newDisplayMonth < 0) {
+          newDisplayMonth = 11;
+          newDisplayYear -= 1;
+        }
       } else {
-        newStart.setMonth(newStart.getMonth() + 1);
+        newDisplayMonth += 1;
+        if (newDisplayMonth > 11) {
+          newDisplayMonth = 0;
+          newDisplayYear += 1;
+        }
       }
+      
       // 한국 시간 기준으로 날짜 설정
-      const start = new Date(newStart.getFullYear(), newStart.getMonth(), 1, 0, 0, 0, 0);
-      const end = new Date(newStart.getFullYear(), newStart.getMonth() + 2, 0, 23, 59, 59, 999);
+      // 선택한 달의 전 달 1일부터 다음 달 마지막 날까지 (3개월 범위)로 설정하여 차트가 잘리지 않도록 함
+      const start = new Date(newDisplayYear, newDisplayMonth - 1, 1, 0, 0, 0, 0);
+      const end = new Date(newDisplayYear, newDisplayMonth + 2, 0, 23, 59, 59, 999);
       return { start, end };
     });
   };

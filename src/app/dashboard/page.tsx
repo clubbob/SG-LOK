@@ -349,7 +349,7 @@ export default function DashboardPage() {
               >
                 <div className="flex items-center justify-between h-full">
                   <div>
-                    <p className="text-xs font-medium text-gray-600">생산 중</p>
+                    <p className="text-xs font-medium text-gray-600">계획 확정</p>
                     <p className="text-2xl font-bold text-gray-900 mt-1">{productionStats.inProgress}</p>
                   </div>
                   <div className="bg-green-100 rounded-full p-2">

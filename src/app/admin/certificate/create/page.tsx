@@ -254,12 +254,13 @@ const generatePDFBlobWithProducts = async (
       ctx.drawImage(logoImg, 0, 0);
       const logoBase64 = canvas.toDataURL('image/png');
       
-      // 로고 크기 설정 (높이 14mm로 설정하여 조금 크게)
-      logoHeightMM = 14;
+      // 로고 크기 설정 (높이 11.2mm로 설정 - 기존 14mm의 80%)
+      logoHeightMM = 11.2;
       logoWidthMM = (logoImg.width / logoImg.height) * logoHeightMM;
       
-      // PDF에 로고 추가 (왼쪽, 타이틀과 같은 높이)
-      const logoY = titleYPosition - (logoHeightMM / 2); // 타이틀 중앙에 맞추기 위해 조정
+      // PDF에 로고 추가 (왼쪽, Green 글씨가 MATERIAL과 같은 높이)
+      // 로고를 위로 올려서 Green 부분이 MATERIAL과 정렬되도록 조정
+      const logoY = titleYPosition - (logoHeightMM / 2) - 2; // 2mm 위로 올림
       doc.addImage(logoBase64, 'PNG', margin, logoY, logoWidthMM, logoHeightMM);
     }
   } catch (error) {
@@ -267,7 +268,7 @@ const generatePDFBlobWithProducts = async (
   }
 
   // 제목: MATERIAL TEST CERTIFICATE (로고 오른쪽에 배치)
-  doc.setFontSize(18);
+  doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
   doc.text('MATERIAL TEST CERTIFICATE', pageWidth / 2, titleYPosition, { align: 'center' });
   yPosition = titleYPosition + 10;
@@ -416,6 +417,42 @@ const generatePDFBlobWithProducts = async (
   certificationLines.forEach((line: string) => {
     doc.text(line, margin, yPosition);
     yPosition += 5;
+  });
+
+  // INSPECTION POINT 섹션 추가
+  yPosition += 10;
+  // 페이지 넘김 체크
+  if (yPosition > pageHeight - 80) {
+    doc.addPage();
+    yPosition = margin + 10;
+  }
+  
+  // INSPECTION POINT 제목
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('INSPECTION POINT', margin, yPosition);
+  yPosition += 8;
+  
+  // INSPECTION POINT 항목들
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  const inspectionPoints = [
+    'Raw Material : Dimension, Chemical Composition',
+    'Manufactured Products : Dimension, Go/No Gauge',
+    'Cleaning : Cleaning Condition',
+    'Marking : Code, Others',
+    'Leak (Valves) : Air Test by Leak Tester',
+    'Packaging : Labeling, Q\'ty'
+  ];
+  
+  inspectionPoints.forEach((point) => {
+    // 페이지 넘김 체크
+    if (yPosition > pageHeight - 20) {
+      doc.addPage();
+      yPosition = margin + 10;
+    }
+    doc.text(`- ${point}`, margin + 5, yPosition);
+    yPosition += 6;
   });
 
   // INSPECTION CERTIFICATE 제목 표시 (제품별) - File/Size 정보는 제외

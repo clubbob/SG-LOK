@@ -330,7 +330,7 @@ export default function CertificateListPage() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">번호</th>
-                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">요청자</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[60px]">요청자</th>
                         <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">요청일</th>
                         <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">고객명</th>
                         <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">발주번호</th>
@@ -342,7 +342,7 @@ export default function CertificateListPage() {
                         <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">완료일</th>
                         <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">첨부</th>
                         <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">비고</th>
-                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">상태</th>
+                        <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[70px]">상태</th>
                         <th className="px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">관리</th>
                       </tr>
                     </thead>
@@ -355,7 +355,7 @@ export default function CertificateListPage() {
                             <td className="px-1 py-2 text-xs text-gray-900 text-center w-12">
                               {rowNumber}
                             </td>
-                            <td className="px-1 py-2 min-w-[80px]">
+                            <td className="px-1 py-2 min-w-[60px]">
                               <div className="text-xs text-gray-900 truncate" title={certificate.userName || '-'}>{certificate.userName || '-'}</div>
                             </td>
                             <td className="px-1 py-2 w-20">
@@ -414,8 +414,8 @@ export default function CertificateListPage() {
                                 <span className="text-gray-400 text-xs">-</span>
                               )}
                             </td>
-                            <td className="px-1 py-2 w-16">
-                              <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${STATUS_COLORS[certificate.status]}`}>
+                            <td className="px-1 py-2 min-w-[70px]">
+                              <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full whitespace-nowrap ${STATUS_COLORS[certificate.status]}`}>
                                 {STATUS_LABELS[certificate.status]}
                               </span>
                             </td>

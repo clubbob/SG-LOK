@@ -492,21 +492,21 @@ export default function AdminCertificatePage() {
               <table className="w-full divide-y divide-gray-200 table-auto">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[80px]">요청자</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">요청일</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[80px]">고객명</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">발주번호</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품명</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품코드</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">수량</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료요청일</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료예정일</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료일</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">첨부</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">비고</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[60px]">상태</th>
-                        <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[180px]">관리</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[60px]">요청자</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">요청일</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[80px]">고객명</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">발주번호</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품명</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품코드</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">수량</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료요청일</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료예정일</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료일</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">첨부</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">비고</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[60px]">상태</th>
+                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[180px]">관리</th>
                       </tr>
                     </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -515,44 +515,44 @@ export default function AdminCertificatePage() {
                     const rowNumber = filteredCertificates.length - absoluteIndex;
                     return (
                       <tr key={certificate.id} className="hover:bg-gray-50">
-                        <td className="px-2 py-2 text-xs text-gray-900 text-center w-12">
+                        <td className="px-[7.68px] py-2 text-xs text-gray-900 text-center w-12">
                           {rowNumber}
                         </td>
-                        <td className="px-2 py-2 min-w-[80px]">
+                        <td className="px-[7.68px] py-2 min-w-[60px]">
                           <div className="text-xs text-gray-900 truncate" title={certificate.userName}>{certificate.userName}</div>
                         </td>
-                        <td className="px-2 py-2 w-20">
+                        <td className="px-[7.68px] py-2 w-20">
                           <div className="text-xs text-gray-900">{formatDateShort(certificate.requestDate)}</div>
                         </td>
-                        <td className="px-2 py-2 min-w-[80px]">
+                        <td className="px-[7.68px] py-2 min-w-[80px]">
                           <div className="text-xs text-gray-900 truncate" title={certificate.customerName || '-'}>{certificate.customerName || '-'}</div>
                         </td>
-                        <td className="px-2 py-2 min-w-[100px]">
+                        <td className="px-[7.68px] py-2 min-w-[100px]">
                           <div className="text-xs text-gray-900 truncate" title={certificate.orderNumber || '-'}>{certificate.orderNumber || '-'}</div>
                         </td>
-                        <td className="px-2 py-2 min-w-[100px]">
+                        <td className="px-[7.68px] py-2 min-w-[100px]">
                           <div className="text-xs font-medium text-gray-900 truncate" title={certificate.productName || '-'}>{certificate.productName || '-'}</div>
                         </td>
-                        <td className="px-2 py-2 min-w-[100px]">
+                        <td className="px-[7.68px] py-2 min-w-[100px]">
                           <div className="text-xs text-gray-900 truncate" title={certificate.productCode || '-'}>{certificate.productCode || '-'}</div>
                         </td>
-                        <td className="px-2 py-2 w-16">
+                        <td className="px-[7.68px] py-2 w-16">
                           <div className="text-xs text-gray-900 text-center">{certificate.quantity ? certificate.quantity.toLocaleString() : '-'}</div>
                         </td>
-                        <td className="px-2 py-2 w-20">
+                        <td className="px-[7.68px] py-2 w-20">
                           <div className="text-xs text-gray-900">{certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-'}</div>
                         </td>
-                        <td className="px-2 py-2 w-20">
+                        <td className="px-[7.68px] py-2 w-20">
                           <div className="text-xs text-gray-900">
                             {certificate.status === 'in_progress' || certificate.status === 'completed' 
                               ? (certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-')
                               : '-'}
                           </div>
                         </td>
-                        <td className="px-2 py-2 w-20">
+                        <td className="px-[7.68px] py-2 w-20">
                           <div className="text-xs text-gray-900">{certificate.completedAt ? formatDateShort(certificate.completedAt) : '-'}</div>
                         </td>
-                        <td className="px-2 py-2 w-16">
+                        <td className="px-[7.68px] py-2 w-16">
                           {certificate.attachments && certificate.attachments.length > 0 ? (
                             <button
                               onClick={() => setAttachmentModalCertificate(certificate)}
@@ -564,7 +564,7 @@ export default function AdminCertificatePage() {
                             <span className="text-gray-400 text-xs">-</span>
                           )}
                         </td>
-                        <td className="px-2 py-2 w-16">
+                        <td className="px-[7.68px] py-2 w-16">
                           {certificate.memo ? (
                             <button
                               onClick={() => setMemoModalCertificate(certificate)}
@@ -577,12 +577,12 @@ export default function AdminCertificatePage() {
                             <span className="text-gray-400 text-xs">-</span>
                           )}
                         </td>
-                        <td className="px-2 py-2 min-w-[60px]">
+                        <td className="px-[7.68px] py-2 min-w-[60px]">
                           <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full whitespace-nowrap ${STATUS_COLORS[certificate.status]}`}>
                             {STATUS_LABELS[certificate.status]}
                           </span>
                         </td>
-                        <td className="px-2 py-2 min-w-[180px]">
+                        <td className="px-[7.68px] py-2 min-w-[180px]">
                           <div className="flex items-center gap-1 whitespace-nowrap">
                             {certificate.status === 'pending' && (
                               <>

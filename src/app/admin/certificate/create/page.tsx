@@ -331,14 +331,26 @@ const generatePDFBlobWithProducts = async (
   doc.text('PRODUCT INFORMATION:', margin, yPosition);
   yPosition += 10;
 
-  // 제품 테이블 헤더
+  // 제품 테이블 헤더 (DESCRIPTION, CODE, MATERIAL을 10% 넓게, MATERIAL을 Q'TY 우측으로)
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.text('No.', margin, yPosition);
-  doc.text('DESCRIPTION', margin + 15, yPosition);
-  doc.text('CODE', margin + 80, yPosition);
-  doc.text("Q'TY", margin + 120, yPosition);
-  doc.text('HEAT NO.', margin + 150, yPosition);
+  const colNo = margin; // 12mm
+  const colDescription = margin + 8; // 20mm (너비: 60.5mm, 10% 증가)
+  const colCode = margin + 70.5; // 82.5mm (너비: 30.8mm, 10% 증가)
+  const colQty = margin + 103.3; // 115.3mm (너비: 14.4mm, 60%로 축소)
+  const colMaterial = margin + 117.7; // 129.7mm
+  // Material, Result, Heat No. 간격을 균등하게 배치
+  const availableWidth = pageWidth - margin - colMaterial; // 사용 가능한 너비
+  const colResult = colMaterial + availableWidth / 3; // 144.5mm
+  const colHeatNo = colMaterial + (availableWidth * 2) / 3; // 171.3mm
+  
+  doc.text('No.', colNo, yPosition);
+  doc.text('DESCRIPTION', colDescription, yPosition);
+  doc.text('CODE', colCode, yPosition);
+  doc.text("Q'TY", colQty, yPosition);
+  doc.text('MATERIAL', colMaterial, yPosition);
+  doc.text('RESULT', colResult, yPosition);
+  doc.text('HEAT NO.', colHeatNo, yPosition);
   yPosition += 8;
   
   // 구분선
@@ -354,18 +366,45 @@ const generatePDFBlobWithProducts = async (
       yPosition = margin + 10;
     }
     
-    doc.text(`${index + 1}.`, margin, yPosition);
+    doc.text(`${index + 1}.`, colNo, yPosition);
     const descriptionText = product.productName || '-';
-    const descriptionLines = doc.splitTextToSize(descriptionText, 50);
+    // DESCRIPTION 열 너비 조정 (10% 넓게 설정하여 한 줄로 표시)
+    const descriptionWidth = colCode - colDescription - 2; // 약 60.5mm (10% 증가)
+    const descriptionLines = doc.splitTextToSize(descriptionText, descriptionWidth);
     let descY = yPosition;
     descriptionLines.forEach((line: string) => {
-      renderKoreanText(doc, line, margin + 15, descY, 10);
+      renderKoreanText(doc, line, colDescription, descY, 10);
       descY += 5;
     });
-    renderKoreanText(doc, product.productCode || '-', margin + 80, yPosition, 10);
-    doc.text((product.quantity || 0).toString(), margin + 120, yPosition);
-    renderKoreanText(doc, product.heatNo || '-', margin + 150, yPosition, 10);
-    yPosition = Math.max(descY, yPosition + 5) + 3;
+    // CODE 열 너비 조정 (10% 넓게 설정하여 한 줄로 표시)
+    const codeWidth = colQty - colCode - 2; // 약 30.8mm (10% 증가)
+    const codeLines = doc.splitTextToSize(product.productCode || '-', codeWidth);
+    let codeY = yPosition;
+    codeLines.forEach((line: string) => {
+      renderKoreanText(doc, line, colCode, codeY, 10);
+      codeY += 5;
+    });
+    // Q'TY 열 (간격 확보)
+    doc.text((product.quantity || 0).toString(), colQty, yPosition);
+    // MATERIAL 열 (Q'TY 우측에 배치, 10% 넓게)
+    const materialWidth = colResult - colMaterial - 2; // 약 19.8mm (10% 증가)
+    const materialLines = doc.splitTextToSize('316/316L', materialWidth);
+    let materialY = yPosition;
+    materialLines.forEach((line: string) => {
+      doc.text(line, colMaterial, materialY);
+      materialY += 5;
+    });
+    // RESULT 열 (더 넓은 공간 확보)
+    doc.text('GOOD', colResult, yPosition);
+    // HEAT NO. 열 너비 조정 (페이지 끝까지, 넓게 설정)
+    const heatNoWidth = (pageWidth - margin) - colHeatNo - 2; // 약 20mm
+    const heatNoLines = doc.splitTextToSize(product.heatNo || '-', heatNoWidth);
+    let heatNoY = yPosition;
+    heatNoLines.forEach((line: string) => {
+      renderKoreanText(doc, line, colHeatNo, heatNoY, 10);
+      heatNoY += 5;
+    });
+    yPosition = Math.max(descY, Math.max(codeY, Math.max(materialY, Math.max(heatNoY, yPosition + 5)))) + 3;
   });
 
   // 기본 인증 문구 추가
@@ -393,7 +432,7 @@ const generatePDFBlobWithProducts = async (
       
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
-      doc.text(`INSPECTION CERTIFICATE (Product ${index + 1}):`, margin, yPosition);
+      doc.text(`INSPECTION CERTIFICATE (No.${index + 1}):`, margin, yPosition);
       yPosition += 8;
       // File과 Size 정보는 표시하지 않음
     }
@@ -639,7 +678,7 @@ const generatePDFBlobWithProducts = async (
         // 제목 표시
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(12);
-        doc.text(`INSPECTION CERTIFICATE (Product ${index + 1})`, imageMargin, yPosition);
+        doc.text(`INSPECTION CERTIFICATE (No.${index + 1})`, imageMargin, yPosition);
         yPosition += 10;
         
         // 이미지 크기 계산 (가로 여백 최소화)

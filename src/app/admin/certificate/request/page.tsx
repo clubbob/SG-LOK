@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
-import { collection, addDoc, Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, doc, getDoc, updateDoc, getDocs, query, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { CertificateType, InquiryAttachment, CertificateAttachment, CertificateProduct } from '@/types';
@@ -67,6 +67,24 @@ function AdminCertificateRequestContent() {
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [certificateStatus, setCertificateStatus] = useState<'pending' | 'in_progress' | 'completed' | 'cancelled' | null>(null);
+  
+  // 제품명 및 제품코드 자동완성
+  const [productNameSuggestions, setProductNameSuggestions] = useState<string[]>([]);
+  const [productCodeSuggestions, setProductCodeSuggestions] = useState<string[]>([]);
+  const [showProductNameSuggestions, setShowProductNameSuggestions] = useState<Record<number, boolean>>({});
+  const [showProductCodeSuggestions, setShowProductCodeSuggestions] = useState<Record<number, boolean>>({});
+  
+  // 고객명 및 발주번호 자동완성
+  const [customerNameSuggestions, setCustomerNameSuggestions] = useState<string[]>([]);
+  const [orderNumberSuggestions, setOrderNumberSuggestions] = useState<string[]>([]);
+  const [showCustomerNameSuggestions, setShowCustomerNameSuggestions] = useState(false);
+  const [showOrderNumberSuggestions, setShowOrderNumberSuggestions] = useState(false);
+  
+  // 제외 목록 (삭제된 항목들)
+  const [excludedProductNames, setExcludedProductNames] = useState<Set<string>>(new Set());
+  const [excludedProductCodes, setExcludedProductCodes] = useState<Set<string>>(new Set());
+  const [excludedCustomerNames, setExcludedCustomerNames] = useState<Set<string>>(new Set());
+  const [excludedOrderNumbers, setExcludedOrderNumbers] = useState<Set<string>>(new Set());
 
   // 관리자 인증 확인
   useEffect(() => {
@@ -169,6 +187,95 @@ function AdminCertificateRequestContent() {
     }
   }, [requestId, router]);
 
+  // 이전에 등록된 제품명 및 제품코드 목록 불러오기
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      try {
+        const certificatesRef = collection(db, 'certificates');
+        const q = query(certificatesRef, limit(500));
+        const querySnapshot = await getDocs(q);
+        
+        const productNames = new Set<string>();
+        const productCodes = new Set<string>();
+        const customerNames = new Set<string>();
+        const orderNumbers = new Set<string>();
+        
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          // products 배열이 있는 경우
+          if (data.products && Array.isArray(data.products)) {
+            data.products.forEach((p: CertificateProduct) => {
+              if (p.productName && typeof p.productName === 'string') {
+                productNames.add(p.productName);
+              }
+              if (p.productCode && typeof p.productCode === 'string') {
+                productCodes.add(p.productCode);
+              }
+            });
+          } else {
+            // 기존 단일 제품 필드 사용
+            if (data.productName && typeof data.productName === 'string') {
+              productNames.add(data.productName);
+            }
+            if (data.productCode && typeof data.productCode === 'string') {
+              productCodes.add(data.productCode);
+            }
+          }
+          
+          // 고객명 및 발주번호
+          if (data.customerName && typeof data.customerName === 'string') {
+            customerNames.add(data.customerName);
+          }
+          if (data.orderNumber && typeof data.orderNumber === 'string') {
+            orderNumbers.add(data.orderNumber);
+          }
+        });
+        
+        setProductNameSuggestions(Array.from(productNames).sort());
+        setProductCodeSuggestions(Array.from(productCodes).sort());
+        setCustomerNameSuggestions(Array.from(customerNames).sort());
+        setOrderNumberSuggestions(Array.from(orderNumbers).sort());
+      } catch (error) {
+        console.error('제품명/제품코드/고객명/발주번호 목록 로드 오류:', error);
+      }
+    };
+
+    if (checkAdminAuth()) {
+      loadSuggestions();
+    }
+  }, []);
+
+  // 제외 목록 로드 (localStorage에서)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const loadExcluded = () => {
+        try {
+          const excludedProductNamesStr = localStorage.getItem('excludedProductNames');
+          const excludedProductCodesStr = localStorage.getItem('excludedProductCodes');
+          const excludedCustomerNamesStr = localStorage.getItem('excludedCustomerNames');
+          const excludedOrderNumbersStr = localStorage.getItem('excludedOrderNumbers');
+          
+          if (excludedProductNamesStr) {
+            setExcludedProductNames(new Set(JSON.parse(excludedProductNamesStr)));
+          }
+          if (excludedProductCodesStr) {
+            setExcludedProductCodes(new Set(JSON.parse(excludedProductCodesStr)));
+          }
+          if (excludedCustomerNamesStr) {
+            setExcludedCustomerNames(new Set(JSON.parse(excludedCustomerNamesStr)));
+          }
+          if (excludedOrderNumbersStr) {
+            setExcludedOrderNumbers(new Set(JSON.parse(excludedOrderNumbersStr)));
+          }
+        } catch (error) {
+          console.error('제외 목록 로드 오류:', error);
+        }
+      };
+      
+      loadExcluded();
+    }
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     // 고객명, 발주번호는 영문을 대문자로 변환
@@ -176,6 +283,14 @@ function AdminCertificateRequestContent() {
     const processedValue = fieldsToUpperCase.includes(name) ? value.toUpperCase() : value;
     
     setFormData(prev => ({ ...prev, [name]: processedValue }));
+    
+    // 고객명 또는 발주번호 입력 시 자동완성 표시
+    if (name === 'customerName') {
+      setShowCustomerNameSuggestions(value.length > 0);
+    } else if (name === 'orderNumber') {
+      setShowOrderNumberSuggestions(value.length > 0);
+    }
+    
     // 필드 에러 초기화
     if (fieldErrors[name]) {
       setFieldErrors(prev => {
@@ -185,6 +300,89 @@ function AdminCertificateRequestContent() {
       });
     }
     if (error) setError('');
+  };
+  
+  // 고객명 선택 핸들러
+  const handleCustomerNameSelect = (customerName: string) => {
+    setFormData(prev => ({ ...prev, customerName: customerName }));
+    setShowCustomerNameSuggestions(false);
+  };
+  
+  // 발주번호 선택 핸들러
+  const handleOrderNumberSelect = (orderNumber: string) => {
+    setFormData(prev => ({ ...prev, orderNumber: orderNumber }));
+    setShowOrderNumberSuggestions(false);
+  };
+  
+  // 필터링된 고객명 제안 목록
+  const getFilteredCustomerNameSuggestions = () => {
+    const filtered = customerNameSuggestions.filter(name =>
+      !excludedCustomerNames.has(name)
+    );
+    
+    // 입력값이 있으면 필터링, 없으면 모든 항목 표시
+    if (formData.customerName.length > 0) {
+      return filtered.filter(name =>
+        name.toLowerCase().includes(formData.customerName.toLowerCase())
+      ).slice(0, 10);
+    }
+    return filtered.slice(0, 10);
+  };
+  
+  // 필터링된 발주번호 제안 목록
+  const getFilteredOrderNumberSuggestions = () => {
+    const filtered = orderNumberSuggestions.filter(number =>
+      !excludedOrderNumbers.has(number)
+    );
+    
+    // 입력값이 있으면 필터링, 없으면 모든 항목 표시
+    if (formData.orderNumber.length > 0) {
+      return filtered.filter(number =>
+        number.toLowerCase().includes(formData.orderNumber.toLowerCase())
+      ).slice(0, 10);
+    }
+    return filtered.slice(0, 10);
+  };
+  
+  // 삭제 핸들러들
+  const handleRemoveProductName = (productName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newExcluded = new Set(excludedProductNames);
+    newExcluded.add(productName);
+    setExcludedProductNames(newExcluded);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('excludedProductNames', JSON.stringify(Array.from(newExcluded)));
+    }
+  };
+  
+  const handleRemoveProductCode = (productCode: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newExcluded = new Set(excludedProductCodes);
+    newExcluded.add(productCode);
+    setExcludedProductCodes(newExcluded);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('excludedProductCodes', JSON.stringify(Array.from(newExcluded)));
+    }
+  };
+  
+  const handleRemoveCustomerName = (customerName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newExcluded = new Set(excludedCustomerNames);
+    newExcluded.add(customerName);
+    setExcludedCustomerNames(newExcluded);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('excludedCustomerNames', JSON.stringify(Array.from(newExcluded)));
+    }
+  };
+  
+  const handleRemoveOrderNumber = (orderNumber: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const newExcluded = new Set(excludedOrderNumbers);
+    newExcluded.add(orderNumber);
+    setExcludedOrderNumbers(newExcluded);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('excludedOrderNumbers', JSON.stringify(Array.from(newExcluded)));
+    }
   };
 
   // 제품 필드 변경 핸들러
@@ -200,6 +398,65 @@ function AdminCertificateRequestContent() {
       }
       return newProducts;
     });
+    
+    // 제품명 또는 제품코드 입력 시 자동완성 표시
+    if (field === 'productName') {
+      setShowProductNameSuggestions(prev => ({ ...prev, [index]: value.length > 0 }));
+    } else if (field === 'productCode') {
+      setShowProductCodeSuggestions(prev => ({ ...prev, [index]: value.length > 0 }));
+    }
+  };
+  
+  // 제품명 선택 핸들러
+  const handleProductNameSelect = (index: number, productName: string) => {
+    setProducts(prev => {
+      const newProducts = [...prev];
+      newProducts[index] = { ...newProducts[index], productName: productName };
+      return newProducts;
+    });
+    setShowProductNameSuggestions(prev => ({ ...prev, [index]: false }));
+  };
+  
+  // 제품코드 선택 핸들러
+  const handleProductCodeSelect = (index: number, productCode: string) => {
+    setProducts(prev => {
+      const newProducts = [...prev];
+      newProducts[index] = { ...newProducts[index], productCode: productCode };
+      return newProducts;
+    });
+    setShowProductCodeSuggestions(prev => ({ ...prev, [index]: false }));
+  };
+  
+  // 필터링된 제품명 제안 목록
+  const getFilteredProductNameSuggestions = (index: number) => {
+    const productName = products[index]?.productName || '';
+    const filtered = productNameSuggestions.filter(name =>
+      !excludedProductNames.has(name)
+    );
+    
+    // 입력값이 있으면 필터링, 없으면 모든 항목 표시
+    if (productName.length > 0) {
+      return filtered.filter(name =>
+        name.toLowerCase().includes(productName.toLowerCase())
+      ).slice(0, 10);
+    }
+    return filtered.slice(0, 10);
+  };
+  
+  // 필터링된 제품코드 제안 목록
+  const getFilteredProductCodeSuggestions = (index: number) => {
+    const productCode = products[index]?.productCode || '';
+    const filtered = productCodeSuggestions.filter(code =>
+      !excludedProductCodes.has(code)
+    );
+    
+    // 입력값이 있으면 필터링, 없으면 모든 항목 표시
+    if (productCode.length > 0) {
+      return filtered.filter(code =>
+        code.toLowerCase().includes(productCode.toLowerCase())
+      ).slice(0, 10);
+    }
+    return filtered.slice(0, 10);
   };
 
   // 제품 추가 (이전 제품 내용 복사)
@@ -218,9 +475,39 @@ function AdminCertificateRequestContent() {
 
   // 제품 삭제
   const handleRemoveProduct = (index: number) => {
-    if (products.length > 1) {
-      setProducts(prev => prev.filter((_, i) => i !== index));
-    }
+    // 제품이 1개만 있어도 삭제 가능하지만, 삭제 후 빈 제품 1개는 유지
+    setProducts(prev => {
+      const newProducts = prev.filter((_, i) => i !== index);
+      // 제품이 모두 삭제되면 빈 제품 1개 추가
+      return newProducts.length > 0 ? newProducts : [{ productName: '', productCode: '', quantity: '' }];
+    });
+    
+    // 자동완성 state 정리 (삭제된 인덱스 이후의 인덱스들을 재정렬)
+    setShowProductNameSuggestions(prev => {
+      const newState: Record<number, boolean> = {};
+      Object.keys(prev).forEach(key => {
+        const oldIndex = parseInt(key);
+        if (oldIndex < index) {
+          newState[oldIndex] = prev[oldIndex];
+        } else if (oldIndex > index) {
+          newState[oldIndex - 1] = prev[oldIndex];
+        }
+      });
+      return newState;
+    });
+    
+    setShowProductCodeSuggestions(prev => {
+      const newState: Record<number, boolean> = {};
+      Object.keys(prev).forEach(key => {
+        const oldIndex = parseInt(key);
+        if (oldIndex < index) {
+          newState[oldIndex] = prev[oldIndex];
+        } else if (oldIndex > index) {
+          newState[oldIndex - 1] = prev[oldIndex];
+        }
+      });
+      return newState;
+    });
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -522,30 +809,126 @@ function AdminCertificateRequestContent() {
 
         <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input
-              id="customerName"
-              name="customerName"
-              type="text"
-              label="고객명 *"
-              required
-              value={formData.customerName}
-              onChange={handleChange}
-              placeholder="고객명을 입력하세요"
-              error={fieldErrors.customerName}
-              style={{ textTransform: 'uppercase' }}
-              disabled={isEditMode}
-            />
-
-            <Input
-              id="orderNumber"
-              name="orderNumber"
-              type="text"
-              label="발주번호"
-              value={formData.orderNumber}
-              onChange={handleChange}
-              placeholder="발주번호를 입력하세요 (선택사항)"
-              style={{ textTransform: 'uppercase' }}
-            />
+            <div className="relative">
+              <Input
+                id="customerName"
+                name="customerName"
+                type="text"
+                label="고객명 *"
+                required
+                value={formData.customerName}
+                onChange={handleChange}
+                onFocus={() => setShowCustomerNameSuggestions(true)}
+                onMouseEnter={() => setShowCustomerNameSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowCustomerNameSuggestions(false), 200)}
+                placeholder="고객명을 입력하거나 선택하세요"
+                error={fieldErrors.customerName}
+                style={{ textTransform: 'uppercase' }}
+                disabled={isEditMode}
+                list="customerNameList"
+              />
+              <datalist id="customerNameList">
+                {customerNameSuggestions.map((name, i) => (
+                  <option key={i} value={name} />
+                ))}
+              </datalist>
+              
+              {/* 커스텀 자동완성 드롭다운 */}
+              {showCustomerNameSuggestions && (
+                <div 
+                  className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
+                  onMouseEnter={() => setShowCustomerNameSuggestions(true)}
+                  onMouseLeave={() => setShowCustomerNameSuggestions(false)}
+                >
+                  {getFilteredCustomerNameSuggestions().map((name, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between px-4 py-2 hover:bg-gray-100 group"
+                    >
+                      <button
+                        type="button"
+                        className="flex-1 text-left focus:outline-none"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleCustomerNameSelect(name);
+                        }}
+                      >
+                        {name}
+                      </button>
+                      <button
+                        type="button"
+                        className="ml-2 text-red-600 hover:text-red-800 hover:bg-red-50 focus:outline-none flex-shrink-0 p-1 rounded"
+                        onMouseDown={(e) => handleRemoveCustomerName(name, e)}
+                        title="삭제"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="relative">
+              <Input
+                id="orderNumber"
+                name="orderNumber"
+                type="text"
+                label="발주번호"
+                value={formData.orderNumber}
+                onChange={handleChange}
+                onFocus={() => setShowOrderNumberSuggestions(true)}
+                onMouseEnter={() => setShowOrderNumberSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowOrderNumberSuggestions(false), 200)}
+                placeholder="발주번호를 입력하거나 선택하세요 (선택사항)"
+                style={{ textTransform: 'uppercase' }}
+                list="orderNumberList"
+              />
+              <datalist id="orderNumberList">
+                {orderNumberSuggestions.map((number, i) => (
+                  <option key={i} value={number} />
+                ))}
+              </datalist>
+              
+              {/* 커스텀 자동완성 드롭다운 */}
+              {showOrderNumberSuggestions && (
+                <div 
+                  className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
+                  onMouseEnter={() => setShowOrderNumberSuggestions(true)}
+                  onMouseLeave={() => setShowOrderNumberSuggestions(false)}
+                >
+                  {getFilteredOrderNumberSuggestions().map((number, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between px-4 py-2 hover:bg-gray-100 group"
+                    >
+                      <button
+                        type="button"
+                        className="flex-1 text-left focus:outline-none"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          handleOrderNumberSelect(number);
+                        }}
+                      >
+                        {number}
+                      </button>
+                      <button
+                        type="button"
+                        className="ml-2 text-red-600 hover:text-red-800 hover:bg-red-50 focus:outline-none flex-shrink-0 p-1 rounded"
+                        onMouseDown={(e) => handleRemoveOrderNumber(number, e)}
+                        title="삭제"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 제품 정보 섹션 */}
@@ -573,38 +956,132 @@ function AdminCertificateRequestContent() {
               <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-4 bg-gray-50">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium text-gray-700">제품 {index + 1}</h3>
-                  {products.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveProduct(index)}
-                      disabled={submitting || uploadingFiles}
-                      className="text-red-600 hover:text-red-800 text-sm font-medium"
-                    >
-                      삭제
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveProduct(index)}
+                    disabled={submitting || uploadingFiles}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    삭제
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Input
-                    type="text"
-                    label="제품명"
-                    value={product.productName}
-                    onChange={(e) => handleProductChange(index, 'productName', e.target.value)}
-                    placeholder="제품명을 입력하세요"
-                    style={{ textTransform: 'uppercase' }}
-                    disabled={submitting || uploadingFiles}
-                  />
+                  <div className="relative">
+                    <Input
+                      type="text"
+                      label="제품명"
+                      value={product.productName}
+                      onChange={(e) => handleProductChange(index, 'productName', e.target.value)}
+                      onFocus={() => setShowProductNameSuggestions(prev => ({ ...prev, [index]: true }))}
+                      onMouseEnter={() => setShowProductNameSuggestions(prev => ({ ...prev, [index]: true }))}
+                      onBlur={() => setTimeout(() => setShowProductNameSuggestions(prev => ({ ...prev, [index]: false })), 200)}
+                      placeholder="제품명을 입력하거나 선택하세요"
+                      style={{ textTransform: 'uppercase' }}
+                      disabled={submitting || uploadingFiles}
+                      list={`productNameList-${index}`}
+                    />
+                    <datalist id={`productNameList-${index}`}>
+                      {productNameSuggestions.map((name, i) => (
+                        <option key={i} value={name} />
+                      ))}
+                    </datalist>
+                    
+                    {/* 커스텀 자동완성 드롭다운 */}
+                    {showProductNameSuggestions[index] && (
+                      <div 
+                        className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
+                        onMouseEnter={() => setShowProductNameSuggestions(prev => ({ ...prev, [index]: true }))}
+                        onMouseLeave={() => setShowProductNameSuggestions(prev => ({ ...prev, [index]: false }))}
+                      >
+                        {getFilteredProductNameSuggestions(index).map((name, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between px-4 py-2 hover:bg-gray-100 group"
+                          >
+                            <button
+                              type="button"
+                              className="flex-1 text-left focus:outline-none"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleProductNameSelect(index, name);
+                              }}
+                            >
+                              {name}
+                            </button>
+                            <button
+                              type="button"
+                              className="ml-2 text-red-600 hover:text-red-800 hover:bg-red-50 focus:outline-none flex-shrink-0 p-1 rounded"
+                              onMouseDown={(e) => handleRemoveProductName(name, e)}
+                              title="삭제"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
-                  <Input
-                    type="text"
-                    label="제품코드"
-                    value={product.productCode}
-                    onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
-                    placeholder="제품코드를 입력하세요"
-                    style={{ textTransform: 'uppercase' }}
-                    disabled={submitting || uploadingFiles}
-                  />
+                  <div className="relative">
+                    <Input
+                      type="text"
+                      label="제품코드"
+                      value={product.productCode}
+                      onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
+                      onFocus={() => setShowProductCodeSuggestions(prev => ({ ...prev, [index]: true }))}
+                      onMouseEnter={() => setShowProductCodeSuggestions(prev => ({ ...prev, [index]: true }))}
+                      onBlur={() => setTimeout(() => setShowProductCodeSuggestions(prev => ({ ...prev, [index]: false })), 200)}
+                      placeholder="제품코드를 입력하거나 선택하세요"
+                      style={{ textTransform: 'uppercase' }}
+                      disabled={submitting || uploadingFiles}
+                      list={`productCodeList-${index}`}
+                    />
+                    <datalist id={`productCodeList-${index}`}>
+                      {productCodeSuggestions.map((code, i) => (
+                        <option key={i} value={code} />
+                      ))}
+                    </datalist>
+                    
+                    {/* 커스텀 자동완성 드롭다운 */}
+                    {showProductCodeSuggestions[index] && (
+                      <div 
+                        className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
+                        onMouseEnter={() => setShowProductCodeSuggestions(prev => ({ ...prev, [index]: true }))}
+                        onMouseLeave={() => setShowProductCodeSuggestions(prev => ({ ...prev, [index]: false }))}
+                      >
+                        {getFilteredProductCodeSuggestions(index).map((code, i) => (
+                          <div
+                            key={i}
+                            className="flex items-center justify-between px-4 py-2 hover:bg-gray-100 group"
+                          >
+                            <button
+                              type="button"
+                              className="flex-1 text-left focus:outline-none"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                handleProductCodeSelect(index, code);
+                              }}
+                            >
+                              {code}
+                            </button>
+                            <button
+                              type="button"
+                              className="ml-2 text-red-600 hover:text-red-800 hover:bg-red-50 focus:outline-none flex-shrink-0 p-1 rounded"
+                              onMouseDown={(e) => handleRemoveProductCode(code, e)}
+                              title="삭제"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                   <Input
                     type="text"

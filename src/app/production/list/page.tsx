@@ -35,7 +35,7 @@ export default function ProductionRequestListPage() {
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [error, setError] = useState('');
   const [displayedRequests, setDisplayedRequests] = useState<ProductionRequest[]>([]);
-  const [itemsPerPage] = useState(10);
+  const itemsPerPage = 10; // 명시적으로 10개로 설정
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string; adminMemo?: string } | null>(null);
@@ -105,8 +105,8 @@ export default function ProductionRequestListPage() {
           });
         });
         
-        // Firestore에서 이미 정렬되어 있지만, 안전을 위해 다시 정렬
-        requestsData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        // 클라이언트 사이드 정렬 (오래된 순으로 정렬)
+        requestsData.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
         
         setRequests(requestsData);
         setLoadingRequests(false);
@@ -129,6 +129,12 @@ export default function ProductionRequestListPage() {
   useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredRequests(requests);
+      // 검색어가 없을 때는 마지막 페이지로 이동 (최신 항목 표시)
+      if (requests.length > 0) {
+        const ITEMS_PER_PAGE = 10;
+        const totalPages = Math.ceil(requests.length / ITEMS_PER_PAGE);
+        setCurrentPage(totalPages > 0 ? totalPages : 1);
+      }
       return;
     }
 
@@ -155,10 +161,18 @@ export default function ProductionRequestListPage() {
 
   // 페이지네이션
   useEffect(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    setDisplayedRequests(filteredRequests.slice(startIndex, endIndex));
-  }, [filteredRequests, currentPage, itemsPerPage]);
+    const ITEMS_PER_PAGE = 10; // 명시적으로 10개로 설정
+    if (filteredRequests.length === 0) {
+      setDisplayedRequests([]);
+      return;
+    }
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const sliced = filteredRequests.slice(startIndex, endIndex);
+    // 각 페이지에서 위쪽이 최신 번호가 되도록 역순으로 뒤집기
+    const reversed = [...sliced].reverse();
+    setDisplayedRequests(reversed);
+  }, [filteredRequests, currentPage]);
 
   const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
 
@@ -400,8 +414,11 @@ export default function ProductionRequestListPage() {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {displayedRequests.map((request, idx) => {
-                        const absoluteIndex = (currentPage - 1) * itemsPerPage + idx;
-                        const rowNumber = filteredRequests.length - absoluteIndex;
+                        const itemsPerPageValue = 10; // 명시적으로 10개로 설정
+                        // 역순으로 표시되므로, idx는 역순 인덱스 (0이 마지막 항목)
+                        const reversedIdx = displayedRequests.length - 1 - idx;
+                        const absoluteIndex = (currentPage - 1) * itemsPerPageValue + reversedIdx;
+                        const rowNumber = absoluteIndex + 1; // 1번부터 시작
                         return (
                         <tr key={request.id} className="hover:bg-gray-50">
                           <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap text-center w-12">

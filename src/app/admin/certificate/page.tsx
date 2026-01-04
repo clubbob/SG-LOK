@@ -65,7 +65,7 @@ export default function AdminCertificatePage() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [displayedCertificates, setDisplayedCertificates] = useState<Certificate[]>([]);
-  const [itemsPerPage] = useState(10);
+  const itemsPerPage = 10; // 명시적으로 10개로 설정
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredCertificates, setFilteredCertificates] = useState<Certificate[]>([]);
@@ -148,8 +148,8 @@ export default function AdminCertificatePage() {
           });
         });
         
-        // 클라이언트 사이드 정렬
-        certificatesData.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        // 클라이언트 사이드 정렬 (오래된 순으로 정렬)
+        certificatesData.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
         
         setCertificates(certificatesData);
         setLoadingCertificates(false);
@@ -169,6 +169,12 @@ export default function AdminCertificatePage() {
   useEffect(() => {
     if (!searchQuery.trim()) {
       setFilteredCertificates(certificates);
+      // 검색어가 없을 때는 마지막 페이지로 이동 (최신 항목 표시)
+      if (certificates.length > 0) {
+        const ITEMS_PER_PAGE = 10;
+        const totalPages = Math.ceil(certificates.length / ITEMS_PER_PAGE);
+        setCurrentPage(totalPages > 0 ? totalPages : 1);
+      }
       return;
     }
 
@@ -208,10 +214,23 @@ export default function AdminCertificatePage() {
 
   // 페이지네이션
   useEffect(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    setDisplayedCertificates(filteredCertificates.slice(startIndex, endIndex));
-  }, [filteredCertificates, currentPage, itemsPerPage]);
+    const ITEMS_PER_PAGE = 10; // 명시적으로 10개로 설정
+    if (filteredCertificates.length === 0) {
+      setDisplayedCertificates([]);
+      return;
+    }
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    // endIndex는 startIndex + ITEMS_PER_PAGE로 계산 (slice는 endIndex를 포함하지 않으므로)
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    // slice는 startIndex부터 endIndex-1까지 반환하므로, endIndex는 포함하지 않음
+    // 예: slice(0, 10)은 인덱스 0~9까지 (총 10개) 반환
+    const sliced = filteredCertificates.slice(startIndex, endIndex);
+    // 각 페이지에서 위쪽이 최신 번호가 되도록 역순으로 뒤집기
+    const reversed = [...sliced].reverse();
+    console.log(`[페이지네이션] ITEMS_PER_PAGE: ${ITEMS_PER_PAGE}, currentPage: ${currentPage}, startIndex: ${startIndex}, endIndex: ${endIndex}, 표시할 항목 수: ${sliced.length}, 전체 항목 수: ${filteredCertificates.length}`);
+    console.log(`[페이지네이션 상세] sliced 배열:`, sliced.map((c, i) => `${i}: ${c.id || 'no-id'}`));
+    setDisplayedCertificates(reversed);
+  }, [filteredCertificates, currentPage]);
 
   // 성공 메시지 자동 제거
   useEffect(() => {
@@ -492,67 +511,70 @@ export default function AdminCertificatePage() {
               <table className="w-full divide-y divide-gray-200 table-auto">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[60px]">요청자</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">요청일</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[80px]">고객명</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">발주번호</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품명</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품코드</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">수량</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료요청일</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료예정일</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료일</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">첨부</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">비고</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[60px]">상태</th>
-                        <th className="px-[7.68px] py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[180px]">관리</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[60px]">요청자</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">요청일</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[80px]">고객명</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">발주번호</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품명</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품코드</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">수량</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료요청일</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료예정일</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">완료일</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">첨부</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-16">비고</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[60px]">상태</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[180px]">관리</th>
                       </tr>
                     </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {displayedCertificates.map((certificate, idx) => {
-                    const absoluteIndex = (currentPage - 1) * itemsPerPage + idx;
-                    const rowNumber = filteredCertificates.length - absoluteIndex;
+                    const itemsPerPageValue = 10; // 명시적으로 10개로 설정
+                    // 역순으로 표시되므로, idx는 역순 인덱스 (0이 마지막 항목)
+                    const reversedIdx = displayedCertificates.length - 1 - idx;
+                    const absoluteIndex = (currentPage - 1) * itemsPerPageValue + reversedIdx;
+                    const rowNumber = absoluteIndex + 1; // 1번부터 시작
                     return (
                       <tr key={certificate.id} className="hover:bg-gray-50">
-                        <td className="px-[7.68px] py-2 text-xs text-gray-900 text-center w-12">
+                        <td className="px-[7.68px] py-3 text-xs text-gray-900 text-center w-12">
                           {rowNumber}
                         </td>
-                        <td className="px-[7.68px] py-2 min-w-[60px]">
+                        <td className="px-[7.68px] py-3 min-w-[60px]">
                           <div className="text-xs text-gray-900 truncate" title={certificate.userName}>{certificate.userName}</div>
                         </td>
-                        <td className="px-[7.68px] py-2 w-20">
+                        <td className="px-[7.68px] py-3 w-20">
                           <div className="text-xs text-gray-900">{formatDateShort(certificate.requestDate)}</div>
                         </td>
-                        <td className="px-[7.68px] py-2 min-w-[80px]">
+                        <td className="px-[7.68px] py-3 min-w-[80px]">
                           <div className="text-xs text-gray-900 truncate" title={certificate.customerName || '-'}>{certificate.customerName || '-'}</div>
                         </td>
-                        <td className="px-[7.68px] py-2 min-w-[100px]">
+                        <td className="px-[7.68px] py-3 min-w-[100px]">
                           <div className="text-xs text-gray-900 truncate" title={certificate.orderNumber || '-'}>{certificate.orderNumber || '-'}</div>
                         </td>
-                        <td className="px-[7.68px] py-2 min-w-[100px]">
+                        <td className="px-[7.68px] py-3 min-w-[100px]">
                           <div className="text-xs font-medium text-gray-900 truncate" title={certificate.productName || '-'}>{certificate.productName || '-'}</div>
                         </td>
-                        <td className="px-[7.68px] py-2 min-w-[100px]">
+                        <td className="px-[7.68px] py-3 min-w-[100px]">
                           <div className="text-xs text-gray-900 truncate" title={certificate.productCode || '-'}>{certificate.productCode || '-'}</div>
                         </td>
-                        <td className="px-[7.68px] py-2 w-16">
+                        <td className="px-[7.68px] py-3 w-16">
                           <div className="text-xs text-gray-900 text-center">{certificate.quantity ? certificate.quantity.toLocaleString() : '-'}</div>
                         </td>
-                        <td className="px-[7.68px] py-2 w-20">
+                        <td className="px-[7.68px] py-3 w-20">
                           <div className="text-xs text-gray-900">{certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-'}</div>
                         </td>
-                        <td className="px-[7.68px] py-2 w-20">
+                        <td className="px-[7.68px] py-3 w-20">
                           <div className="text-xs text-gray-900">
                             {certificate.status === 'in_progress' || certificate.status === 'completed' 
                               ? (certificate.requestedCompletionDate ? formatDateShort(certificate.requestedCompletionDate) : '-')
                               : '-'}
                           </div>
                         </td>
-                        <td className="px-[7.68px] py-2 w-20">
+                        <td className="px-[7.68px] py-3 w-20">
                           <div className="text-xs text-gray-900">{certificate.completedAt ? formatDateShort(certificate.completedAt) : '-'}</div>
                         </td>
-                        <td className="px-[7.68px] py-2 w-16">
+                        <td className="px-[7.68px] py-3 w-16">
                           {certificate.attachments && certificate.attachments.length > 0 ? (
                             <button
                               onClick={() => setAttachmentModalCertificate(certificate)}
@@ -564,7 +586,7 @@ export default function AdminCertificatePage() {
                             <span className="text-gray-400 text-xs">-</span>
                           )}
                         </td>
-                        <td className="px-[7.68px] py-2 w-16">
+                        <td className="px-[7.68px] py-3 w-16">
                           {certificate.memo ? (
                             <button
                               onClick={() => setMemoModalCertificate(certificate)}
@@ -577,12 +599,12 @@ export default function AdminCertificatePage() {
                             <span className="text-gray-400 text-xs">-</span>
                           )}
                         </td>
-                        <td className="px-[7.68px] py-2 min-w-[60px]">
+                        <td className="px-[7.68px] py-3 min-w-[60px]">
                           <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full whitespace-nowrap ${STATUS_COLORS[certificate.status]}`}>
                             {STATUS_LABELS[certificate.status]}
                           </span>
                         </td>
-                        <td className="px-[7.68px] py-2 min-w-[180px]">
+                        <td className="px-[7.68px] py-3 min-w-[180px]">
                           <div className="flex items-center gap-1 whitespace-nowrap">
                             {certificate.status === 'pending' && (
                               <>

@@ -1183,6 +1183,19 @@ function MaterialTestCertificateContent() {
     setProducts(prev => {
       const newProducts = [...prev];
       newProducts[index] = { ...newProducts[index], inspectionCertiFile: file };
+      
+      // 파일이 선택되었을 때 파일 이름의 앞 6자리를 Heat No.에 자동 입력
+      if (file) {
+        const fileName = file.name;
+        // 확장자 제거 (예: .pdf, .jpg 등)
+        const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+        // 앞 6자리 추출
+        const heatNo = nameWithoutExt.substring(0, 6);
+        if (heatNo) {
+          newProducts[index] = { ...newProducts[index], heatNo: heatNo.toUpperCase() };
+        }
+      }
+      
       return newProducts;
     });
   };

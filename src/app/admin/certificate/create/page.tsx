@@ -1191,6 +1191,7 @@ function MaterialTestCertificateContent() {
         productCode: lastProduct?.productCode || '',
         quantity: lastProduct?.quantity || '',
         heatNo: lastProduct?.heatNo || '',
+        material: lastProduct?.material || '',
         inspectionCertiFile: null, // 새 파일은 복사하지 않음
         existingInspectionCerti: null, // 기존 Inspection Certi도 복사하지 않음
       };

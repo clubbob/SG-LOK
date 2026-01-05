@@ -70,6 +70,8 @@ export default function AdminCertificatePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredCertificates, setFilteredCertificates] = useState<Certificate[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeletingMultiple, setIsDeletingMultiple] = useState(false);
   const [approvingCertificate, setApprovingCertificate] = useState<Certificate | null>(null);
   const [approvalForm, setApprovalForm] = useState({
     requestedCompletionDate: '',
@@ -403,6 +405,56 @@ export default function AdminCertificatePage() {
     }
   };
 
+  // 전체 선택/해제
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(displayedCertificates.map(c => c.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  // 개별 선택/해제
+  const handleSelectOne = (id: string, checked: boolean) => {
+    const newSelected = new Set(selectedIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  // 선택된 항목들 일괄 삭제
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) {
+      setError('삭제할 항목을 선택해주세요.');
+      return;
+    }
+
+    if (!confirm(`선택한 ${selectedIds.size}개의 성적서 요청을 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    setIsDeletingMultiple(true);
+    setError('');
+    
+    try {
+      const deletePromises = Array.from(selectedIds).map(id => 
+        deleteDoc(doc(db, 'certificates', id))
+      );
+      await Promise.all(deletePromises);
+      setSelectedIds(new Set());
+      setSuccess(`${selectedIds.size}개의 성적서 요청이 삭제되었습니다.`);
+    } catch (error) {
+      console.error('성적서 일괄 삭제 오류:', error);
+      const firebaseError = error as { code?: string; message?: string };
+      setError(`성적서 삭제에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+    } finally {
+      setIsDeletingMultiple(false);
+    }
+  };
+
   const handleRefresh = () => {
     setLoadingCertificates(true);
     setError('');
@@ -466,9 +518,9 @@ export default function AdminCertificatePage() {
         </div>
       )}
 
-      {/* 검색 입력 필드 */}
-      <div className="mb-6">
-        <div className="relative">
+      {/* 검색 입력 필드 및 선택된 항목 삭제 버튼 */}
+      <div className="mb-6 flex items-center gap-4">
+        <div className="relative flex-1">
           <input
             type="text"
             value={searchQuery}
@@ -495,6 +547,17 @@ export default function AdminCertificatePage() {
             </button>
           )}
         </div>
+        {selectedIds.size > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDeleteSelected}
+            disabled={isDeletingMultiple || updatingStatus || approving}
+            className="text-red-600 border-red-300 hover:bg-red-50"
+          >
+            {isDeletingMultiple ? '삭제 중...' : `선택한 ${selectedIds.size}개 삭제`}
+          </Button>
+        )}
       </div>
 
       {certificates.length === 0 ? (
@@ -511,6 +574,14 @@ export default function AdminCertificatePage() {
               <table className="w-full divide-y divide-gray-200 table-auto">
                     <thead className="bg-gray-50">
                       <tr>
+                        <th className="px-[7.68px] py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">
+                          <input
+                            type="checkbox"
+                            checked={displayedCertificates.length > 0 && displayedCertificates.every(c => selectedIds.has(c.id))}
+                            onChange={(e) => handleSelectAll(e.target.checked)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        </th>
                         <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
                         <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[60px]">요청자</th>
                         <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">요청일</th>
@@ -537,6 +608,15 @@ export default function AdminCertificatePage() {
                     const rowNumber = absoluteIndex + 1; // 1번부터 시작
                     return (
                       <tr key={certificate.id} className="hover:bg-gray-50">
+                        <td className="px-[7.68px] py-3 text-center w-12">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(certificate.id)}
+                            onChange={(e) => handleSelectOne(certificate.id, e.target.checked)}
+                            disabled={deletingId === certificate.id || updatingStatus || approving || isDeletingMultiple}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                        </td>
                         <td className="px-[7.68px] py-3 text-xs text-gray-900 text-center w-12">
                           {rowNumber}
                         </td>
@@ -671,7 +751,6 @@ export default function AdminCertificatePage() {
                                 <span className="text-gray-300 text-xs">|</span>
                               </>
                             )}
-                            <span className="text-gray-300 text-xs">|</span>
                             <button
                               onClick={() => handleDelete(certificate)}
                               className="text-red-600 hover:text-red-800 text-xs font-medium"

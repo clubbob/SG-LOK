@@ -15,8 +15,31 @@ interface JSPDFDocument {
   addImage: (imgData: string, format: string, x: number, y: number, width: number, height: number) => void;
   setFont: (fontName: string, fontStyle?: string) => void;
   setFontSize: (size: number) => void;
-  text: (text: string | string[], x: number, y: number) => void;
+  text: (text: string | string[], x: number, y: number, options?: { align?: string }) => void;
+  getTextWidth: (text: string) => number;
 }
+
+// 날짜 포맷팅 함수: "2026-01-05" -> "January 5, 2026"
+const formatDateLong = (dateStr: string): string => {
+  if (!dateStr || dateStr === '-') return '-';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    
+    const month = months[date.getMonth()];
+    const day = date.getDate();
+    const year = date.getFullYear();
+    
+    return `${month} ${day}, ${year}`;
+  } catch {
+    return dateStr;
+  }
+};
 
 // 한글 텍스트를 Canvas 이미지로 변환하여 PDF에 삽입하는 헬퍼 함수
 const renderKoreanText = (
@@ -118,7 +141,8 @@ const generatePDFBlobWithProducts = async (
 ): Promise<{ blob: Blob; failedImageCount: number }> => {
   // 동적 import로 jsPDF 로드
   const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF();
+  // A4 가로 방향으로 설정
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
   // 한글 폰트 추가 (Noto Sans KR)
   // CDN에서 TTF 폰트 로드
@@ -254,8 +278,8 @@ const generatePDFBlobWithProducts = async (
       ctx.drawImage(logoImg, 0, 0);
       const logoBase64 = canvas.toDataURL('image/png');
       
-      // 로고 크기 설정 (높이 11.2mm로 설정 - 기존 14mm의 80%)
-      logoHeightMM = 11.2;
+      // 로고 크기 설정 (높이 16.8mm로 설정 - 기존 11.2mm의 1.5배)
+      logoHeightMM = 11.2 * 1.5; // 16.8mm
       logoWidthMM = (logoImg.width / logoImg.height) * logoHeightMM;
       
       // PDF에 로고 추가 (왼쪽, Green 글씨가 MATERIAL과 같은 높이)
@@ -268,7 +292,7 @@ const generatePDFBlobWithProducts = async (
   }
 
   // 제목: MATERIAL TEST CERTIFICATE (로고 오른쪽에 배치)
-  doc.setFontSize(20);
+  doc.setFontSize(20 * 1.3); // 26 (기존 20의 1.3배)
   doc.setFont('helvetica', 'bold');
   doc.text('MATERIAL TEST CERTIFICATE', pageWidth / 2, titleYPosition, { align: 'center' });
   yPosition = titleYPosition + 10;
@@ -308,7 +332,7 @@ const generatePDFBlobWithProducts = async (
   doc.setFont('helvetica', 'bold');
   doc.text('DATE OF ISSUE:', rightColumn, rightY);
   doc.setFont('helvetica', 'normal');
-  doc.text(formData.dateOfIssue || '-', rightColumn + 40, rightY);
+  doc.text(formatDateLong(formData.dateOfIssue), rightColumn + 40, rightY);
   leftY += lineHeight;
   rightY += lineHeight;
 
@@ -332,18 +356,18 @@ const generatePDFBlobWithProducts = async (
   doc.text('PRODUCT INFORMATION:', margin, yPosition);
   yPosition += 10;
 
-  // 제품 테이블 헤더 (DESCRIPTION, CODE, MATERIAL을 10% 넓게, MATERIAL을 Q'TY 우측으로)
+  // 제품 테이블 헤더 (DESCRIPTION을 더 넓게, Q'ty, Material, Result, Heat No.는 조금씩 줄임)
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   const colNo = margin; // 12mm
-  const colDescription = margin + 8; // 20mm (너비: 60.5mm, 10% 증가)
-  const colCode = margin + 70.5; // 82.5mm (너비: 30.8mm, 10% 증가)
-  const colQty = margin + 103.3; // 115.3mm (너비: 14.4mm, 60%로 축소)
-  const colMaterial = margin + 117.7; // 129.7mm
-  // Material, Result, Heat No. 간격을 균등하게 배치
+  const colDescription = margin + 8; // 20mm
+  const colCode = margin + 70; // Code를 오른쪽으로 이동하여 Description 공간 확대 (60 -> 70, 10mm 증가)
+  const colQty = margin + 108; // Q'ty를 조금 오른쪽으로 이동 (103.3 -> 108, 4.7mm 증가)
+  const colMaterial = margin + 148; // Material을 조금 오른쪽으로 이동 (143.75 -> 148, 4.25mm 증가)
+  // Material, Result, Heat No. 간격을 동일하게 배치
   const availableWidth = pageWidth - margin - colMaterial; // 사용 가능한 너비
-  const colResult = colMaterial + availableWidth / 3; // 144.5mm
-  const colHeatNo = colMaterial + (availableWidth * 2) / 3; // 171.3mm
+  const colResult = colMaterial + availableWidth / 3; // Material, Result, Heat No. 간격 동일하게
+  const colHeatNo = colMaterial + (availableWidth * 2) / 3; // Material, Result, Heat No. 간격 동일하게
   
   doc.text('No.', colNo, yPosition);
   doc.text('DESCRIPTION', colDescription, yPosition);
@@ -369,8 +393,8 @@ const generatePDFBlobWithProducts = async (
     
     doc.text(`${index + 1}.`, colNo, yPosition);
     const descriptionText = product.productName || '-';
-    // DESCRIPTION 열 너비 조정 (10% 넓게 설정하여 한 줄로 표시)
-    const descriptionWidth = colCode - colDescription - 2; // 약 60.5mm (10% 증가)
+    // DESCRIPTION 열 너비 조정 (더 넓게 설정하여 한 줄로 표시)
+    const descriptionWidth = colCode - colDescription - 2; // 약 60mm (Code 이동으로 10mm 증가)
     const descriptionLines = doc.splitTextToSize(descriptionText, descriptionWidth);
     let descY = yPosition;
     descriptionLines.forEach((line: string) => {
@@ -389,7 +413,8 @@ const generatePDFBlobWithProducts = async (
     doc.text((product.quantity || 0).toString(), colQty, yPosition);
     // MATERIAL 열 (Q'TY 우측에 배치, 10% 넓게)
     const materialWidth = colResult - colMaterial - 2; // 약 19.8mm (10% 증가)
-    const materialLines = doc.splitTextToSize('316/316L', materialWidth);
+    const materialText = product.material || '-'; // Material이 없으면 '-' 표시
+    const materialLines = doc.splitTextToSize(materialText, materialWidth);
     let materialY = yPosition;
     materialLines.forEach((line: string) => {
       doc.text(line, colMaterial, materialY);
@@ -408,8 +433,13 @@ const generatePDFBlobWithProducts = async (
     yPosition = Math.max(descY, Math.max(codeY, Math.max(materialY, Math.max(heatNoY, yPosition + 5)))) + 3;
   });
 
-  // 기본 인증 문구 추가
-  yPosition += 10;
+  // 기본 인증 문구 추가 (INSPECTION POINT 위에 배치)
+  yPosition += 8;
+  // 페이지 넘김 체크
+  if (yPosition > pageHeight - 50) {
+    doc.addPage();
+    yPosition = margin + 10;
+  }
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10); // 9pt → 10pt로 한 단계 크게
   const certificationText = 'We hereby certify that all items are strictly compiled with the purchase order, purchase specification, contractual requirement and applicable code & standard, and are supplied with all qualified verification documents hear with.';
@@ -419,10 +449,10 @@ const generatePDFBlobWithProducts = async (
     yPosition += 5;
   });
 
-  // INSPECTION POINT 섹션 추가
-  yPosition += 10;
-  // 페이지 넘김 체크
-  if (yPosition > pageHeight - 80) {
+  // INSPECTION POINT 섹션 추가 (인증 문구 다음)
+  yPosition += 8;
+  // 페이지 넘김 체크 (INSPECTION POINT가 1페이지에 들어가도록)
+  if (yPosition > pageHeight - 50) {
     doc.addPage();
     yPosition = margin + 10;
   }
@@ -433,7 +463,7 @@ const generatePDFBlobWithProducts = async (
   doc.text('INSPECTION POINT', margin, yPosition);
   yPosition += 8;
   
-  // INSPECTION POINT 항목들
+  // INSPECTION POINT 항목들 (2열로 배치)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   const inspectionPoints = [
@@ -445,57 +475,47 @@ const generatePDFBlobWithProducts = async (
     'Packaging : Labeling, Q\'ty'
   ];
   
-  inspectionPoints.forEach((point) => {
-    // 페이지 넘김 체크
-    if (yPosition > pageHeight - 20) {
-      doc.addPage();
-      yPosition = margin + 10;
-    }
-    doc.text(`- ${point}`, margin + 5, yPosition);
-    yPosition += 6;
-  });
-
-  // INSPECTION CERTIFICATE 제목 표시 (제품별) - File/Size 정보는 제외
-  yPosition += 10;
-  console.log('[PDF 생성] 제품 개수:', products.length);
-  for (let index = 0; index < products.length; index++) {
-    const product = products[index];
-    if (product.inspectionCertificate) {
-      // 표지 페이지에 제목만 표시 (페이지 넘김 체크)
-      if (yPosition > pageHeight - 50) {
-        doc.addPage();
-        yPosition = margin + 10;
-      }
-      
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.text(`INSPECTION CERTIFICATE (No.${index + 1}):`, margin, yPosition);
-      yPosition += 8;
-      // File과 Size 정보는 표시하지 않음
-    }
-  }
-
-  // 페이지 하단 우측 끝에 승인 정보 추가
+  // 2열로 배치하기 위한 설정
+  const columnWidth = (pageWidth - margin * 2 - 20) / 2; // 두 열 너비 (여백과 열 사이 간격 고려)
+  const leftColumnX = margin + 5;
+  const rightColumnX = leftColumnX + columnWidth + (8 * 0.7); // 열 사이 간격 30% 줄임 (8mm -> 5.6mm)
+  const inspectionLineHeight = 6; // 각 항목 간격
+  const startY = yPosition; // 시작 Y 위치 저장
+  
+  // 사인 컨텐츠를 우측 끝에 배치하기 위한 설정
   const approvalSectionX = pageWidth - margin; // 우측 끝 (margin만큼 여백)
+  const signatureHeight = 12; // 사인 이미지 높이 공간
+  const approvalStartY = startY; // INSPECTION POINT 시작 Y와 동일
   
-  // 승인 섹션의 총 높이 계산
-  const signatureHeight = 15; // 사인 이미지 높이 공간 (더 크게)
-  const sectionHeight = 8 + 6 + signatureHeight + 5 + 8 + 8; // 제목(2줄) + 사인 + 구분선 + 날짜 + 여유 공간
-  const approvalSectionY = pageHeight - margin - sectionHeight; // 하단에서 섹션 높이만큼 위로
+  // 왼쪽 열 (0, 1, 2)
+  inspectionPoints.slice(0, 3).forEach((point, index) => {
+    doc.text(`- ${point}`, leftColumnX, startY + (index * inspectionLineHeight));
+  });
   
+  // 오른쪽 열 (3, 4, 5)
+  inspectionPoints.slice(3, 6).forEach((point, index) => {
+    doc.text(`- ${point}`, rightColumnX, startY + (index * inspectionLineHeight));
+  });
+  
+  // 사인 컨텐츠를 INSPECTION POINT 2열 우측 끝에 배치
   // Approved by (첫 번째 줄)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text('Approved by', approvalSectionX, approvalSectionY, { align: 'right' });
+  doc.text('Approved by', approvalSectionX, approvalStartY, { align: 'right' });
   
   // Quality Representative (두 번째 줄)
-  const qualityRepY = approvalSectionY + 6;
+  const qualityRepY = approvalStartY + 6;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.text('Quality Representative', approvalSectionX, qualityRepY, { align: 'right' });
   
+  // "Quality Representative" 텍스트의 시작 위치 계산 (Q 자 시작 위치)
+  const qualityRepText = 'Quality Representative';
+  const qualityRepTextWidth = doc.getTextWidth(qualityRepText);
+  const qualityRepStartX = approvalSectionX - qualityRepTextWidth;
+  
   // 사인 이미지 추가
-  const signatureY = qualityRepY + 8;
+  const signatureY = qualityRepY + 5; // 위 마진 줄임 (8mm -> 5mm)
   try {
     // 사인 이미지 경로 (public 폴더 기준)
     const signaturePath = '/quality-sign.png';
@@ -528,7 +548,7 @@ const generatePDFBlobWithProducts = async (
       ctx.drawImage(signatureImg, 0, 0);
       const signatureBase64 = canvas.toDataURL('image/png');
       
-      // 사인 크기 설정 (높이 8mm 기준으로 비율 유지)
+      // 사인 크기 설정 (높이 기준으로 비율 유지)
       const signatureWidthMM = (signatureImg.width / signatureImg.height) * signatureHeight;
       
       // PDF에 사인 추가 (우측 정렬)
@@ -539,16 +559,19 @@ const generatePDFBlobWithProducts = async (
     console.warn('사인 이미지 로드 실패, 사인 없이 진행:', error);
   }
   
-  // 구분선 (길이 줄임: 60mm → 40mm)
-  const lineY = signatureY + signatureHeight + 5;
+  // 구분선 (Quality Representative의 Q 자 시작 위치와 통일)
+  const lineY = signatureY + signatureHeight + 3; // 아래 마진 줄임 (5mm -> 3mm)
   doc.setLineWidth(0.3);
-  doc.line(approvalSectionX - 40, lineY, approvalSectionX, lineY);
+  doc.line(qualityRepStartX, lineY, approvalSectionX, lineY);
   
   // Date: 성적서 발행일자
-  const dateY = lineY + 8;
+  const dateY = lineY + 6; // 마진 줄임 (8mm -> 6mm)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  doc.text(`Date: ${formData.dateOfIssue || '-'}`, approvalSectionX, dateY, { align: 'right' });
+  doc.text(`Date: ${formatDateLong(formData.dateOfIssue)}`, approvalSectionX, dateY, { align: 'right' });
+  
+  // yPosition을 두 열 중 더 아래쪽으로 설정 (3개 항목이므로)
+  yPosition = Math.max(startY + (3 * inspectionLineHeight), dateY + 8);
 
   // 표지 다음 페이지부터 각 제품의 INSPECTION CERTIFICATE 이미지를 순서대로 삽입
   console.log('[PDF 생성] Inspection Certificate 이미지 추가 시작, 제품 개수:', products.length);
@@ -798,12 +821,6 @@ const generatePDFBlobWithProducts = async (
   
   console.log(`[PDF 생성] 모든 이미지 처리 완료. 총 페이지 수: ${doc.getNumberOfPages()}, 실패한 이미지: ${failedImageCount}개`);
 
-  // 페이지 넘김 체크
-  if (yPosition > pageHeight - 30) {
-    doc.addPage();
-    yPosition = margin;
-  }
-
   // 하단 정보 (DEFAULT 고정 내용은 나중에 추가)
   // 주석 처리: 사용자가 요청할 때까지 표시하지 않음
   // yPosition = pageHeight - 30;
@@ -819,7 +836,8 @@ const generatePDFBlobWithProducts = async (
   } catch (error) {
     console.error('PDF 생성 오류:', error);
     // PDF 생성 실패 시 빈 PDF 반환 (에러 방지)
-    const fallbackDoc = new jsPDF();
+    const { jsPDF: jsPDFFallback } = await import('jspdf');
+    const fallbackDoc = new jsPDFFallback({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     fallbackDoc.text('PDF 생성 중 오류가 발생했습니다.', 20, 20);
     return { blob: fallbackDoc.output('blob'), failedImageCount };
   }
@@ -901,15 +919,16 @@ function MaterialTestCertificateContent() {
     testResult: '',           // TEST RESULT
   });
 
-  // 제품 배열 (제품명, 제품코드, 수량, 히트번호, Inspection Certi)
+  // 제품 배열 (제품명, 제품코드, 수량, 히트번호, Material, Inspection Certi)
   const [products, setProducts] = useState<Array<{
     productName: string;
     productCode: string;
     quantity: string;
     heatNo: string;
+    material: string;
     inspectionCertiFile: File | null;
     existingInspectionCerti: CertificateAttachment | null;
-  }>>([{ productName: '', productCode: '', quantity: '', heatNo: '', inspectionCertiFile: null, existingInspectionCerti: null }]);
+  }>>([{ productName: '', productCode: '', quantity: '', heatNo: '', material: '', inspectionCertiFile: null, existingInspectionCerti: null }]);
 
   // 성적서 번호 자동 생성 함수
   const generateCertificateNo = async (): Promise<string> => {
@@ -993,6 +1012,7 @@ function MaterialTestCertificateContent() {
                   productCode: p.productCode || '',
                   quantity: p.quantity?.toString() || '',
                   heatNo: p.heatNo || '',
+                  material: p.material || '',
                   inspectionCertiFile: null,
                   existingInspectionCerti: p.inspectionCertificate || null,
                 })));
@@ -1003,6 +1023,7 @@ function MaterialTestCertificateContent() {
                   productCode: mtc.code || '',
                   quantity: mtc.quantity?.toString() || '',
                   heatNo: mtc.heatNo || '',
+                  material: mtc.material || '',
                   inspectionCertiFile: null,
                   existingInspectionCerti: mtc.inspectionCertificate || null,
                 }]);
@@ -1025,6 +1046,7 @@ function MaterialTestCertificateContent() {
                   productCode: p.productCode || '',
                   quantity: p.quantity?.toString() || '',
                   heatNo: p.heatNo || '',
+                  material: p.material || '',
                   inspectionCertiFile: null,
                   existingInspectionCerti: p.inspectionCertificate || null,
                 })));
@@ -1035,6 +1057,7 @@ function MaterialTestCertificateContent() {
                   productCode: data.productCode || '',
                   quantity: data.quantity?.toString() || '',
                   heatNo: data.lotNumber || '',
+                  material: '',
                   inspectionCertiFile: null,
                   existingInspectionCerti: null,
                 }]);
@@ -1064,6 +1087,7 @@ function MaterialTestCertificateContent() {
                 productCode: p.productCode || '',
                 quantity: p.quantity?.toString() || '',
                 heatNo: p.heatNo || '',
+                material: p.material || '',
                 inspectionCertiFile: null,
                 existingInspectionCerti: p.inspectionCertificate || null,
               })));
@@ -1074,6 +1098,7 @@ function MaterialTestCertificateContent() {
                 productCode: mtc.code || '',
                 quantity: mtc.quantity?.toString() || '',
                 heatNo: mtc.heatNo || '',
+                material: mtc.material || '',
                 inspectionCertiFile: null,
                 existingInspectionCerti: mtc.inspectionCertificate || null,
               }]);
@@ -1098,6 +1123,7 @@ function MaterialTestCertificateContent() {
                 productCode: p.productCode || '',
                 quantity: p.quantity?.toString() || '',
                 heatNo: p.heatNo || '',
+                material: p.material || '',
                 inspectionCertiFile: null,
                 existingInspectionCerti: p.inspectionCertificate || null,
               })));
@@ -1108,6 +1134,7 @@ function MaterialTestCertificateContent() {
                 productCode: data.productCode || '',
                 quantity: data.quantity?.toString() || '',
                 heatNo: data.lotNumber || '',
+                material: '',
                 inspectionCertiFile: null,
                 existingInspectionCerti: null,
               }]);
@@ -1143,11 +1170,11 @@ function MaterialTestCertificateContent() {
   };
 
   // 제품 필드 변경 핸들러
-  const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity' | 'heatNo', value: string) => {
+  const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity' | 'heatNo' | 'material', value: string) => {
     setProducts(prev => {
       const newProducts = [...prev];
-      // 제품명, 제품코드, 히트번호는 대문자로 변환
-      const uppercaseFields = ['productName', 'productCode', 'heatNo'];
+      // 제품명, 제품코드, 히트번호, Material은 대문자로 변환
+      const uppercaseFields = ['productName', 'productCode', 'heatNo', 'material'];
       const processedValue = uppercaseFields.includes(field) ? value.toUpperCase() : value;
       newProducts[index] = { ...newProducts[index], [field]: processedValue };
       return newProducts;
@@ -1184,16 +1211,57 @@ function MaterialTestCertificateContent() {
       const newProducts = [...prev];
       newProducts[index] = { ...newProducts[index], inspectionCertiFile: file };
       
-      // 파일이 선택되었을 때 파일 이름의 앞 6자리를 Heat No.에 자동 입력
+      // 파일이 선택되었을 때 파일명에서 Material, S로 시작하는 번호와 날짜를 자동 입력
       if (file) {
         const fileName = file.name;
         // 확장자 제거 (예: .pdf, .jpg 등)
         const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
-        // 앞 6자리 추출
-        const heatNo = nameWithoutExt.substring(0, 6);
-        if (heatNo) {
-          newProducts[index] = { ...newProducts[index], heatNo: heatNo.toUpperCase() };
+        // 파일명을 '-'로 분리
+        // 예: 316-11.11-S45123-210225 -> ['316', '11.11', 'S45123', '210225']
+        const parts = nameWithoutExt.split('-');
+        
+        // 첫 번째 부분이 Material (소재 정보)
+        const materialCode = parts[0]?.trim();
+        let material = '';
+        if (materialCode === '316') {
+          material = '316/316L';
+        } else if (materialCode === '304') {
+          material = '304';
+        } else if (materialCode) {
+          material = materialCode; // 다른 소재 코드도 그대로 사용
         }
+        if (material) {
+          newProducts[index] = { ...newProducts[index], material };
+        }
+        
+        // S로 시작하는 부분 찾기 (Heat No.)
+        const heatNoPart = parts.find(part => part.trim().toUpperCase().startsWith('S'));
+        
+        // 마지막 부분이 6자리 숫자면 날짜로 간주 (YYMMDD 형식)
+        const lastPart = parts[parts.length - 1];
+        let dateStr = '';
+        if (lastPart && /^\d{6}$/.test(lastPart)) {
+          // YYMMDD -> YYYY-MM-DD 변환
+          const yy = parseInt(lastPart.substring(0, 2), 10);
+          const mm = lastPart.substring(2, 4);
+          const dd = lastPart.substring(4, 6);
+          // 2000년대 가정 (00-50: 2000-2050, 51-99: 1951-1999)
+          const yyyy = yy <= 50 ? 2000 + yy : 1900 + yy;
+          dateStr = `${yyyy}-${mm}-${dd}`;
+        }
+        
+        if (heatNoPart) {
+          const heatNo = heatNoPart.trim().toUpperCase();
+          // Heat No.와 날짜를 함께 표시
+          const heatNoWithDate = dateStr ? `${heatNo} / ${dateStr}` : heatNo;
+          newProducts[index] = { ...newProducts[index], heatNo: heatNoWithDate };
+        } else {
+          // S로 시작하는 부분을 찾지 못한 경우 Heat No. 초기화
+          newProducts[index] = { ...newProducts[index], heatNo: '' };
+        }
+      } else {
+        // 파일이 없으면 Heat No.와 Material 초기화
+        newProducts[index] = { ...newProducts[index], heatNo: '', material: '' };
       }
       
       return newProducts;
@@ -1298,6 +1366,7 @@ function MaterialTestCertificateContent() {
           productCode: product.productCode.trim() || undefined,
           quantity: product.quantity.trim() ? parseInt(product.quantity, 10) : undefined,
           heatNo: product.heatNo.trim() || undefined,
+          material: product.material.trim() || undefined,
         };
 
         // 제품별 Inspection Certi 파일 업로드
@@ -1432,7 +1501,7 @@ function MaterialTestCertificateContent() {
         // PDF 생성 실패해도 계속 진행 (이미지 로드 실패 등)
         // 빈 PDF 생성
         const { jsPDF } = await import('jspdf');
-        const fallbackDoc = new jsPDF();
+        const fallbackDoc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
         fallbackDoc.text('PDF 생성 중 오류가 발생했습니다.', 20, 20);
         pdfBlob = fallbackDoc.output('blob');
         failedImageCount = productsData.length; // 모든 이미지 실패로 간주
@@ -1767,6 +1836,7 @@ function MaterialTestCertificateContent() {
           productCode: product.productCode.trim() || undefined,
           quantity: product.quantity.trim() ? parseInt(product.quantity, 10) : undefined,
           heatNo: product.heatNo.trim() || undefined,
+          material: product.material.trim() || undefined,
         };
 
         // 새로 선택한 Inspection Certi 파일이 있으면 업로드
@@ -1982,6 +2052,15 @@ function MaterialTestCertificateContent() {
                         onChange={(e) => handleProductChange(index, 'quantity', e.target.value)}
                         placeholder="수량을 입력하세요"
                         pattern="[0-9]*"
+                        disabled={saving || generatingPDF}
+                      />
+
+                      <Input
+                        type="text"
+                        label="MATERIAL (소재)"
+                        value={product.material}
+                        onChange={(e) => handleProductChange(index, 'material', e.target.value)}
+                        placeholder="소재를 입력하세요 (예: 316/316L, 304)"
                         disabled={saving || generatingPDF}
                       />
 

@@ -15,7 +15,7 @@ interface JSPDFDocument {
   addImage: (imgData: string, format: string, x: number, y: number, width: number, height: number) => void;
   setFont: (fontName: string, fontStyle?: string) => void;
   setFontSize: (size: number) => void;
-  text: (text: string | string[], x: number, y: number, options?: { align?: 'center' | 'left' | 'right' | 'justify' }) => any;
+  text: (text: string | string[], x: number, y: number, options?: { align?: 'center' | 'left' | 'right' | 'justify' }) => JSPDFDocument;
   getTextWidth: (text: string) => number;
 }
 

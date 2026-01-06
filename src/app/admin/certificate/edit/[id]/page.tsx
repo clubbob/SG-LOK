@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -139,6 +139,22 @@ const generatePDFBlobWithProducts = async (
   },
   products: CertificateProduct[]
 ): Promise<{ blob: Blob; failedImageCount: number }> => {
+  // 디버깅: PDF 생성 함수에 전달된 formData 확인
+  console.log('[PDF 생성] 함수 호출 시 전달된 formData:', {
+    certificateNo: formData.certificateNo,
+    dateOfIssue: formData.dateOfIssue,
+    customer: formData.customer,
+    poNo: formData.poNo,
+    testResult: formData.testResult,
+  });
+  console.log('[PDF 생성] 함수 호출 시 전달된 products:', products.map((p, idx) => ({
+    index: idx + 1,
+    productName: p.productName,
+    productCode: p.productCode,
+    quantity: p.quantity,
+    heatNo: p.heatNo,
+    material: p.material,
+  })));
   // 동적 import로 jsPDF 로드
   const { jsPDF } = await import('jspdf');
   // A4 가로 방향으로 설정
@@ -457,29 +473,57 @@ const generatePDFBlobWithProducts = async (
     });
     // Q'TY 열 (간격 확보)
     doc.text((product.quantity || 0).toString(), colQty, yPosition);
-    // HEAT NO. 열 먼저 처리하여 줄 수 확인
+    // HEAT NO. 열 처리
     const heatNoWidth = (pageWidth - margin) - colHeatNo - 2; // 약 20mm
     const heatNoText = product.heatNo || '-';
-    const heatNoLines = doc.splitTextToSize(heatNoText, heatNoWidth);
+    
+    // 쉼표로 구분된 Heat No. 값들 (각각 한 줄씩 표시)
+    const heatNoValues = heatNoText.split(',').map(h => h.trim()).filter(h => h.length > 0);
+    
+    // Heat No.를 각 값별로 줄바꿈하여 표시할 수 있도록 처리
+    const heatNoLines: string[] = [];
+    for (const heatNoValue of heatNoValues) {
+      // 각 Heat No. 값이 너무 길면 자동 줄바꿈
+      const wrappedLines = doc.splitTextToSize(heatNoValue, heatNoWidth);
+      heatNoLines.push(...wrappedLines);
+    }
+    
+    // Heat No. 값이 없으면 '-' 표시
+    if (heatNoLines.length === 0) {
+      heatNoLines.push('-');
+    }
+    
+    // 실제 표시될 줄 수 계산 (각 Heat No. 값이 여러 줄로 나뉠 수 있음)
     const heatNoLineCount = heatNoLines.length;
     
     // MATERIAL 열 (Q'TY 우측에 배치, Heat No. 줄 수와 동일하게 맞춤)
     const materialText = product.material || '-'; // Material이 없으면 '-' 표시
     
-    // Heat No. 줄 수에 맞춰 Material 표시
+    // Material 표시
     let materialY = yPosition;
     // 쉼표로 구분된 Material 값들
     const materialValues = materialText.split(',').map(m => m.trim()).filter(m => m.length > 0);
-    const hasMultipleMaterials = materialValues.length > 1;
     
-    // Heat No. 줄 수만큼 Material 표시
-    for (let i = 0; i < heatNoLineCount; i++) {
-      // Material 값이 여러 개면 순환 사용, 하나면 동일한 값 반복
-      const materialValue = hasMultipleMaterials 
-        ? (materialValues[i] || materialValues[materialValues.length - 1])
-        : (materialValues[0] || materialText || '-');
+    // Material 값 개수와 Heat No. 줄 수 중 더 큰 값만큼 표시 (모든 Material이 표시되도록)
+    const materialDisplayCount = Math.max(materialValues.length, heatNoLineCount);
+    
+    for (let i = 0; i < materialDisplayCount; i++) {
+      // Material 값이 있으면 해당 값을 사용, 없으면 마지막 값 반복 또는 '-' 표시
+      let materialValue: string;
+      if (materialValues.length > 0) {
+        if (i < materialValues.length) {
+          // Material 값이 있으면 해당 인덱스의 값 사용
+          materialValue = materialValues[i];
+        } else {
+          // Material 값보다 표시할 줄이 더 많으면 마지막 Material 값 반복
+          materialValue = materialValues[materialValues.length - 1];
+        }
+      } else {
+        // Material 값이 없으면 '-'
+        materialValue = '-';
+      }
       
-      // Material 값을 한 줄로 표시 (Heat No. 각 줄마다 하나씩)
+      // Material 값을 한 줄로 표시
       doc.text(materialValue, colMaterial, materialY);
       materialY += 5;
     }
@@ -1225,13 +1269,11 @@ const collectMaterialAndHeatNo = (
   return { material: materialStr, heatNo: heatNoStr };
 };
 
-function MaterialTestCertificateContent() {
+function MaterialTestCertificateEditContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const certificateId = searchParams.get('id'); // 기존 성적서 요청 ID
-  const copyFromId = searchParams.get('copyFrom'); // 복사할 성적서 ID
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [isCopyMode, setIsCopyMode] = useState(false);
+  const params = useParams();
+  const certificateId = params?.id as string; // 동적 라우트에서 id 가져오기
+  const [isEditMode, setIsEditMode] = useState(true); // 수정 페이지는 항상 수정 모드
   const [loadingCertificate, setLoadingCertificate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatingPDF, setGeneratingPDF] = useState(false);
@@ -1303,13 +1345,11 @@ function MaterialTestCertificateContent() {
     }
   }, [router]);
 
-  // 성적서 요청 정보 불러오기 (certificateId 또는 copyFromId 필수)
+  // 성적서 정보 불러오기 (수정 모드)
   useEffect(() => {
     const loadCertificateData = async () => {
-      const targetId = copyFromId || certificateId;
-      
-      if (!targetId) {
-        setError('성적서 요청 ID가 필요합니다. 성적서 목록에서 성적서 작성 버튼을 클릭해주세요.');
+      if (!certificateId) {
+        setError('성적서 ID가 필요합니다. 성적서 목록에서 수정 버튼을 클릭해주세요.');
         setTimeout(() => {
           router.push('/admin/certificate');
         }, 3000);
@@ -1318,106 +1358,20 @@ function MaterialTestCertificateContent() {
 
       setLoadingCertificate(true);
       try {
-        const certDoc = await getDoc(doc(db, 'certificates', targetId));
-        if (certDoc.exists()) {
-          const data = certDoc.data();
+        const certDoc = await getDoc(doc(db, 'certificates', certificateId));
+        if (!certDoc.exists()) {
+          setError('성적서를 찾을 수 없습니다.');
+          setTimeout(() => {
+            router.push('/admin/certificate');
+          }, 3000);
+          setLoadingCertificate(false);
+          return;
+        }
 
-          // 복사 모드인 경우 (certificateId가 없고 copyFromId만 있는 경우)
-          if (copyFromId && !certificateId) {
-            setIsCopyMode(true);
-            // 기존 성적서 데이터를 복사하되, 새로운 성적서 번호 생성
-            if (data.materialTestCertificate) {
-              const mtc = data.materialTestCertificate;
-              const newCertificateNo = await generateCertificateNo();
-              setFormData({
-                certificateNo: newCertificateNo,
-                dateOfIssue: new Date().toISOString().split('T')[0], // 오늘 날짜로 설정
-                customer: mtc.customer || '',
-                poNo: mtc.poNo || '',
-                testResult: mtc.testResult || '',
-              });
-              
-              // 제품 데이터 로드 (products 배열이 있으면 사용, 없으면 기존 단일 제품 필드 사용)
-              if (mtc.products && Array.isArray(mtc.products) && mtc.products.length > 0) {
-                setProducts(mtc.products.map((p: CertificateProduct) => {
-                  // inspectionCertificates 배열이 있으면 사용, 없으면 inspectionCertificate 단일 객체를 배열로 변환
-                  const productWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
-                  const existingCerts = productWithCerts.inspectionCertificates && Array.isArray(productWithCerts.inspectionCertificates)
-                    ? productWithCerts.inspectionCertificates
-                    : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
-                  // 기존 파일들에서 Material과 Heat No. 수집
-                  const { material, heatNo } = collectMaterialAndHeatNo([], existingCerts);
-                  return {
-                    productName: p.productName || '',
-                    productCode: p.productCode || '',
-                    quantity: p.quantity?.toString() || '',
-                    heatNo: heatNo || p.heatNo || '',
-                    material: material || p.material || '',
-                    inspectionCertiFiles: [],
-                    existingInspectionCertis: existingCerts,
-                  };
-                }));
-              } else if (mtc.description || mtc.code || mtc.quantity) {
-                // 기존 단일 제품 데이터를 배열로 변환
-                // inspectionCertificates 배열이 있으면 사용, 없으면 inspectionCertificate 단일 객체를 배열로 변환
-                const mtcWithCerts = mtc as MaterialTestCertificate & { inspectionCertificates?: CertificateAttachment[] };
-                const existingCerts = mtcWithCerts.inspectionCertificates && Array.isArray(mtcWithCerts.inspectionCertificates)
-                  ? mtcWithCerts.inspectionCertificates
-                  : (mtc.inspectionCertificate ? [mtc.inspectionCertificate] : []);
-                const { material, heatNo } = collectMaterialAndHeatNo([], existingCerts);
-                setProducts([{
-                  productName: mtc.description || '',
-                  productCode: mtc.code || '',
-                  quantity: mtc.quantity?.toString() || '',
-                  heatNo: heatNo || mtc.heatNo || '',
-                  material: material || mtc.material || '',
-                  inspectionCertiFiles: [],
-                  existingInspectionCertis: existingCerts,
-                }]);
-              }
-            } else {
-              // 기존 성적서가 없으면 기본 정보로 자동 채움
-              const newCertificateNo = await generateCertificateNo();
-              setFormData({
-                certificateNo: newCertificateNo,
-                dateOfIssue: new Date().toISOString().split('T')[0],
-                customer: data.customerName || '',
-                poNo: data.orderNumber || '',
-                testResult: '',
-              });
-              
-              // 제품 데이터 로드 (products 배열이 있으면 사용, 없으면 기존 단일 제품 필드 사용)
-              if (data.products && Array.isArray(data.products) && data.products.length > 0) {
-                setProducts(data.products.map((p: CertificateProduct) => ({
-                  productName: p.productName || '',
-                  productCode: p.productCode || '',
-                  quantity: p.quantity?.toString() || '',
-                  heatNo: p.heatNo || '',
-                  material: p.material || '',
-                  inspectionCertiFiles: [],
-                  existingInspectionCertis: p.inspectionCertificate ? [p.inspectionCertificate] : [],
-                })));
-              } else if (data.productName || data.productCode || data.quantity) {
-                // 기존 단일 제품 데이터를 배열로 변환
-                setProducts([{
-                  productName: data.productName || '',
-                  productCode: data.productCode || '',
-                  quantity: data.quantity?.toString() || '',
-                  heatNo: data.lotNumber || '',
-                  material: '',
-                  inspectionCertiFiles: [],
-                  existingInspectionCertis: [],
-                }]);
-              }
-            }
-            setLoadingCertificate(false);
-            return;
-          }
+        const data = certDoc.data();
 
-          // 기존 MATERIAL TEST CERTIFICATE 내용이 있으면 불러오기 (수정 모드)
-          if (data.materialTestCertificate) {
-            setIsEditMode(true);
-            setIsCopyMode(false); // 수정 모드에서는 복사 모드가 아님
+        // 기존 MATERIAL TEST CERTIFICATE 내용이 있으면 불러오기 (수정 모드)
+        if (data.materialTestCertificate) {
             const mtc = data.materialTestCertificate;
             const loadedFormData = {
               certificateNo: mtc.certificateNo || '',
@@ -1554,48 +1508,14 @@ function MaterialTestCertificateContent() {
               inspectionCertiFiles: [], // 비교 시에는 제외
             })));
           } else {
-            // 기존 내용이 없으면 기본 정보로 자동 채움 및 성적서 번호 자동 생성
-            const today = new Date().toISOString().split('T')[0];
-            const autoCertificateNo = await generateCertificateNo();
-            
-            setFormData(prev => ({
-              ...prev,
-              certificateNo: autoCertificateNo,
-              customer: data.customerName || '',
-              poNo: data.orderNumber || '',
-              dateOfIssue: today, // 오늘 날짜
-            }));
-            
-            // 제품 데이터 로드 (products 배열이 있으면 사용, 없으면 기존 단일 제품 필드 사용)
-            if (data.products && Array.isArray(data.products) && data.products.length > 0) {
-              setProducts(data.products.map((p: CertificateProduct) => {
-                const existingCerts = p.inspectionCertificate ? [p.inspectionCertificate] : [];
-                // 기존 파일들에서 Material과 Heat No. 수집
-                const { material, heatNo } = collectMaterialAndHeatNo([], existingCerts);
-                return {
-                  productName: p.productName || '',
-                  productCode: p.productCode || '',
-                  quantity: p.quantity?.toString() || '',
-                  heatNo: heatNo || p.heatNo || '',
-                  material: material || p.material || '',
-                  inspectionCertiFiles: [],
-                  existingInspectionCertis: existingCerts,
-                };
-              }));
-            } else if (data.productName || data.productCode || data.quantity) {
-              // 기존 단일 제품 데이터를 배열로 변환
-              setProducts([{
-                productName: data.productName || '',
-                productCode: data.productCode || '',
-                quantity: data.quantity?.toString() || '',
-                heatNo: data.lotNumber || '',
-                material: '',
-                inspectionCertiFiles: [],
-                existingInspectionCertis: [],
-              }]);
-            }
+            // 수정 페이지에서는 materialTestCertificate가 필수입니다
+            setError('성적서 데이터가 없습니다. 성적서를 먼저 작성해주세요.');
+            setTimeout(() => {
+              router.push('/admin/certificate');
+            }, 3000);
+            setLoadingCertificate(false);
+            return;
           }
-        }
       } catch (error) {
         console.error('성적서 데이터 로드 오류:', error);
         setError('성적서 데이터를 불러오는데 실패했습니다.');
@@ -1604,10 +1524,10 @@ function MaterialTestCertificateContent() {
       }
     };
 
-    if (copyFromId || certificateId) {
+    if (certificateId) {
       loadCertificateData();
     }
-  }, [certificateId, copyFromId, router]);
+  }, [certificateId, router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -1628,10 +1548,19 @@ function MaterialTestCertificateContent() {
   const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity' | 'heatNo' | 'material', value: string) => {
     setProducts(prev => {
       const newProducts = [...prev];
+      const currentProduct = newProducts[index];
       // 제품명, 제품코드, 히트번호, Material은 대문자로 변환
       const uppercaseFields = ['productName', 'productCode', 'heatNo', 'material'];
       const processedValue = uppercaseFields.includes(field) ? value.toUpperCase() : value;
-      newProducts[index] = { ...newProducts[index], [field]: processedValue };
+      
+      // 기존 파일들을 유지하면서 필드만 업데이트
+      newProducts[index] = {
+        ...currentProduct,
+        [field]: processedValue,
+        // inspectionCertiFiles와 existingInspectionCertis를 명시적으로 유지
+        inspectionCertiFiles: currentProduct.inspectionCertiFiles || [],
+        existingInspectionCertis: currentProduct.existingInspectionCertis || [],
+      };
       return newProducts;
     });
   };
@@ -1672,15 +1601,25 @@ function MaterialTestCertificateContent() {
     console.log('[파일 추가] 파일 선택됨:', Array.from(files).map(f => f.name));
     
     setProducts(prev => {
-      const newProducts = [...prev];
+      const newProducts = prev.map((p, i) => ({ ...p })); // 깊은 복사
       const newFiles = Array.from(files);
+      
+      if (!newProducts[index]) {
+        console.error('[파일 추가] 제품 인덱스가 유효하지 않습니다:', index);
+        return prev;
+      }
+      
       const currentProduct = newProducts[index];
       
-      console.log('[파일 추가] 현재 제품의 기존 파일:', currentProduct.inspectionCertiFiles.map(f => f.name));
+      // inspectionCertiFiles가 없으면 빈 배열로 초기화
+      const currentFiles = currentProduct.inspectionCertiFiles || [];
+      console.log('[파일 추가] 현재 제품의 기존 파일:', currentFiles.map(f => f.name));
+      console.log('[파일 추가] 새로 선택한 파일:', newFiles.map(f => f.name));
       
-      // 모든 파일(기존 + 새로 추가된)에서 Material과 Heat No. 수집
-      const updatedFiles = [...currentProduct.inspectionCertiFiles, ...newFiles];
-      const { material, heatNo } = collectMaterialAndHeatNo(updatedFiles, currentProduct.existingInspectionCertis);
+      // 새로 선택한 파일만 추가
+      const updatedFiles = [...currentFiles, ...newFiles];
+      // Material과 Heat No.는 기존 파일과 새 파일 모두에서 수집
+      const { material, heatNo } = collectMaterialAndHeatNo(updatedFiles, currentProduct.existingInspectionCertis || []);
       
       // 한 번에 모든 업데이트 적용
       const updatedProduct = {
@@ -1695,6 +1634,9 @@ function MaterialTestCertificateContent() {
       
       newProducts[index] = updatedProduct;
       
+      console.log('[파일 추가] 상태 업데이트 완료, 반환할 제품 수:', newProducts.length);
+      console.log('[파일 추가] 업데이트된 제품의 파일 수:', newProducts[index].inspectionCertiFiles.length);
+      
       return newProducts;
     });
   };
@@ -1706,8 +1648,8 @@ function MaterialTestCertificateContent() {
       const currentProduct = newProducts[productIndex];
       const updatedFiles = currentProduct.inspectionCertiFiles.filter((_, i) => i !== fileIndex);
       
-      // 남은 파일들에서 Material과 Heat No. 다시 수집
-      const { material, heatNo } = collectMaterialAndHeatNo(updatedFiles, currentProduct.existingInspectionCertis);
+      // 남은 새 파일들에서만 Material과 Heat No. 다시 수집 (기존 파일은 제외하여 중복 방지)
+      const { material, heatNo } = collectMaterialAndHeatNo(updatedFiles, []);
       
       newProducts[productIndex] = {
         ...currentProduct,
@@ -1730,8 +1672,8 @@ function MaterialTestCertificateContent() {
       const currentProduct = newProducts[productIndex];
       const updatedExistingFiles = currentProduct.existingInspectionCertis.filter((_, i) => i !== fileIndex);
       
-      // 남은 파일들에서 Material과 Heat No. 다시 수집
-      const { material, heatNo } = collectMaterialAndHeatNo(currentProduct.inspectionCertiFiles, updatedExistingFiles);
+      // Material과 Heat No.는 새로 선택한 파일에서만 수집 (기존 파일은 제외하여 중복 방지)
+      const { material, heatNo } = collectMaterialAndHeatNo(currentProduct.inspectionCertiFiles, []);
       
       newProducts[productIndex] = { 
         ...currentProduct, 
@@ -1924,14 +1866,8 @@ function MaterialTestCertificateContent() {
   };
 
   const handleSave = async () => {
-    // 복사 모드인 경우 새로운 성적서 요청을 생성해야 함
-    if (isCopyMode && !copyFromId) {
-      setError('복사할 성적서 ID가 없습니다.');
-      return;
-    }
-
-    // 일반 모드인 경우 certificateId가 필요
-    if (!isCopyMode && !certificateId) {
+    // 수정 모드인 경우 certificateId가 필요
+    if (!certificateId) {
       setError('성적서 ID가 없습니다.');
       return;
     }
@@ -1974,22 +1910,103 @@ function MaterialTestCertificateContent() {
         };
 
         // 제품별 Inspection Certi 파일 처리
-        // 모든 제품의 파일이 포함되도록 보장
+        // 기존 파일과 새 파일 모두 포함 (기타 정보 수정 시에도 첨부 파일 유지)
         const inspectionCertificates: CertificateAttachment[] = [];
         
-        // 1. 기존 파일 추가 (각 제품의 기존 파일 독립적으로 포함)
+        // 1. 기존 파일 먼저 추가 (항상 포함)
         if (product.existingInspectionCertis && product.existingInspectionCertis.length > 0) {
           const validExistingFiles = product.existingInspectionCertis.filter(
             cert => cert && cert.url && cert.url.trim().length > 0
           );
           console.log(`[저장] 제품 ${i + 1} 기존 파일 ${validExistingFiles.length}개 추가`);
-          inspectionCertificates.push(...validExistingFiles);
-        } else {
-          console.log(`[저장] 제품 ${i + 1} 기존 파일 없음`);
+          
+          // 기존 파일의 base64 데이터가 없으면 다운로드하여 추가
+          for (const existingFile of validExistingFiles) {
+            try {
+              let base64Data = existingFile.base64;
+              
+              // base64가 없으면 다운로드하여 생성 (타임아웃 및 재시도 포함)
+              if (!base64Data && existingFile.url) {
+                console.log(`[저장] 제품 ${i + 1} 기존 파일 "${existingFile.name}" base64 데이터 생성 중...`);
+                try {
+                  // fetch에 타임아웃 추가 (30초)
+                  const fetchPromise = fetch(existingFile.url, {
+                    method: 'GET',
+                    headers: {
+                      'Accept': 'image/*',
+                    },
+                  });
+                  
+                  const timeoutPromise = new Promise<Response>((_, reject) => {
+                    setTimeout(() => reject(new Error('fetch 타임아웃 (30초)')), 30000);
+                  });
+                  
+                  const response = await Promise.race([fetchPromise, timeoutPromise]);
+                  
+                  if (!response.ok) {
+                    throw new Error(`Failed to fetch: ${response.statusText}`);
+                  }
+                  
+                  const blob = await response.blob();
+                  base64Data = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    const fileReaderTimeout = setTimeout(() => {
+                      reject(new Error('FileReader 타임아웃 (10초)'));
+                    }, 10000);
+                    
+                    reader.onloadend = () => {
+                      clearTimeout(fileReaderTimeout);
+                      if (typeof reader.result === 'string') {
+                        resolve(reader.result);
+                      } else {
+                        reject(new Error('FileReader result is not a string'));
+                      }
+                    };
+                    reader.onerror = () => {
+                      clearTimeout(fileReaderTimeout);
+                      reject(new Error('FileReader error'));
+                    };
+                    reader.readAsDataURL(blob);
+                  });
+                  console.log(`[저장] 제품 ${i + 1} 기존 파일 "${existingFile.name}" base64 데이터 생성 완료`);
+                } catch (fetchError) {
+                  console.warn(`[저장] 제품 ${i + 1} 기존 파일 "${existingFile.name}" base64 데이터 생성 실패, URL로 계속 진행:`, fetchError);
+                  // base64 데이터 생성 실패해도 계속 진행 (PDF 생성 시 URL로 다운로드)
+                  base64Data = undefined;
+                }
+              }
+              
+              // 기존 파일 정보를 그대로 유지 (base64는 선택적)
+              inspectionCertificates.push({
+                name: existingFile.name,
+                url: existingFile.url,
+                storagePath: existingFile.storagePath,
+                size: existingFile.size,
+                type: existingFile.type,
+                uploadedAt: existingFile.uploadedAt,
+                uploadedBy: existingFile.uploadedBy || 'admin',
+                base64: base64Data, // base64 데이터 포함 (없으면 undefined)
+              });
+            } catch (existingFileError) {
+              console.warn(`[저장] 제품 ${i + 1} 기존 파일 "${existingFile.name}" base64 생성 실패, 기존 정보 유지:`, existingFileError);
+              // 오류가 발생해도 기존 파일 정보는 그대로 포함 (base64 없이)
+              inspectionCertificates.push({
+                name: existingFile.name,
+                url: existingFile.url,
+                storagePath: existingFile.storagePath,
+                size: existingFile.size,
+                type: existingFile.type,
+                uploadedAt: existingFile.uploadedAt,
+                uploadedBy: existingFile.uploadedBy || 'admin',
+                base64: existingFile.base64, // 기존 base64가 있으면 유지
+              });
+            }
+          }
         }
         
         // 2. 새로 추가한 파일 업로드 및 추가
         if (product.inspectionCertiFiles && product.inspectionCertiFiles.length > 0) {
+          console.log(`[저장] 제품 ${i + 1} 새 파일 ${product.inspectionCertiFiles.length}개 업로드 시작`);
           for (const file of product.inspectionCertiFiles) {
             try {
               const timestamp = Date.now();
@@ -2031,7 +2048,7 @@ function MaterialTestCertificateContent() {
               throw fileError;
             }
           }
-          console.log(`[저장] 제품 ${i + 1} 새 파일 업로드 완료, 최종 ${inspectionCertificates.length}개`);
+          console.log(`[저장] 제품 ${i + 1} 새 파일 업로드 완료, 현재 총 ${inspectionCertificates.length}개`);
         } else {
           console.log(`[저장] 제품 ${i + 1} 새 파일 없음`);
         }
@@ -2051,11 +2068,19 @@ function MaterialTestCertificateContent() {
 
         productsData.push(productDataWithCerts);
         
-        // 디버깅: 각 제품의 파일 개수 확인
+        // 디버깅: 각 제품의 파일 개수 및 상세 정보 확인
         console.log(`[저장] 제품 ${i + 1} "${product.productName}" 처리 완료:`, {
           inspectionCertificatesCount: inspectionCertificates.length,
           existingFiles: product.existingInspectionCertis?.length || 0,
           newFiles: product.inspectionCertiFiles?.length || 0,
+          files: inspectionCertificates.map((c, idx) => ({
+            index: idx + 1,
+            name: c.name,
+            url: c.url,
+            hasBase64: !!c.base64,
+            base64Length: c.base64 ? c.base64.length : 0,
+            isNew: !!c.base64, // base64가 있으면 새 파일
+          })),
         });
       }
 
@@ -2082,15 +2107,13 @@ function MaterialTestCertificateContent() {
       let createdAt = new Date();
       let createdBy = 'admin';
       
-      if (certificateId && !isCopyMode) {
-        // 기존 성적서 정보 로드
-        const existingDoc = await getDoc(doc(db, 'certificates', certificateId));
-        if (existingDoc.exists()) {
-          const existingData = existingDoc.data();
-          if (existingData.materialTestCertificate) {
-            createdAt = existingData.materialTestCertificate.createdAt?.toDate() || new Date();
-            createdBy = existingData.materialTestCertificate.createdBy || 'admin';
-          }
+      // 기존 성적서 정보 로드
+      const existingDoc = await getDoc(doc(db, 'certificates', certificateId));
+      if (existingDoc.exists()) {
+        const existingData = existingDoc.data();
+        if (existingData.materialTestCertificate) {
+          createdAt = existingData.materialTestCertificate.createdAt?.toDate() || new Date();
+          createdBy = existingData.materialTestCertificate.createdBy || 'admin';
         }
       }
 
@@ -2112,6 +2135,15 @@ function MaterialTestCertificateContent() {
       
       // 항상 새 PDF 생성
       try {
+        // 디버깅: PDF 생성 시 전달되는 formData 확인
+        console.log('[저장] PDF 생성 시 전달되는 formData:', {
+          certificateNo: formData.certificateNo,
+          dateOfIssue: formData.dateOfIssue,
+          customer: formData.customer,
+          poNo: formData.poNo,
+          testResult: formData.testResult,
+        });
+        
         // 디버깅: productsData의 inspectionCertificates 확인
         console.log('[저장] PDF 생성 전 productsData 확인:', productsData.map((p, idx) => {
           const productWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
@@ -2132,6 +2164,31 @@ function MaterialTestCertificateContent() {
             })),
           };
         }));
+        
+        // PDF 생성 전 최종 확인: productsData의 inspectionCertificates가 제대로 포함되어 있는지 확인
+        console.log('[저장] PDF 생성 함수 호출 전 최종 확인:', {
+          totalProducts: productsData.length,
+          products: productsData.map((p, idx) => {
+            const productWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+            const inspectionCerts = productWithCerts.inspectionCertificates && Array.isArray(productWithCerts.inspectionCertificates)
+              ? productWithCerts.inspectionCertificates
+              : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
+            return {
+              productIndex: idx + 1,
+              productName: p.productName,
+              inspectionCertCount: inspectionCerts.length,
+              hasInspectionCertificates: !!productWithCerts.inspectionCertificates,
+              isArray: Array.isArray(productWithCerts.inspectionCertificates),
+              inspectionCerts: inspectionCerts.map((c, certIdx) => ({
+                index: certIdx + 1,
+                name: c.name,
+                url: c.url,
+                hasBase64: !!c.base64,
+                base64Length: c.base64 ? c.base64.length : 0,
+              })),
+            };
+          }),
+        });
         
         const result = await Promise.race([
           generatePDFBlobWithProducts(formData, productsData),
@@ -2158,58 +2215,6 @@ function MaterialTestCertificateContent() {
       }
       const fileName = `MATERIAL_TEST_CERTIFICATE_${formData.certificateNo || 'CERT'}_${new Date().toISOString().split('T')[0]}.pdf`;
       
-      let targetCertificateId: string;
-      
-      // 수정 모드인 경우 (certificateId가 있으면 기존 성적서 업데이트)
-      if (certificateId) {
-        targetCertificateId = certificateId;
-      } 
-      // 복사 모드인 경우 (certificateId가 없고 copyFromId만 있으면 새로운 성적서 생성)
-      else if (isCopyMode && copyFromId) {
-        const sourceDoc = await getDoc(doc(db, 'certificates', copyFromId));
-        if (!sourceDoc.exists()) {
-          setError('원본 성적서를 찾을 수 없습니다.');
-          setSaving(false);
-          return;
-        }
-        
-        const sourceData = sourceDoc.data();
-        // 원본 성적서 요청의 기본 정보를 복사하여 새로운 요청 생성
-        const newCertificateData: Record<string, unknown> = {
-          userId: sourceData.userId || 'admin',
-          userName: sourceData.userName || '관리자',
-          userEmail: sourceData.userEmail || 'admin@sglok.com',
-          customerName: formData.customer.trim(),
-          orderNumber: formData.poNo.trim() || null,
-          products: productsData,
-          certificateType: sourceData.certificateType || 'quality',
-          requestDate: Timestamp.now(),
-          requestedCompletionDate: sourceData.requestedCompletionDate || Timestamp.now(),
-          status: 'completed', // 바로 완료 상태로 설정
-          createdAt: Timestamp.now(),
-          updatedAt: Timestamp.now(),
-          createdBy: 'admin',
-        };
-        
-        // memo 복사
-        if (sourceData.memo) {
-          newCertificateData.memo = sourceData.memo;
-        }
-        
-        // 첨부 파일 복사
-        if (sourceData.attachments) {
-          newCertificateData.attachments = sourceData.attachments;
-        }
-        
-        const newDocRef = await addDoc(collection(db, 'certificates'), newCertificateData);
-        targetCertificateId = newDocRef.id;
-      } else {
-        // certificateId도 없고 copyFromId도 없으면 에러
-        setError('성적서 ID가 없습니다.');
-        setSaving(false);
-        return;
-      }
-      
       // pdfBlob이 null이면 에러
       if (!pdfBlob) {
         setError('PDF 생성에 실패했습니다. 다시 시도해주세요.');
@@ -2220,8 +2225,8 @@ function MaterialTestCertificateContent() {
       // 새 PDF 업로드
       const timestamp = Date.now();
       const randomId = Math.random().toString(36).substring(2, 15);
-      const storageFileName = `certificate_${targetCertificateId}_${timestamp}_${randomId}_${fileName}`;
-      const filePath = `certificates/${targetCertificateId}/${storageFileName}`;
+      const storageFileName = `certificate_${certificateId}_${timestamp}_${randomId}_${fileName}`;
+      const filePath = `certificates/${certificateId}/${storageFileName}`;
       
       const storageRef = ref(storage, filePath);
       await uploadBytes(storageRef, pdfBlob);
@@ -2339,7 +2344,7 @@ function MaterialTestCertificateContent() {
         uploadedAt: Timestamp.fromDate(certificateFile.uploadedAt),
       };
 
-      await updateDoc(doc(db, 'certificates', targetCertificateId), {
+      await updateDoc(doc(db, 'certificates', certificateId), {
         materialTestCertificate: materialTestCertificateForFirestore,
         certificateFile: certificateFileForFirestore,
         status: 'completed',
@@ -2349,18 +2354,13 @@ function MaterialTestCertificateContent() {
         updatedBy: 'admin',
       });
 
-      // 수정 모드인지 복사 모드인지 확인
-      const isActuallyCopyMode = !certificateId && isCopyMode && copyFromId;
-      let successMessage = isActuallyCopyMode 
-        ? '기존 성적서를 복사하여 새로운 성적서가 생성되었습니다.' 
-        : '성적서 내용이 저장되었고 PDF 파일이 업로드되었습니다.';
+      let successMessage = '성적서 내용이 저장되었고 PDF 파일이 업로드되었습니다.';
       
       if (failedImageCount > 0) {
         successMessage += ` (참고: ${failedImageCount}개의 이미지를 PDF에 포함하지 못했습니다. 네트워크 문제일 수 있습니다.)`;
       }
       
       setSuccess(successMessage);
-      setIsEditMode(true);
       
       // 저장 후 상태 업데이트: 새로 업로드한 파일을 existingInspectionCertis로 이동
       setProducts(prev => prev.map((product, index) => {
@@ -2381,10 +2381,10 @@ function MaterialTestCertificateContent() {
         };
       }));
       
-      // 저장 완료 후 2초 뒤 목록 페이지로 이동
+      // 저장 완료 후 성공 메시지를 보여준 뒤 목록 페이지로 이동
       setTimeout(() => {
         router.push('/admin/certificate');
-      }, 2000);
+      }, 1500);
     } catch (error) {
       console.error('저장 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
@@ -2651,8 +2651,8 @@ function MaterialTestCertificateContent() {
   return (
     <div className="p-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">성적서 작성</h1>
-        <p className="text-gray-600 mt-2">성적서 내용을 입력하고 PDF로 생성할 수 있습니다</p>
+        <h1 className="text-2xl font-bold text-gray-900">성적서 수정</h1>
+        <p className="text-gray-600 mt-2">성적서 내용을 수정하고 PDF를 재생성할 수 있습니다</p>
       </div>
 
       {error && (
@@ -2793,62 +2793,33 @@ function MaterialTestCertificateContent() {
                     {/* 제품별 Inspection Certi 첨부 */}
                     <div className="mt-4">
                       <h3 className="text-md font-semibold text-gray-800 mb-3">INSPECTION CERTIFICATE 첨부 (제품 {index + 1})</h3>
-                      {/* 기존 파일 목록 */}
-                      {product.existingInspectionCertis && product.existingInspectionCertis.length > 0 && (
-                        <div className="mb-3 space-y-2">
-                          {product.existingInspectionCertis.map((cert, certIndex) => (
-                            <div key={certIndex} className="p-3 bg-gray-50 rounded-md border border-gray-200">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                  <span className="text-sm text-gray-900">{cert.name}</span>
-                                  {cert.size && (
-                                    <span className="text-xs text-gray-500">
-                                      ({(cert.size / 1024).toFixed(1)} KB)
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <a
-                                    href={cert.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-800 text-sm font-medium underline"
-                                  >
-                                    다운로드
-                                  </a>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteExistingInspectionCerti(index, certIndex)}
-                                    disabled={saving || generatingPDF}
-                                    className="text-red-600 hover:text-red-800 text-sm font-medium underline disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="파일 삭제"
-                                  >
-                                    삭제
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {/* 기존 파일 목록은 수정 페이지에서 숨김 (새 파일만 등록) */}
                       {/* 새로 선택한 파일 목록 */}
                       {product.inspectionCertiFiles && product.inspectionCertiFiles.length > 0 && (
                         <div className="mb-3 space-y-2">
                           {product.inspectionCertiFiles.map((file, fileIndex) => (
                             <div key={fileIndex} className="p-3 bg-blue-50 rounded-md border border-blue-200">
                               <div className="flex items-center justify-between">
-                                <p className="text-sm text-gray-600">선택된 파일: {file.name}</p>
+                                <div className="flex items-center gap-2">
+                                  <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  <span className="text-sm text-gray-900 font-medium">{file.name}</span>
+                                  {file.size && (
+                                    <span className="text-xs text-gray-500">
+                                      ({(file.size / 1024).toFixed(1)} KB)
+                                    </span>
+                                  )}
+                                  <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">새 파일</span>
+                                </div>
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteInspectionCertiFile(index, fileIndex)}
                                   disabled={saving || generatingPDF}
                                   className="text-red-600 hover:text-red-800 text-sm font-medium underline disabled:opacity-50 disabled:cursor-not-allowed"
-                                  title="파일 삭제"
+                                  title="파일 제거"
                                 >
-                                  삭제
+                                  제거
                                 </button>
                               </div>
                             </div>
@@ -2864,8 +2835,16 @@ function MaterialTestCertificateContent() {
                           accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
                           onChange={(e) => {
                             const selectedFiles = e.target.files;
+                            console.log('[파일 입력] onChange 이벤트 발생:', {
+                              index,
+                              fileCount: selectedFiles?.length || 0,
+                              fileNames: selectedFiles ? Array.from(selectedFiles).map(f => f.name) : [],
+                            });
                             if (selectedFiles && selectedFiles.length > 0) {
+                              console.log('[파일 입력] handleProductInspectionCertiAdd 호출');
                               handleProductInspectionCertiAdd(index, selectedFiles);
+                            } else {
+                              console.log('[파일 입력] 선택된 파일이 없습니다.');
                             }
                             // 파일 입력 필드 초기화는 상태 업데이트 후에 수행 (같은 파일 다시 선택 가능하도록)
                             setTimeout(() => {
@@ -2924,7 +2903,7 @@ function MaterialTestCertificateContent() {
   );
 }
 
-export default function MaterialTestCertificatePage() {
+export default function MaterialTestCertificateEditPage() {
   return (
     <Suspense fallback={
       <div className="p-8">
@@ -2936,7 +2915,7 @@ export default function MaterialTestCertificatePage() {
         </div>
       </div>
     }>
-      <MaterialTestCertificateContent />
+      <MaterialTestCertificateEditContent />
     </Suspense>
   );
 }

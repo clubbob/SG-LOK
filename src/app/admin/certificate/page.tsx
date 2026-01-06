@@ -711,7 +711,7 @@ export default function AdminCertificatePage() {
                                 </button>
                                 <span className="text-gray-300 text-xs">|</span>
                                 <button
-                                  onClick={() => router.push(`/admin/certificate/create?id=${certificate.id}`)}
+                                  onClick={() => router.push(`/admin/certificate/edit/${certificate.id}`)}
                                   className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                                   disabled={deletingId === certificate.id || updatingStatus || approving}
                                   title="성적서 수정"

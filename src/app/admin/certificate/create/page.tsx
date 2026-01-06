@@ -1649,7 +1649,8 @@ function MaterialTestCertificateContent() {
     return true;
   };
 
-  // 변경사항 확인 함수
+  // 변경사항 확인 함수 (현재 사용하지 않음 - 수정 모드에서 항상 새 PDF 생성)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const hasChanges = (): boolean => {
     try {
       // 수정 모드가 아니거나 기존 데이터가 없으면 변경사항 있음
@@ -1888,7 +1889,7 @@ function MaterialTestCertificateContent() {
         if (inspectionCertificates.length > 0) {
           productData.inspectionCertificate = inspectionCertificates[0];
           // 배열로도 저장 (향후 확장용)
-          (productData as any).inspectionCertificates = inspectionCertificates;
+          (productData as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] }).inspectionCertificates = inspectionCertificates;
         }
 
         productsData.push(productData);
@@ -2047,8 +2048,9 @@ function MaterialTestCertificateContent() {
           };
           
           // inspectionCertificates 배열이 있으면 저장 (여러 파일 지원)
-          const inspectionCerts = (p as any).inspectionCertificates && Array.isArray((p as any).inspectionCertificates)
-            ? (p as any).inspectionCertificates
+          const productWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          const inspectionCerts = productWithCerts.inspectionCertificates && Array.isArray(productWithCerts.inspectionCertificates)
+            ? productWithCerts.inspectionCertificates
             : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
           
           if (inspectionCerts.length > 0) {
@@ -2170,6 +2172,8 @@ function MaterialTestCertificateContent() {
     }
   };
 
+  // PDF 미리보기 함수 (현재 사용하지 않음)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleGeneratePDF = async () => {
     if (!validateForm()) {
       return;
@@ -2198,7 +2202,7 @@ function MaterialTestCertificateContent() {
 
           if (product.existingInspectionCertis && product.existingInspectionCertis.length > 0) {
             productData.inspectionCertificate = product.existingInspectionCertis[0];
-            (productData as any).inspectionCertificates = product.existingInspectionCertis;
+            (productData as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] }).inspectionCertificates = product.existingInspectionCertis;
           }
 
           productsDataForGenerate.push(productData);
@@ -2368,7 +2372,7 @@ function MaterialTestCertificateContent() {
         
         if (inspectionCertificates.length > 0) {
           productData.inspectionCertificate = inspectionCertificates[0];
-          (productData as any).inspectionCertificates = inspectionCertificates;
+          (productData as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] }).inspectionCertificates = inspectionCertificates;
         }
 
         productsDataForDownload.push(productData);

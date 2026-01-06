@@ -492,19 +492,10 @@ function CertificateRequestContent() {
 
             {/* 제품 정보 섹션 */}
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <label className="block text-sm font-medium text-gray-700">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-4">
                   제품 정보
                 </label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleAddProduct}
-                  disabled={submitting || uploadingFiles}
-                  className="text-sm"
-                >
-                  + 제품 추가
-                </Button>
               </div>
               
               {fieldErrors.products && (
@@ -525,41 +516,60 @@ function CertificateRequestContent() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Input
-                      type="text"
-                      name="productName"
-                      id={`productName-${index}`}
-                      label="제품명"
-                      value={product.productName}
-                      onChange={(e) => handleProductChange(index, 'productName', e.target.value)}
-                      placeholder="제품명을 입력하세요"
-                      style={{ textTransform: 'uppercase' }}
-                      disabled={submitting || uploadingFiles}
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
+                    <div className="md:col-span-3">
+                      <Input
+                        type="text"
+                        name="productName"
+                        id={`productName-${index}`}
+                        label="제품명"
+                        value={product.productName}
+                        onChange={(e) => handleProductChange(index, 'productName', e.target.value)}
+                        placeholder="제품명을 입력하세요"
+                        style={{ textTransform: 'uppercase' }}
+                        disabled={submitting || uploadingFiles}
+                      />
+                    </div>
 
-                    <Input
-                      type="text"
-                      name="productCode"
-                      id={`productCode-${index}`}
-                      label="제품코드"
-                      value={product.productCode}
-                      onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
-                      placeholder="제품코드를 입력하세요"
-                      style={{ textTransform: 'uppercase' }}
-                      disabled={submitting || uploadingFiles}
-                    />
+                    <div className="md:col-span-2">
+                      <Input
+                        type="text"
+                        name="productCode"
+                        id={`productCode-${index}`}
+                        label="제품코드"
+                        value={product.productCode}
+                        onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
+                        placeholder="제품코드를 입력하세요"
+                        style={{ textTransform: 'uppercase' }}
+                        disabled={submitting || uploadingFiles}
+                      />
+                    </div>
 
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      label="수량"
-                      value={product.quantity}
-                      onChange={(e) => handleProductChange(index, 'quantity', e.target.value)}
-                      placeholder="수량을 입력하세요"
-                      pattern="[0-9]*"
-                      disabled={submitting || uploadingFiles}
-                    />
+                    <div className={`flex items-end gap-2 md:col-span-3 ${index === products.length - 1 ? 'justify-end' : ''}`}>
+                      <div className={index === products.length - 1 ? 'flex-[2]' : 'w-full'}>
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          label="수량"
+                          value={product.quantity}
+                          onChange={(e) => handleProductChange(index, 'quantity', e.target.value)}
+                          placeholder="수량을 입력하세요"
+                          pattern="[0-9]*"
+                          disabled={submitting || uploadingFiles}
+                        />
+                      </div>
+                      {index === products.length - 1 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleAddProduct}
+                          disabled={submitting || uploadingFiles}
+                          className="text-sm whitespace-nowrap mb-[2px]"
+                        >
+                          + 제품 추가
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

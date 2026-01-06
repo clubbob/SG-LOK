@@ -13,7 +13,7 @@ import { formatDateShort } from '@/lib/utils';
 
 const STATUS_LABELS: Record<CertificateStatus, string> = {
   pending: '대기',
-  in_progress: '진행중',
+  in_progress: '진행',
   completed: '완료',
   cancelled: '취소',
 };
@@ -351,7 +351,7 @@ export default function CertificateListPage() {
                         <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">번호</th>
                         <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[60px]">요청자</th>
                         <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">요청일</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">고객명</th>
+                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[64px]">고객명</th>
                         <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">발주번호</th>
                         <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">제품명</th>
                         <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">제품코드</th>
@@ -383,7 +383,7 @@ export default function CertificateListPage() {
                             <td className="px-1 py-3 w-20">
                               <div className="text-xs text-gray-900 whitespace-nowrap">{formatDateShort(certificate.requestDate)}</div>
                             </td>
-                            <td className="px-1 py-3 min-w-[80px]">
+                            <td className="px-1 py-3 min-w-[64px]">
                               <div className="text-xs text-gray-900 truncate" title={certificate.customerName || '-'}>{certificate.customerName || '-'}</div>
                             </td>
                             <td className="px-1 py-3 min-w-[100px]">

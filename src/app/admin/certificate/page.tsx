@@ -13,7 +13,7 @@ const ADMIN_SESSION_KEY = 'admin_session';
 
 const STATUS_LABELS: Record<CertificateStatus, string> = {
   pending: '대기',
-  in_progress: '진행중',
+  in_progress: '진행',
   completed: '완료',
   cancelled: '취소',
 };
@@ -585,7 +585,7 @@ export default function AdminCertificatePage() {
                         <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
                         <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[60px]">요청자</th>
                         <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-20">요청일</th>
-                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[80px]">고객명</th>
+                        <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[38px]">고객명</th>
                         <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">발주번호</th>
                         <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품명</th>
                         <th className="px-[7.68px] py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap min-w-[100px]">제품코드</th>
@@ -626,7 +626,7 @@ export default function AdminCertificatePage() {
                         <td className="px-[7.68px] py-3 w-20">
                           <div className="text-xs text-gray-900">{formatDateShort(certificate.requestDate)}</div>
                         </td>
-                        <td className="px-[7.68px] py-3 min-w-[80px]">
+                        <td className="px-[7.68px] py-3 min-w-[38px]">
                           <div className="text-xs text-gray-900 truncate" title={certificate.customerName || '-'}>{certificate.customerName || '-'}</div>
                         </td>
                         <td className="px-[7.68px] py-3 min-w-[100px]">
@@ -710,6 +710,15 @@ export default function AdminCertificatePage() {
                                   다운로드
                                 </button>
                                 <span className="text-gray-300 text-xs">|</span>
+                                <button
+                                  onClick={() => router.push(`/admin/certificate/create?id=${certificate.id}`)}
+                                  className="text-blue-600 hover:text-blue-800 text-xs font-medium"
+                                  disabled={deletingId === certificate.id || updatingStatus || approving}
+                                  title="성적서 수정"
+                                >
+                                  수정
+                                </button>
+                                <span className="text-gray-300 text-xs">|</span>
                               </>
                             )}
                             {certificate.status !== 'pending' && !certificate.certificateFile && (
@@ -721,19 +730,6 @@ export default function AdminCertificatePage() {
                                   title="성적서 작성"
                                 >
                                   성적서 작성
-                                </button>
-                                <span className="text-gray-300 text-xs">|</span>
-                              </>
-                            )}
-                            {certificate.certificateFile && certificate.status !== 'completed' && (
-                              <>
-                                <button
-                                  onClick={() => router.push(`/admin/certificate/create?id=${certificate.id}`)}
-                                  className="text-blue-600 hover:text-blue-800 text-xs font-medium"
-                                  disabled={deletingId === certificate.id || updatingStatus || approving}
-                                  title="성적서 수정"
-                                >
-                                  수정
                                 </button>
                                 <span className="text-gray-300 text-xs">|</span>
                               </>
@@ -906,7 +902,7 @@ export default function AdminCertificatePage() {
                       disabled={updatingStatus}
                     >
                       <option value="pending">대기</option>
-                      <option value="in_progress">진행중</option>
+                      <option value="in_progress">진행</option>
                       <option value="completed">완료</option>
                       <option value="cancelled">취소</option>
                     </select>

@@ -464,7 +464,6 @@ const generatePDFBlobWithProducts = async (
     const heatNoLineCount = heatNoLines.length;
     
     // MATERIAL 열 (Q'TY 우측에 배치, Heat No. 줄 수와 동일하게 맞춤)
-    const materialWidth = colResult - colMaterial - 2; // 약 19.8mm
     const materialText = product.material || '-'; // Material이 없으면 '-' 표시
     
     // Heat No. 줄 수에 맞춰 Material 표시
@@ -643,8 +642,10 @@ const generatePDFBlobWithProducts = async (
   for (let index = 0; index < products.length; index++) {
     const product = products[index];
     // 여러 파일 지원: inspectionCertificates 배열이 있으면 사용, 없으면 inspectionCertificate 단일 객체를 배열로 변환
-    const inspectionCerts = (product as any).inspectionCertificates || 
-                            (product.inspectionCertificate ? [product.inspectionCertificate] : []);
+    const productWithCerts = product as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+    const inspectionCerts = productWithCerts.inspectionCertificates && Array.isArray(productWithCerts.inspectionCertificates)
+      ? productWithCerts.inspectionCertificates
+      : (product.inspectionCertificate ? [product.inspectionCertificate] : []);
     
     console.log(`[PDF 생성] 제품 ${index + 1} 처리 중:`, {
       inspectionCertCount: inspectionCerts.length,

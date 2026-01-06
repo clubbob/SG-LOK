@@ -1266,8 +1266,9 @@ function MaterialTestCertificateContent() {
               if (mtc.products && Array.isArray(mtc.products) && mtc.products.length > 0) {
                 setProducts(mtc.products.map((p: CertificateProduct) => {
                   // inspectionCertificates 배열이 있으면 사용, 없으면 inspectionCertificate 단일 객체를 배열로 변환
-                  const existingCerts = (p as any).inspectionCertificates && Array.isArray((p as any).inspectionCertificates)
-                    ? (p as any).inspectionCertificates
+                  const productWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+                  const existingCerts = productWithCerts.inspectionCertificates && Array.isArray(productWithCerts.inspectionCertificates)
+                    ? productWithCerts.inspectionCertificates
                     : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
                   // 기존 파일들에서 Material과 Heat No. 수집
                   const { material, heatNo } = collectMaterialAndHeatNo([], existingCerts);
@@ -1284,8 +1285,9 @@ function MaterialTestCertificateContent() {
               } else if (mtc.description || mtc.code || mtc.quantity) {
                 // 기존 단일 제품 데이터를 배열로 변환
                 // inspectionCertificates 배열이 있으면 사용, 없으면 inspectionCertificate 단일 객체를 배열로 변환
-                const existingCerts = (mtc as any).inspectionCertificates && Array.isArray((mtc as any).inspectionCertificates)
-                  ? (mtc as any).inspectionCertificates
+                const mtcWithCerts = mtc as MaterialTestCertificate & { inspectionCertificates?: CertificateAttachment[] };
+                const existingCerts = mtcWithCerts.inspectionCertificates && Array.isArray(mtcWithCerts.inspectionCertificates)
+                  ? mtcWithCerts.inspectionCertificates
                   : (mtc.inspectionCertificate ? [mtc.inspectionCertificate] : []);
                 const { material, heatNo } = collectMaterialAndHeatNo([], existingCerts);
                 setProducts([{
@@ -1358,8 +1360,9 @@ function MaterialTestCertificateContent() {
             if (mtc.products && Array.isArray(mtc.products) && mtc.products.length > 0) {
               loadedProducts = mtc.products.map((p: CertificateProduct) => {
                 // inspectionCertificates 배열이 있으면 사용, 없으면 inspectionCertificate 단일 객체를 배열로 변환
-                const existingCerts = (p as any).inspectionCertificates && Array.isArray((p as any).inspectionCertificates)
-                  ? (p as any).inspectionCertificates
+                const productWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+                const existingCerts = productWithCerts.inspectionCertificates && Array.isArray(productWithCerts.inspectionCertificates)
+                  ? productWithCerts.inspectionCertificates
                   : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
                 // 기존 파일들에서 Material과 Heat No. 수집
                 const { material, heatNo } = collectMaterialAndHeatNo([], existingCerts);
@@ -1376,8 +1379,9 @@ function MaterialTestCertificateContent() {
             } else if (mtc.description || mtc.code || mtc.quantity) {
               // 기존 단일 제품 데이터를 배열로 변환
               // inspectionCertificates 배열이 있으면 사용, 없으면 inspectionCertificate 단일 객체를 배열로 변환
-              const existingCerts = (mtc as any).inspectionCertificates && Array.isArray((mtc as any).inspectionCertificates)
-                ? (mtc as any).inspectionCertificates
+              const mtcWithCerts = mtc as MaterialTestCertificate & { inspectionCertificates?: CertificateAttachment[] };
+              const existingCerts = mtcWithCerts.inspectionCertificates && Array.isArray(mtcWithCerts.inspectionCertificates)
+                ? mtcWithCerts.inspectionCertificates
                 : (mtc.inspectionCertificate ? [mtc.inspectionCertificate] : []);
               const { material, heatNo } = collectMaterialAndHeatNo([], existingCerts);
               loadedProducts = [{

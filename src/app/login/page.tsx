@@ -62,12 +62,6 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    // 이메일이 "admin"이면 관리자 로그인 페이지로 리다이렉트
-    if (formData.email.trim().toLowerCase() === 'admin') {
-      router.push('/admin/login');
-      return;
-    }
-
     try {
       const credential = await signInWithEmailAndPassword(auth, formData.email, formData.password);
 

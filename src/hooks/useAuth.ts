@@ -9,7 +9,7 @@ import { User as UserType } from '@/types';
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserType | null>(null);
-  const [loading, setLoading] = useState(false); // 초기값을 false로 설정하여 처음 접속 시 로그아웃 상태로 표시
+  const [loading, setLoading] = useState(true); // 초기값을 true로 설정하여 인증 상태 확인이 완료될 때까지 로딩 상태 유지
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {

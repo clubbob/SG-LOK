@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
 import { collection, query, getDocs, doc, updateDoc, Timestamp, onSnapshot, deleteDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { Certificate, CertificateStatus, CertificateType, CertificateAttachment } from '@/types';
 import { formatDateShort } from '@/lib/utils';
@@ -247,9 +247,48 @@ export default function AdminCertificatePage() {
 
   const totalPages = Math.ceil(filteredCertificates.length / itemsPerPage);
 
-  const handleDownload = (certificate: Certificate) => {
-    if (certificate.certificateFile?.url) {
-      window.open(certificate.certificateFile.url, '_blank');
+  const handleDownload = async (certificate: Certificate) => {
+    if (!certificate.certificateFile?.url) {
+      return;
+    }
+
+    try {
+      // CERTIFICATE NO. 가져오기
+      const certificateNo = certificate.materialTestCertificate?.certificateNo || 'CERT';
+      
+      // CERTIFICATE NO.를 기반으로 파일명 생성 (특수문자 제거)
+      const sanitizedCertificateNo = certificateNo.replace(/[^a-zA-Z0-9]/g, '_');
+      const fileName = `MATERIAL_TEST_CERTIFICATE_${sanitizedCertificateNo}.pdf`;
+      
+      // storagePath가 있으면 getDownloadURL을 사용하여 새로운 다운로드 URL 가져오기
+      let downloadUrl = certificate.certificateFile.url;
+      if (certificate.certificateFile.storagePath) {
+        try {
+          const storageRef = ref(storage, certificate.certificateFile.storagePath);
+          downloadUrl = await getDownloadURL(storageRef);
+        } catch (urlError) {
+          console.warn('getDownloadURL 실패, 기존 URL 사용:', urlError);
+          // 기존 URL 사용
+        }
+      }
+      
+      // CORS 문제를 피하기 위해 fetch를 사용하지 않고 직접 a 태그로 다운로드 시도
+      // 외부 URL의 경우 브라우저가 download 속성을 무시할 수 있지만, 시도해봄
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = fileName;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // 브라우저가 download 속성을 무시하고 새 창에서 열 수 있음
+      // 이 경우 파일명은 지정할 수 없지만, 다운로드는 가능함
+    } catch (error) {
+      console.error('다운로드 오류:', error);
+      // 최종 대체: 기존 방식으로 새 창에서 열기
+      window.open(certificate.certificateFile?.url, '_blank');
     }
   };
 
@@ -389,13 +428,33 @@ export default function AdminCertificatePage() {
   };
 
   const handleDelete = async (certificate: Certificate) => {
-    if (!confirm(`정말로 "${certificate.productName || '제품명 없음'}" 성적서 요청을 삭제하시겠습니까?`)) {
+    const certificateName = certificate.productName || certificate.customerName || '제품명 없음';
+    const confirmMessage = certificate.certificateFile?.storagePath
+      ? `정말로 "${certificateName}" 성적서 요청을 삭제하시겠습니까?\n연결된 PDF 파일도 Storage에서 삭제됩니다.`
+      : `정말로 "${certificateName}" 성적서 요청을 삭제하시겠습니까?`;
+    
+    if (!confirm(confirmMessage)) {
       return;
     }
 
     setDeletingId(certificate.id);
     try {
+      // Storage에서 PDF 파일 삭제 (있는 경우)
+      if (certificate.certificateFile?.storagePath) {
+        try {
+          console.log('[삭제] Storage에서 PDF 파일 삭제 시도:', certificate.certificateFile.storagePath);
+          const fileRef = ref(storage, certificate.certificateFile.storagePath);
+          await deleteObject(fileRef);
+          console.log('[삭제] ✅ Storage PDF 파일 삭제 완료');
+        } catch (storageError) {
+          // Storage 삭제 실패해도 Firestore 삭제는 계속 진행
+          console.warn('[삭제] ⚠️ Storage PDF 파일 삭제 실패 (계속 진행):', storageError);
+        }
+      }
+      
+      // Firestore에서 성적서 문서 삭제
       await deleteDoc(doc(db, 'certificates', certificate.id));
+      console.log('[삭제] ✅ Firestore 문서 삭제 완료');
     } catch (error) {
       console.error('성적서 삭제 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
@@ -432,7 +491,13 @@ export default function AdminCertificatePage() {
       return;
     }
 
-    if (!confirm(`선택한 ${selectedIds.size}개의 성적서 요청을 삭제하시겠습니까?`)) {
+    const certificatesToDelete = certificates.filter(c => selectedIds.has(c.id));
+    const hasPdfFiles = certificatesToDelete.some(c => c.certificateFile?.storagePath);
+    const confirmMessage = hasPdfFiles
+      ? `선택한 ${selectedIds.size}개의 성적서 요청을 삭제하시겠습니까?\n연결된 PDF 파일도 Storage에서 삭제됩니다.`
+      : `선택한 ${selectedIds.size}개의 성적서 요청을 삭제하시겠습니까?`;
+
+    if (!confirm(confirmMessage)) {
       return;
     }
 
@@ -440,10 +505,29 @@ export default function AdminCertificatePage() {
     setError('');
     
     try {
-      const deletePromises = Array.from(selectedIds).map(id => 
-        deleteDoc(doc(db, 'certificates', id))
-      );
+      // Storage에서 PDF 파일 삭제 및 Firestore 문서 삭제
+      const deletePromises = Array.from(selectedIds).map(async (id) => {
+        const certificate = certificates.find(c => c.id === id);
+        
+        // Storage에서 PDF 파일 삭제 (있는 경우)
+        if (certificate?.certificateFile?.storagePath) {
+          try {
+            console.log(`[일괄 삭제] Storage에서 PDF 파일 삭제 시도: ${certificate.certificateFile.storagePath}`);
+            const fileRef = ref(storage, certificate.certificateFile.storagePath);
+            await deleteObject(fileRef);
+            console.log(`[일괄 삭제] ✅ PDF 파일 삭제 완료: ${id}`);
+          } catch (storageError) {
+            // Storage 삭제 실패해도 Firestore 삭제는 계속 진행
+            console.warn(`[일괄 삭제] ⚠️ PDF 파일 삭제 실패 (계속 진행): ${id}`, storageError);
+          }
+        }
+        
+        // Firestore에서 성적서 문서 삭제
+        await deleteDoc(doc(db, 'certificates', id));
+      });
+      
       await Promise.all(deletePromises);
+      console.log(`[일괄 삭제] ✅ ${selectedIds.size}개 성적서 삭제 완료`);
       setSelectedIds(new Set());
       setSuccess(`${selectedIds.size}개의 성적서 요청이 삭제되었습니다.`);
     } catch (error) {

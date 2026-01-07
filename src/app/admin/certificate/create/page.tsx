@@ -138,7 +138,19 @@ const generatePDFBlobWithProducts = async (
     testResult: string;
   },
   products: CertificateProduct[]
-): Promise<{ blob: Blob; failedImageCount: number }> => {
+): Promise<{ 
+  blob: Blob; 
+  failedImageCount: number;
+  fileValidationResults: Array<{
+    productIndex: number;
+    productName: string;
+    files: Array<{
+      fileName: string;
+      included: boolean;
+      error?: string;
+    }>;
+  }>;
+}> => {
   // 동적 import로 jsPDF 로드
   const { jsPDF } = await import('jspdf');
   // A4 가로 방향으로 설정
@@ -639,6 +651,17 @@ const generatePDFBlobWithProducts = async (
   // 표지 다음 페이지부터 각 제품의 INSPECTION CERTIFICATE 이미지를 순서대로 삽입
   console.log('[PDF 생성] Inspection Certificate 이미지 추가 시작, 제품 개수:', products.length);
   let failedImageCount = 0; // 실패한 이미지 개수 추적
+  // 각 제품별, 파일별 검증 결과 저장
+  const fileValidationResults: Array<{
+    productIndex: number;
+    productName: string;
+    files: Array<{
+      fileName: string;
+      included: boolean;
+      error?: string;
+    }>;
+  }> = [];
+  
   for (let index = 0; index < products.length; index++) {
     const product = products[index];
     // 여러 파일 지원: inspectionCertificates 배열이 있으면 사용, 없으면 inspectionCertificate 단일 객체를 배열로 변환
@@ -658,11 +681,44 @@ const generatePDFBlobWithProducts = async (
       console.log(`[PDF 생성] 제품 ${index + 1} Inspection Certificate 없음`);
     }
     
+    // 제품별 검증 결과 초기화
+    const productValidationResult: {
+      productIndex: number;
+      productName: string;
+      files: Array<{
+        fileName: string;
+        included: boolean;
+        error?: string;
+      }>;
+    } = {
+      productIndex: index + 1,
+      productName: product.productName || `제품 ${index + 1}`,
+      files: [],
+    };
+    
     // inspectionCerts 배열에서 유효한 파일만 필터링 (url이 있는 것만)
     const beforeFilterCount = inspectionCerts.length;
-    inspectionCerts = inspectionCerts.filter(cert => cert && cert.url && cert.url.trim().length > 0);
+    const filteredOutFiles: CertificateAttachment[] = [];
+    inspectionCerts = inspectionCerts.filter(cert => {
+      if (cert && cert.url && cert.url.trim().length > 0) {
+        return true;
+      } else {
+        filteredOutFiles.push(cert);
+        return false;
+      }
+    });
+    
+    // URL이 없는 파일들을 검증 결과에 추가
+    filteredOutFiles.forEach(cert => {
+      productValidationResult.files.push({
+        fileName: cert.name || '이름 없음',
+        included: false,
+        error: 'URL이 없습니다.',
+      });
+    });
+    
     if (beforeFilterCount !== inspectionCerts.length) {
-      console.warn(`[PDF 생성] 제품 ${index + 1} 필터링: ${beforeFilterCount}개 → ${inspectionCerts.length}개 (URL이 없는 파일 제거됨)`);
+      console.warn(`[PDF 생성] 제품 ${index + 1} 필터링: ${beforeFilterCount}개 → ${inspectionCerts.length}개 (URL이 없는 파일 ${filteredOutFiles.length}개 제거됨)`);
     }
     
     console.log(`[PDF 생성] 제품 ${index + 1} 처리 중:`, {
@@ -695,6 +751,14 @@ const generatePDFBlobWithProducts = async (
       if (!inspectionCert.url || inspectionCert.url.trim().length === 0) {
         console.warn(`[PDF 생성] 제품 ${index + 1} 파일 ${certIndex + 1}의 URL이 없습니다. 건너뜀.`);
         failedImageCount++;
+        
+        // 검증 결과: URL이 없어서 포함되지 않음
+        productValidationResult.files.push({
+          fileName: inspectionCert.name || '이름 없음',
+          included: false,
+          error: 'URL이 없습니다.',
+        });
+        
         continue;
       }
       
@@ -890,6 +954,14 @@ const generatePDFBlobWithProducts = async (
             failedImageCount++;
             const errorMsg = `이미지 다운로드에 실패했습니다. storagePath와 URL 모두 사용할 수 없습니다.`;
             console.warn(`⚠️ 제품 ${index + 1}의 Inspection Certificate 파일 ${certIndex + 1} (${inspectionCert.name || '이름 없음'}) ${errorMsg} (실패한 이미지: ${failedImageCount}개)`);
+            
+            // 검증 결과: 다운로드 실패
+            productValidationResult.files.push({
+              fileName: inspectionCert.name || '이름 없음',
+              included: false,
+              error: errorMsg,
+            });
+            
             // 에러를 throw하지 않고 continue로 다음 이미지로 넘어감
             continue;
           }
@@ -901,9 +973,23 @@ const generatePDFBlobWithProducts = async (
               failedImageCount++;
               const errorMsg = `이미지 다운로드에 실패했습니다. storagePath와 URL 모두 사용할 수 없습니다.`;
               console.warn(`⚠️ 제품 ${index + 1}의 Inspection Certificate 파일 ${certIndex + 1} (${inspectionCert.name || '이름 없음'}) ${errorMsg} (실패한 이미지: ${failedImageCount}개)`);
+              
+              // 검증 결과: 다운로드 실패
+              productValidationResult.files.push({
+                fileName: inspectionCert.name || '이름 없음',
+                included: false,
+                error: errorMsg,
+              });
             } else if (!blob) {
               failedImageCount++;
               console.warn(`⚠️ 제품 ${index + 1}의 Inspection Certificate 파일 ${certIndex + 1} (${inspectionCert.name || '이름 없음'}) blob이 없습니다. (실패한 이미지: ${failedImageCount}개)`);
+              
+              // 검증 결과: blob이 없음
+              productValidationResult.files.push({
+                fileName: inspectionCert.name || '이름 없음',
+                included: false,
+                error: '다운로드된 blob이 없습니다.',
+              });
             }
             continue;
           }
@@ -966,6 +1052,14 @@ const generatePDFBlobWithProducts = async (
         if (!img) {
           console.error(`[PDF 생성] 제품 ${index + 1} 파일 ${certIndex + 1} img가 null입니다. 건너뜀.`);
           failedImageCount++;
+          
+          // 검증 결과: img가 null
+          productValidationResult.files.push({
+            fileName: inspectionCert.name || '이름 없음',
+            included: false,
+            error: '이미지 객체가 null입니다.',
+          });
+          
           continue;
         }
         
@@ -973,6 +1067,14 @@ const generatePDFBlobWithProducts = async (
         if (!base64ImageData || base64ImageData.length === 0) {
           console.error(`[PDF 생성] 제품 ${index + 1} 파일 ${certIndex + 1} base64ImageData가 없습니다. 건너뜀.`);
           failedImageCount++;
+          
+          // 검증 결과: base64ImageData가 없음
+          productValidationResult.files.push({
+            fileName: inspectionCert.name || '이름 없음',
+            included: false,
+            error: 'base64 이미지 데이터가 없습니다.',
+          });
+          
           continue;
         }
         
@@ -1012,10 +1114,25 @@ const generatePDFBlobWithProducts = async (
         // 이미지 추가
         try {
           doc.addImage(base64ImageData, imageFormat, imgX, imgY, finalWidthMM, finalHeightMM);
-          console.log(`[PDF 생성] 제품 ${index + 1} 파일 ${certIndex + 1} 이미지 추가 완료 - 페이지 번호: ${doc.getNumberOfPages()}, 제목: ${certTitle}`);
+          console.log(`[PDF 생성] ✅ 제품 ${index + 1} "${product.productName}" 파일 ${certIndex + 1}/${inspectionCerts.length} "${inspectionCert.name}" 이미지 추가 완료 - 페이지 번호: ${doc.getNumberOfPages()}, 제목: ${certTitle}`);
+          
+          // 검증 결과: 성공적으로 포함됨
+          productValidationResult.files.push({
+            fileName: inspectionCert.name || '이름 없음',
+            included: true,
+          });
         } catch (addImageError) {
           console.error(`[PDF 생성] doc.addImage 실패:`, addImageError);
-          throw new Error(`이미지를 PDF에 추가하는데 실패했습니다: ${addImageError instanceof Error ? addImageError.message : String(addImageError)}`);
+          const errorMsg = addImageError instanceof Error ? addImageError.message : String(addImageError);
+          
+          // 검증 결과: PDF 추가 실패
+          productValidationResult.files.push({
+            fileName: inspectionCert.name || '이름 없음',
+            included: false,
+            error: `PDF에 이미지 추가 실패: ${errorMsg}`,
+          });
+          
+          throw new Error(`이미지를 PDF에 추가하는데 실패했습니다: ${errorMsg}`);
         }
         
       } catch (error) {
@@ -1029,20 +1146,30 @@ const generatePDFBlobWithProducts = async (
           type: inspectionCert.type,
         };
         
+        let errorMessage = '알 수 없는 오류';
         if (error instanceof Error) {
           errorInfo.errorMessage = error.message;
           errorInfo.errorName = error.name;
           errorInfo.errorStack = error.stack;
+          errorMessage = error.message;
         } else if (error) {
           errorInfo.errorString = String(error);
           errorInfo.errorType = typeof error;
           errorInfo.errorKeys = Object.keys(error as Record<string, unknown>);
+          errorMessage = String(error);
         } else {
           errorInfo.error = '알 수 없는 에러 (null/undefined)';
         }
         
         console.error(`제품 ${index + 1}의 이미지 로드 실패:`, error);
         console.error('에러 상세:', errorInfo);
+        
+        // 검증 결과: 이미지 로드 실패
+        productValidationResult.files.push({
+          fileName: inspectionCert.name || '이름 없음',
+          included: false,
+          error: errorMessage,
+        });
         
         // 에러가 발생해도 다음 파일 계속 처리
         console.warn(`⚠️ 제품 ${index + 1}의 Inspection Certificate 파일 ${certIndex + 1} (${inspectionCert.name || '이름 없음'}) 이미지를 PDF에 추가하지 못했습니다. (실패한 이미지: ${failedImageCount}개)`);
@@ -1055,9 +1182,33 @@ const generatePDFBlobWithProducts = async (
     if (inspectionCerts.length === 0) {
       console.log(`[PDF 생성] 제품 ${index + 1}에는 Inspection Certificate가 없습니다.`);
     }
+    
+    // 제품별 검증 결과를 전체 결과에 추가
+    if (productValidationResult.files.length > 0 || inspectionCerts.length > 0) {
+      fileValidationResults.push(productValidationResult);
+    }
   }
   
   console.log(`[PDF 생성] 모든 이미지 처리 완료. 총 페이지 수: ${doc.getNumberOfPages()}, 실패한 이미지: ${failedImageCount}개`);
+  console.log(`[PDF 생성] 파일 검증 결과:`, fileValidationResults.map((r: {
+    productIndex: number;
+    productName: string;
+    files: Array<{
+      fileName: string;
+      included: boolean;
+      error?: string;
+    }>;
+  }) => ({
+    product: r.productName,
+    totalFiles: r.files.length,
+    includedFiles: r.files.filter((f: { fileName: string; included: boolean; error?: string }) => f.included).length,
+    failedFiles: r.files.filter((f: { fileName: string; included: boolean; error?: string }) => !f.included).length,
+    files: r.files.map((f: { fileName: string; included: boolean; error?: string }) => ({
+      name: f.fileName,
+      included: f.included,
+      error: f.error,
+    })),
+  })));
 
   // 하단 정보 (DEFAULT 고정 내용은 나중에 추가)
   // 주석 처리: 사용자가 요청할 때까지 표시하지 않음
@@ -1070,14 +1221,22 @@ const generatePDFBlobWithProducts = async (
   try {
     const pdfBlob = doc.output('blob');
     console.log(`[PDF 생성] 완료. 실패한 이미지: ${failedImageCount}개`);
-    return { blob: pdfBlob, failedImageCount };
+    return { 
+      blob: pdfBlob, 
+      failedImageCount,
+      fileValidationResults,
+    };
   } catch (error) {
     console.error('PDF 생성 오류:', error);
     // PDF 생성 실패 시 빈 PDF 반환 (에러 방지)
     const { jsPDF: jsPDFFallback } = await import('jspdf');
     const fallbackDoc = new jsPDFFallback({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     fallbackDoc.text('PDF 생성 중 오류가 발생했습니다.', 20, 20);
-    return { blob: fallbackDoc.output('blob'), failedImageCount };
+    return { 
+      blob: fallbackDoc.output('blob'), 
+      failedImageCount,
+      fileValidationResults: [], // 에러 발생 시 빈 배열 반환
+    };
   }
 };
 
@@ -2109,6 +2268,7 @@ function MaterialTestCertificateContent() {
       // PDF 생성 (수정 모드에서도 항상 새로 생성)
       let pdfBlob: Blob | null = null;
       let failedImageCount = 0;
+      let totalExpectedFiles = 0; // PDF 생성 전 예상 파일 개수 (외부에서도 사용)
       
       // 항상 새 PDF 생성
       try {
@@ -2133,28 +2293,126 @@ function MaterialTestCertificateContent() {
           };
         }));
         
-        const result = await Promise.race([
+        // PDF 생성 전 예상 파일 개수 확인
+        const expectedFileCounts: Array<{ productIndex: number; productName: string; fileCount: number }> = [];
+        productsData.forEach((p, idx) => {
+          const productWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          const inspectionCerts = productWithCerts.inspectionCertificates && Array.isArray(productWithCerts.inspectionCertificates)
+            ? productWithCerts.inspectionCertificates
+            : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
+          if (inspectionCerts.length > 0) {
+            expectedFileCounts.push({
+              productIndex: idx + 1,
+              productName: p.productName || `제품 ${idx + 1}`,
+              fileCount: inspectionCerts.length,
+            });
+          }
+        });
+        totalExpectedFiles = expectedFileCounts.reduce((sum, item) => sum + item.fileCount, 0);
+        console.log(`[저장] PDF 생성 전 예상 파일 개수: 총 ${totalExpectedFiles}개 (${expectedFileCounts.length}개 제품)`);
+        
+        // PDF 생성 시도 (타임아웃 120초)
+        const pdfResult = await Promise.race([
           generatePDFBlobWithProducts(formData, productsData),
-          new Promise<{ blob: Blob; failedImageCount: number }>((_, reject) => {
+          new Promise<{ 
+            blob: Blob; 
+            failedImageCount: number;
+            fileValidationResults: Array<{
+              productIndex: number;
+              productName: string;
+              files: Array<{
+                fileName: string;
+                included: boolean;
+                error?: string;
+              }>;
+            }>;
+          }>((_, reject) => {
             setTimeout(() => {
               reject(new Error('PDF 생성 타임아웃 (120초)'));
-            }, 120000); // 2분으로 증가
+            }, 120000);
           })
         ]);
-        pdfBlob = result.blob;
-        failedImageCount = result.failedImageCount;
         
+        if (!pdfResult) {
+          throw new Error('PDF 생성 결과를 받을 수 없습니다.');
+        }
+        
+        pdfBlob = pdfResult.blob;
+        failedImageCount = pdfResult.failedImageCount;
+        
+        // PDF 생성 후 검증: Inspection Certificate 파일이 모두 포함되었는지 확인
+        if (!pdfResult) {
+          setError('PDF 생성 결과를 확인할 수 없습니다. 저장이 중단되었습니다.');
+          setSaving(false);
+          return; // 저장 중단
+        }
+        
+        const totalSuccessFiles = totalExpectedFiles - failedImageCount;
+        console.log(`[저장] PDF 생성 후 검증: 예상 ${totalExpectedFiles}개, 성공 ${totalSuccessFiles}개, 실패 ${failedImageCount}개`);
+        
+        // 실패한 파일이 있으면 상세 정보 수집
         if (failedImageCount > 0) {
-          console.warn(`⚠️ ${failedImageCount}개의 이미지를 PDF에 포함하지 못했습니다.`);
+          let detailedErrorMessage = `❌ ${failedImageCount}개의 Inspection Certificate 파일을 PDF에 포함하지 못했습니다. 저장이 중단되었습니다.\n\n`;
+          detailedErrorMessage += `실패한 파일 상세 정보:\n\n`;
+          
+          // fileValidationResults에서 실패한 파일 정보 추출
+          const failedFilesDetails: Array<{ productName: string; fileName: string; error?: string }> = [];
+          pdfResult.fileValidationResults.forEach(productResult => {
+            productResult.files.forEach(file => {
+              if (!file.included) {
+                failedFilesDetails.push({
+                  productName: productResult.productName,
+                  fileName: file.fileName,
+                  error: file.error,
+                });
+              }
+            });
+          });
+          
+          // 실패한 파일 목록 표시
+          failedFilesDetails.forEach((failed, idx) => {
+            detailedErrorMessage += `${idx + 1}. 제품 "${failed.productName}" - 파일 "${failed.fileName}"`;
+            if (failed.error) {
+              detailedErrorMessage += `\n   오류: ${failed.error}`;
+            }
+            detailedErrorMessage += `\n`;
+          });
+          
+          detailedErrorMessage += `\n가능한 원인:\n`;
+          detailedErrorMessage += `• 파일 URL이 유효하지 않거나 접근할 수 없습니다.\n`;
+          detailedErrorMessage += `• 네트워크 연결 문제로 파일을 다운로드할 수 없습니다.\n`;
+          detailedErrorMessage += `• 파일 형식이 지원되지 않거나 손상되었습니다.\n`;
+          detailedErrorMessage += `• 파일 크기가 너무 커서 처리할 수 없습니다.\n`;
+          
+          setError(detailedErrorMessage);
+          setSaving(false);
+          return; // 저장 중단
+        } else if (totalExpectedFiles > 0) {
+          console.log(`[저장] ✅ 모든 Inspection Certificate 파일(${totalExpectedFiles}개)이 PDF에 성공적으로 포함되었습니다.`);
+          // 성공 메시지는 저장 완료 후 표시
+        } else {
+          console.log(`[저장] ℹ️ Inspection Certificate 파일이 없습니다.`);
         }
       } catch (pdfError) {
-        console.error('PDF 생성 오류:', pdfError);
-        // PDF 생성 실패 시 빈 PDF 생성
-        const { jsPDF } = await import('jspdf');
-        const fallbackDoc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-        fallbackDoc.text('PDF 생성 중 오류가 발생했습니다. 일부 이미지를 포함하지 못했습니다.', 20, 20);
-        pdfBlob = fallbackDoc.output('blob');
-        failedImageCount = productsData.length;
+        console.error('[저장] PDF 생성 오류:', pdfError);
+        const errorMessage = pdfError instanceof Error ? pdfError.message : String(pdfError);
+        
+        // PDF 생성 실패 시 저장 중단 및 상세 에러 메시지 표시
+        let detailedErrorMessage = `❌ PDF 생성에 실패했습니다. 저장이 중단되었습니다.\n\n`;
+        detailedErrorMessage += `오류 원인: ${errorMessage}\n\n`;
+        
+        if (errorMessage.includes('타임아웃')) {
+          detailedErrorMessage += `• PDF 생성 시간이 120초를 초과했습니다.\n`;
+          detailedErrorMessage += `• 네트워크 연결 상태를 확인하거나 Inspection Certificate 파일 크기를 확인해주세요.\n`;
+          detailedErrorMessage += `• 파일이 너무 크거나 많을 경우 시간이 오래 걸릴 수 있습니다.\n`;
+        } else {
+          detailedErrorMessage += `• PDF 생성 중 예기치 않은 오류가 발생했습니다.\n`;
+          detailedErrorMessage += `• 브라우저 콘솔을 확인하여 추가 정보를 확인하세요.\n`;
+        }
+        
+        setError(detailedErrorMessage);
+        setSaving(false);
+        return; // 저장 중단
       }
       const fileName = `MATERIAL_TEST_CERTIFICATE_${formData.certificateNo || 'CERT'}_${new Date().toISOString().split('T')[0]}.pdf`;
       
@@ -2217,20 +2475,36 @@ function MaterialTestCertificateContent() {
         return;
       }
 
-      // 새 PDF 업로드
-      const timestamp = Date.now();
-      const randomId = Math.random().toString(36).substring(2, 15);
-      const storageFileName = `certificate_${targetCertificateId}_${timestamp}_${randomId}_${fileName}`;
+      // 새 PDF 업로드 (수정 페이지와 동일한 파일명 규칙 사용)
+      // CERTIFICATE NO.를 기반으로 고정된 파일명 사용 (같은 성적서는 항상 같은 파일명)
+      const storageFileName = `certificate_${formData.certificateNo.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
       const filePath = `certificates/${targetCertificateId}/${storageFileName}`;
       
+      console.log('[저장] PDF 저장 경로:', filePath);
       const storageRef = ref(storage, filePath);
-      await uploadBytes(storageRef, pdfBlob);
-      const downloadURL = await getDownloadURL(storageRef);
       
-      // certificateFile 정보 생성
+      try {
+        await uploadBytes(storageRef, pdfBlob);
+        console.log('[저장] ✅ PDF 업로드 완료');
+      } catch (uploadError) {
+        console.error('[저장] ❌ PDF 업로드 실패:', uploadError);
+        throw new Error(`PDF 파일 업로드에 실패했습니다: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`);
+      }
+      
+      let downloadURL: string;
+      try {
+        downloadURL = await getDownloadURL(storageRef);
+        console.log('[저장] ✅ PDF 다운로드 URL 획득:', downloadURL);
+      } catch (urlError) {
+        console.error('[저장] ❌ PDF 다운로드 URL 획득 실패:', urlError);
+        throw new Error(`PDF 다운로드 URL 획득에 실패했습니다: ${urlError instanceof Error ? urlError.message : String(urlError)}`);
+      }
+      
+      // certificateFile 정보 생성 (storagePath 포함 - 삭제 시 사용)
       const certificateFile: CertificateAttachment = {
         name: fileName,
         url: downloadURL,
+        storagePath: filePath, // storagePath 저장 (삭제 시 사용)
         size: pdfBlob.size,
         type: 'application/pdf',
         uploadedAt: new Date(),
@@ -2336,6 +2610,7 @@ function MaterialTestCertificateContent() {
 
       const certificateFileForFirestore = {
         ...certificateFile,
+        storagePath: certificateFile.storagePath || null, // storagePath 저장 (삭제 시 사용)
         uploadedAt: Timestamp.fromDate(certificateFile.uploadedAt),
       };
 
@@ -2352,11 +2627,12 @@ function MaterialTestCertificateContent() {
       // 수정 모드인지 복사 모드인지 확인
       const isActuallyCopyMode = !certificateId && isCopyMode && copyFromId;
       let successMessage = isActuallyCopyMode 
-        ? '기존 성적서를 복사하여 새로운 성적서가 생성되었습니다.' 
-        : '성적서 내용이 저장되었고 PDF 파일이 업로드되었습니다.';
+        ? '✅ 기존 성적서를 복사하여 새로운 성적서가 생성되었고 PDF 파일이 업로드되었습니다.'
+        : '✅ 성적서 내용이 저장되었고 PDF 파일이 업로드되었습니다.';
       
-      if (failedImageCount > 0) {
-        successMessage += ` (참고: ${failedImageCount}개의 이미지를 PDF에 포함하지 못했습니다. 네트워크 문제일 수 있습니다.)`;
+      // 성공 메시지에 포함된 파일 개수 표시 (PDF 생성 검증이 이미 완료되었으므로 모든 파일이 포함됨)
+      if (totalExpectedFiles > 0) {
+        successMessage += `\n모든 Inspection Certificate 파일(${totalExpectedFiles}개)이 PDF에 성공적으로 포함되었습니다.`;
       }
       
       setSuccess(successMessage);

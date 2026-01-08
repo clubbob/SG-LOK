@@ -898,15 +898,20 @@ const generatePDFBlobWithProducts = async (
               const storageRef = ref(storage, inspectionCert.storagePath);
               
               // getBytes로 직접 다운로드 (타임아웃 10초로 단축 - 빠른 실패)
-              const bytes = await Promise.race([
+              const bytesResult = await Promise.race([
                 getBytes(storageRef),
-                new Promise<Uint8Array>((_, reject) => 
+                new Promise<never>((_, reject) => 
                   setTimeout(() => reject(new Error('getBytes 타임아웃 (10초)')), 10000)
                 )
-              ]);
+              ]) as ArrayBuffer | Uint8Array;
               
-              console.log('[PDF 생성] getBytes 다운로드 완료, 크기:', bytes.length);
-              const blob = new Blob([bytes], { type: inspectionCert.type || 'image/png' });
+              // 항상 Uint8Array로 변환
+              const bytesArray: Uint8Array = bytesResult instanceof Uint8Array 
+                ? bytesResult 
+                : new Uint8Array(bytesResult);
+              
+              console.log('[PDF 생성] getBytes 다운로드 완료, 크기:', bytesArray.length);
+              const blob = new Blob([bytesArray], { type: inspectionCert.type || 'image/png' });
               const blobUrl = URL.createObjectURL(blob);
               
               // Image 객체로 로드

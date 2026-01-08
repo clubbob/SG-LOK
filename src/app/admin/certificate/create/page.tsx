@@ -911,7 +911,7 @@ const generatePDFBlobWithProducts = async (
                 : new Uint8Array(bytesResult);
               
               console.log('[PDF 생성] getBytes 다운로드 완료, 크기:', bytesArray.length);
-              const blob = new Blob([bytesArray], { type: inspectionCert.type || 'image/png' });
+              const blob = new Blob([bytesArray as BlobPart], { type: inspectionCert.type || 'image/png' });
               const blobUrl = URL.createObjectURL(blob);
               
               // Image 객체로 로드

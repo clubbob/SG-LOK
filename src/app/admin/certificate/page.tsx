@@ -795,7 +795,31 @@ export default function AdminCertificatePage() {
                                 </button>
                                 <span className="text-gray-300 text-xs">|</span>
                                 <button
-                                  onClick={() => router.push(`/admin/certificate/edit/${certificate.id}`)}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    console.log('수정 버튼 클릭됨', { 
+                                      certificateId: certificate.id, 
+                                      hasId: !!certificate.id,
+                                      deletingId,
+                                      updatingStatus,
+                                      approving
+                                    });
+                                    if (!certificate.id) {
+                                      console.error('수정 버튼 클릭: certificate.id가 없습니다', certificate);
+                                      alert('성적서 ID가 없습니다. 페이지를 새로고침해주세요.');
+                                      return;
+                                    }
+                                    const url = `/admin/certificate/create?id=${certificate.id}`;
+                                    console.log('이동할 URL:', url);
+                                    try {
+                                      router.push(url);
+                                    } catch (error) {
+                                      console.error('router.push 오류:', error);
+                                      // router.push 실패 시 window.location 사용
+                                      window.location.href = url;
+                                    }
+                                  }}
                                   className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                                   disabled={deletingId === certificate.id || updatingStatus || approving}
                                   title="성적서 수정"

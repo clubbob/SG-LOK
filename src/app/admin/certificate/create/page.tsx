@@ -2028,11 +2028,11 @@ function MaterialTestCertificateContent() {
 
         // 파일이 삭제되었는지 확인 (이름으로 비교)
         const currentCertNames = (current.inspectionCertiFiles || [])
-          .map(item => item instanceof File ? item.name : item.name)
+          .map(item => item.name)
           .filter(name => name.length > 0)
           .sort();
         const originalCertNames = (original.inspectionCertiFiles || [])
-          .map(item => item instanceof File ? item.name : item.name)
+          .map(item => item.name)
           .filter(name => name.length > 0)
           .sort();
         

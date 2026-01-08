@@ -1847,7 +1847,7 @@ function MaterialTestCertificateContent() {
         heatNo,
       };
       
-      console.log('[파일 추가] 업데이트된 제품의 파일:', updatedProduct.inspectionCertiFiles.map(f => f instanceof File ? f.name : f.name));
+      console.log('[파일 추가] 업데이트된 제품의 파일:', updatedProduct.inspectionCertiFiles.map(f => f.name));
       console.log('[파일 추가] Material:', material, 'Heat No.:', heatNo);
       
       newProducts[index] = updatedProduct;

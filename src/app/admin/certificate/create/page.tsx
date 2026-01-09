@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
-import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs, query, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, getBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { CertificateAttachment, MaterialTestCertificate, CertificateProduct } from '@/types';
@@ -1392,6 +1392,12 @@ function MaterialTestCertificateContent() {
   const [originalFormData, setOriginalFormData] = useState<typeof formData | null>(null);
   const [originalProducts, setOriginalProducts] = useState<typeof products | null>(null);
 
+  // 소재/사이즈 타입 정의
+  interface MaterialSize {
+    materialType: 'Hexa' | 'Round';
+    size: string;
+  }
+
   // 제품 배열 (제품명, 제품코드, 수량, 히트번호, Material, Inspection Certi)
   // inspectionCertiFiles에는 새로 선택한 File 객체만 포함 (기존 파일은 existingInspectionCertis에 있음)
   const [products, setProducts] = useState<Array<{
@@ -1402,6 +1408,7 @@ function MaterialTestCertificateContent() {
     material: string;
     inspectionCertiFiles: File[]; // 새 파일만 포함
     existingInspectionCertis: CertificateAttachment[]; // 기존 파일만 포함 (MTC에 포함되지 않음)
+    materialSizes?: MaterialSize[]; // 소재/사이즈 정보
   }>>([{ productName: '', productCode: '', quantity: '', heatNo: '', material: '', inspectionCertiFiles: [], existingInspectionCertis: [] }]);
 
   // 성적서 번호 자동 생성 함수
@@ -1481,7 +1488,7 @@ function MaterialTestCertificateContent() {
               
               // 제품 데이터 로드 (products 배열이 있으면 사용, 없으면 기존 단일 제품 필드 사용)
               if (mtc.products && Array.isArray(mtc.products) && mtc.products.length > 0) {
-                setProducts(mtc.products.map((p: CertificateProduct) => {
+                const loadedProducts = await Promise.all(mtc.products.map(async (p: CertificateProduct) => {
                   // inspectionCertificates 배열이 있으면 사용, 없으면 inspectionCertificate 단일 객체를 배열로 변환
                   const productWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
                   const existingCerts = productWithCerts.inspectionCertificates && Array.isArray(productWithCerts.inspectionCertificates)
@@ -1489,16 +1496,32 @@ function MaterialTestCertificateContent() {
                     : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
                   // 기존 파일들에서 Material과 Heat No. 수집
                   const { material, heatNo } = collectMaterialAndHeatNo([], existingCerts);
+                  
+                  // 제품명과 제품코드가 모두 있으면 소재/사이즈 조회
+                  const productName = p.productName || '';
+                  const productCode = p.productCode || '';
+                  let materialSizes: MaterialSize[] | undefined = undefined;
+                  if (productName.trim() && productCode.trim()) {
+                    try {
+                      materialSizes = await fetchProductMaterialSizes(productName, productCode);
+                    } catch (error) {
+                      console.error(`[로드] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
+                      // 에러 발생 시 소재/사이즈 없이 진행
+                    }
+                  }
+                  
                   return {
-                    productName: p.productName || '',
-                    productCode: p.productCode || '',
+                    productName: productName,
+                    productCode: productCode,
                     quantity: p.quantity?.toString() || '',
                     heatNo: heatNo || p.heatNo || '',
                     material: material || p.material || '',
                     inspectionCertiFiles: [],
                     existingInspectionCertis: existingCerts,
+                    materialSizes: materialSizes,
                   };
                 }));
+                setProducts(loadedProducts);
               } else if (mtc.description || mtc.code || mtc.quantity) {
                 // 기존 단일 제품 데이터를 배열로 변환
                 // inspectionCertificates 배열이 있으면 사용, 없으면 inspectionCertificate 단일 객체를 배열로 변환
@@ -1636,14 +1659,28 @@ function MaterialTestCertificateContent() {
                 console.log(`[로드] 제품 "${p.productName || '이름 없음'}" 기존 파일 ${existingCerts.length}개 로드 완료 (MTC에 포함되지 않음)`);
                 
                 // Material과 Heat No.는 빈칸으로 설정 (기존 파일에서 추출하지 않음, 새 파일 추가 시에만 추출)
+                // 제품명과 제품코드가 모두 있으면 소재/사이즈 조회
+                const productName = p.productName || '';
+                const productCode = p.productCode || '';
+                let materialSizes: MaterialSize[] | undefined = undefined;
+                if (productName.trim() && productCode.trim()) {
+                  try {
+                    materialSizes = await fetchProductMaterialSizes(productName, productCode);
+                  } catch (error) {
+                    console.error(`[로드] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
+                    // 에러 발생 시 소재/사이즈 없이 진행
+                  }
+                }
+                
                 loadedProducts.push({
-                  productName: p.productName || '',
-                  productCode: p.productCode || '',
+                  productName: productName,
+                  productCode: productCode,
                   quantity: p.quantity?.toString() || '',
                   heatNo: '', // 빈칸으로 설정
                   material: '', // 빈칸으로 설정
                   inspectionCertiFiles: [], // 새 파일만 포함
                   existingInspectionCertis: existingCerts, // 기존 파일은 별도로 분리 (MTC에 포함되지 않음)
+                  materialSizes: materialSizes,
                 });
               }
             } else if (mtc.description || mtc.code || mtc.quantity) {
@@ -1694,14 +1731,28 @@ function MaterialTestCertificateContent() {
               console.log(`[로드] 단일 제품 "${mtc.description || '이름 없음'}" 기존 파일 ${existingCerts.length}개 로드 완료 (MTC에 포함되지 않음)`);
               
               // Material과 Heat No.는 빈칸으로 설정 (기존 파일에서 추출하지 않음, 새 파일 추가 시에만 추출)
+              // 제품명과 제품코드가 모두 있으면 소재/사이즈 조회
+              const productName = mtc.description || '';
+              const productCode = mtc.code || '';
+              let materialSizes: MaterialSize[] | undefined = undefined;
+              if (productName.trim() && productCode.trim()) {
+                try {
+                  materialSizes = await fetchProductMaterialSizes(productName, productCode);
+                } catch (error) {
+                  console.error(`[로드] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
+                  // 에러 발생 시 소재/사이즈 없이 진행
+                }
+              }
+              
               loadedProducts = [{
-                productName: mtc.description || '',
-                productCode: mtc.code || '',
+                productName: productName,
+                productCode: productCode,
                 quantity: mtc.quantity?.toString() || '',
                 heatNo: '', // 빈칸으로 설정
                 material: '', // 빈칸으로 설정
                 inspectionCertiFiles: [], // 새 파일만 포함
                 existingInspectionCertis: existingCerts, // 기존 파일은 별도로 분리 (MTC에 포함되지 않음)
+                materialSizes: materialSizes,
               }];
             }
             setProducts(loadedProducts);
@@ -1790,14 +1841,73 @@ function MaterialTestCertificateContent() {
     }
   };
 
+  // 제품별 소재/사이즈 조회 함수
+  const fetchProductMaterialSizes = async (productName: string, productCode: string): Promise<MaterialSize[] | undefined> => {
+    if (!productName.trim() || !productCode.trim()) {
+      return undefined;
+    }
+    
+    try {
+      const q = query(
+        collection(db, 'productMaterialSizes'),
+        where('productName', '==', productName.trim().toUpperCase()),
+        where('productCode', '==', productCode.trim().toUpperCase())
+      );
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        return undefined;
+      }
+      
+      const docData = querySnapshot.docs[0].data();
+      const materials = (docData.materials || []).map((m: any) => ({
+        materialType: m.materialType as 'Hexa' | 'Round',
+        size: m.size || '',
+      }));
+      
+      return materials.length > 0 ? materials : undefined;
+    } catch (error) {
+      console.error('소재/사이즈 조회 오류:', error);
+      return undefined;
+    }
+  };
+
   // 제품 필드 변경 핸들러
   const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity' | 'heatNo' | 'material', value: string) => {
+    // 제품명, 제품코드, 히트번호, Material은 대문자로 변환
+    const uppercaseFields = ['productName', 'productCode', 'heatNo', 'material'];
+    const processedValue = uppercaseFields.includes(field) ? value.toUpperCase() : value;
+    
     setProducts(prev => {
       const newProducts = [...prev];
-      // 제품명, 제품코드, 히트번호, Material은 대문자로 변환
-      const uppercaseFields = ['productName', 'productCode', 'heatNo', 'material'];
-      const processedValue = uppercaseFields.includes(field) ? value.toUpperCase() : value;
-      newProducts[index] = { ...newProducts[index], [field]: processedValue };
+      const currentProduct = newProducts[index];
+      const updatedProduct = { ...currentProduct, [field]: processedValue };
+      newProducts[index] = updatedProduct;
+      
+      // 제품명 또는 제품코드가 변경된 경우 소재/사이즈 조회 (비동기로 처리)
+      if (field === 'productName' || field === 'productCode') {
+        const productName = field === 'productName' ? processedValue : updatedProduct.productName;
+        const productCode = field === 'productCode' ? processedValue : updatedProduct.productCode;
+        
+        if (productName.trim() && productCode.trim()) {
+          // 비동기로 소재/사이즈 조회 (상태 업데이트는 즉시, 조회는 나중에)
+          fetchProductMaterialSizes(productName, productCode).then(materialSizes => {
+            setProducts(prevProducts => {
+              const updatedProducts = [...prevProducts];
+              if (updatedProducts[index]) {
+                updatedProducts[index] = { ...updatedProducts[index], materialSizes: materialSizes || undefined };
+              }
+              return updatedProducts;
+            });
+          }).catch(error => {
+            console.error('소재/사이즈 조회 오류:', error);
+          });
+        } else {
+          // 제품명 또는 제품코드가 비어있으면 소재/사이즈 정보 제거
+          updatedProduct.materialSizes = undefined;
+        }
+      }
+      
       return newProducts;
     });
     
@@ -1823,7 +1933,8 @@ function MaterialTestCertificateContent() {
         heatNo: lastProduct?.heatNo || '',
         material: lastProduct?.material || '',
         inspectionCertiFiles: [], // 새 파일은 복사하지 않음
-        existingInspectionCertis: [], // 기존 Inspection Certi도 복사하지 않음
+        existingInspectionCertis: [], // 기존 파일도 복사하지 않음
+        materialSizes: undefined, // 소재/사이즈는 복사하지 않음 (제품명/코드 입력 시 자동 조회)
       };
       return [...prev, newProduct];
     });
@@ -3393,14 +3504,28 @@ function MaterialTestCertificateContent() {
                         disabled={saving || generatingPDF}
                       />
 
-                      <Input
-                        type="text"
-                        label="HEAT NO. (히트번호)"
-                        value={product.heatNo}
-                        onChange={(e) => handleProductChange(index, 'heatNo', e.target.value)}
-                        placeholder="히트번호를 입력하세요"
-                        disabled={saving || generatingPDF}
-                      />
+                      <div className="relative">
+                        <Input
+                          type="text"
+                          label="HEAT NO. (히트번호)"
+                          value={product.heatNo}
+                          onChange={(e) => handleProductChange(index, 'heatNo', e.target.value)}
+                          placeholder="히트번호를 입력하세요"
+                          disabled={saving || generatingPDF}
+                        />
+                        {/* 소재/사이즈 표시 (Heat No. 아래) */}
+                        {product.materialSizes && product.materialSizes.length > 0 && (
+                          <div className="mt-2 flex items-center gap-1 text-xs text-gray-600 bg-blue-50 px-2 py-1 rounded border border-blue-200">
+                            <span className="font-medium">소재/사이즈:</span>
+                            {product.materialSizes.map((ms, msIndex) => (
+                              <span key={msIndex}>
+                                {ms.materialType} / {ms.size}mm
+                                {msIndex < product.materialSizes!.length - 1 && ','}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* 제품별 Inspection Certi 첨부 */}

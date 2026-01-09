@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui';
 import { collection, query, getDocs, doc, updateDoc, Timestamp, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -30,6 +31,12 @@ const CERTIFICATE_TYPE_LABELS: Record<CertificateType, string> = {
   safety: '안전',
   environmental: '환경',
   other: '기타',
+};
+
+// 15자 초과시 ... 표시
+const truncateText = (text: string, maxLength: number = 15): string => {
+  if (!text) return '-';
+  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 };
 
 // 관리자 인증 확인 함수
@@ -577,6 +584,11 @@ export default function AdminCertificatePage() {
             </svg>
             새로고침
           </Button>
+          <Link href="/admin/certificate/request">
+            <Button variant="primary" size="sm">
+              성적서요청 등록
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -711,16 +723,16 @@ export default function AdminCertificatePage() {
                           <div className="text-xs text-gray-900">{formatDateShort(certificate.requestDate)}</div>
                         </td>
                         <td className="px-[7.68px] py-3 min-w-[38px]">
-                          <div className="text-xs text-gray-900 truncate" title={certificate.customerName || '-'}>{certificate.customerName || '-'}</div>
+                          <div className="text-xs text-gray-900 whitespace-nowrap" title={certificate.customerName || '-'}>{truncateText(certificate.customerName || '-')}</div>
                         </td>
                         <td className="px-[7.68px] py-3 min-w-[100px]">
-                          <div className="text-xs text-gray-900 truncate" title={certificate.orderNumber || '-'}>{certificate.orderNumber || '-'}</div>
+                          <div className="text-xs text-gray-900 whitespace-nowrap" title={certificate.orderNumber || '-'}>{truncateText(certificate.orderNumber || '-')}</div>
                         </td>
                         <td className="px-[7.68px] py-3 min-w-[100px]">
-                          <div className="text-xs font-medium text-gray-900 truncate" title={certificate.productName || '-'}>{certificate.productName || '-'}</div>
+                          <div className="text-xs font-medium text-gray-900 whitespace-nowrap" title={certificate.productName || '-'}>{truncateText(certificate.productName || '-')}</div>
                         </td>
                         <td className="px-[7.68px] py-3 min-w-[100px]">
-                          <div className="text-xs text-gray-900 truncate" title={certificate.productCode || '-'}>{certificate.productCode || '-'}</div>
+                          <div className="text-xs text-gray-900 whitespace-nowrap" title={certificate.productCode || '-'}>{truncateText(certificate.productCode || '-')}</div>
                         </td>
                         <td className="px-[7.68px] py-3 w-16">
                           <div className="text-xs text-gray-900 text-center">{certificate.quantity ? certificate.quantity.toLocaleString() : '-'}</div>

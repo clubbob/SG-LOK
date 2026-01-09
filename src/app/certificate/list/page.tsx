@@ -32,6 +32,12 @@ const CERTIFICATE_TYPE_LABELS: Record<CertificateType, string> = {
   other: '기타',
 };
 
+// 15자 초과시 ... 표시
+const truncateText = (text: string, maxLength: number = 15): string => {
+  if (!text) return '-';
+  return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+};
+
 export default function CertificateListPage() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
@@ -348,21 +354,21 @@ export default function CertificateListPage() {
                   <table className="w-full divide-y divide-gray-200 table-auto">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">번호</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[60px]">요청자</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">요청일</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[64px]">고객명</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">발주번호</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">제품명</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">제품코드</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">수량</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">완료요청일</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">완료예정일</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">완료일</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">첨부</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">비고</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[70px]">상태</th>
-                        <th className="px-1 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">관리</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12 whitespace-nowrap">번호</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[60px] whitespace-nowrap">요청자</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20 whitespace-nowrap">요청일</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[64px] whitespace-nowrap">고객명</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px] whitespace-nowrap">발주번호</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px] whitespace-nowrap">제품명</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px] whitespace-nowrap">제품코드</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16 whitespace-nowrap">수량</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px] whitespace-nowrap">완료요청일</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px] whitespace-nowrap">완료예정일</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20 whitespace-nowrap">완료일</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16 whitespace-nowrap">첨부</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16 whitespace-nowrap">비고</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[70px] whitespace-nowrap">상태</th>
+                        <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px] whitespace-nowrap">관리</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -384,16 +390,16 @@ export default function CertificateListPage() {
                               <div className="text-xs text-gray-900 whitespace-nowrap">{formatDateShort(certificate.requestDate)}</div>
                             </td>
                             <td className="px-1 py-3 min-w-[64px]">
-                              <div className="text-xs text-gray-900 truncate" title={certificate.customerName || '-'}>{certificate.customerName || '-'}</div>
+                              <div className="text-xs text-gray-900 whitespace-nowrap" title={certificate.customerName || '-'}>{truncateText(certificate.customerName || '-')}</div>
                             </td>
                             <td className="px-1 py-3 min-w-[100px]">
-                              <div className="text-xs text-gray-900 truncate" title={certificate.orderNumber || '-'}>{certificate.orderNumber || '-'}</div>
+                              <div className="text-xs text-gray-900 whitespace-nowrap" title={certificate.orderNumber || '-'}>{truncateText(certificate.orderNumber || '-')}</div>
                             </td>
                             <td className="px-1 py-3 min-w-[100px]">
-                              <div className="text-xs font-medium text-gray-900 truncate" title={certificate.productName || '-'}>{certificate.productName || '-'}</div>
+                              <div className="text-xs font-medium text-gray-900 whitespace-nowrap" title={certificate.productName || '-'}>{truncateText(certificate.productName || '-')}</div>
                             </td>
                             <td className="px-1 py-3 min-w-[100px]">
-                              <div className="text-xs text-gray-900 truncate" title={certificate.productCode || '-'}>{certificate.productCode || '-'}</div>
+                              <div className="text-xs text-gray-900 whitespace-nowrap" title={certificate.productCode || '-'}>{truncateText(certificate.productCode || '-')}</div>
                             </td>
                             <td className="px-1 py-3 w-16">
                               <div className="text-xs text-gray-900 text-center">{certificate.quantity ? certificate.quantity.toLocaleString() : '-'}</div>

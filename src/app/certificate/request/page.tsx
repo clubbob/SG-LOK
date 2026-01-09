@@ -197,12 +197,15 @@ function CertificateRequestContent() {
 
   // 제품 삭제
   const handleRemoveProduct = (index: number) => {
-    // 제품이 1개만 있어도 삭제 가능하지만, 삭제 후 빈 제품 1개는 유지
-    setProducts(prev => {
-      const newProducts = prev.filter((_, i) => i !== index);
-      // 제품이 모두 삭제되면 빈 제품 1개 추가
-      return newProducts.length > 0 ? newProducts : [{ productName: '', productCode: '', quantity: '' }];
-    });
+    const productName = products[index]?.productName || `제품 ${index + 1}`;
+    if (confirm(`"${productName}" 제품을 삭제하시겠습니까?`)) {
+      // 제품이 1개만 있어도 삭제 가능하지만, 삭제 후 빈 제품 1개는 유지
+      setProducts(prev => {
+        const newProducts = prev.filter((_, i) => i !== index);
+        // 제품이 모두 삭제되면 빈 제품 1개 추가
+        return newProducts.length > 0 ? newProducts : [{ productName: '', productCode: '', quantity: '' }];
+      });
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -494,7 +497,7 @@ function CertificateRequestContent() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-4">
-                  제품 정보
+                  제품 정보 *
                 </label>
               </div>
               
@@ -503,15 +506,23 @@ function CertificateRequestContent() {
               )}
 
               {products.map((product, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-4 space-y-4 bg-gray-50">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-medium text-gray-700">제품 {index + 1}</h3>
+                <div key={index} className="border-2 border-gray-300 rounded-lg p-5 space-y-4 bg-white shadow-sm mb-6">
+                  <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white text-sm font-bold">
+                        {index + 1}
+                      </span>
+                      <h3 className="text-base font-semibold text-gray-900">제품 {index + 1}</h3>
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleRemoveProduct(index)}
                       disabled={submitting || uploadingFiles}
-                      className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-md hover:bg-red-100 hover:border-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
                       삭제
                     </button>
                   </div>
@@ -545,34 +556,37 @@ function CertificateRequestContent() {
                       />
                     </div>
 
-                    <div className={`flex items-end gap-2 md:col-span-3 ${index === products.length - 1 ? 'justify-end' : ''}`}>
-                      <div className={index === products.length - 1 ? 'flex-[2]' : 'w-full'}>
-                        <Input
-                          type="text"
-                          inputMode="numeric"
-                          label="수량"
-                          value={product.quantity}
-                          onChange={(e) => handleProductChange(index, 'quantity', e.target.value)}
-                          placeholder="수량을 입력하세요"
-                          pattern="[0-9]*"
-                          disabled={submitting || uploadingFiles}
-                        />
-                      </div>
-                      {index === products.length - 1 && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={handleAddProduct}
-                          disabled={submitting || uploadingFiles}
-                          className="text-sm whitespace-nowrap mb-[2px]"
-                        >
-                          + 제품 추가
-                        </Button>
-                      )}
+                    <div className="md:col-span-3">
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        label="수량"
+                        value={product.quantity}
+                        onChange={(e) => handleProductChange(index, 'quantity', e.target.value)}
+                        placeholder="수량을 입력하세요"
+                        pattern="[0-9]*"
+                        disabled={submitting || uploadingFiles}
+                      />
                     </div>
                   </div>
                 </div>
               ))}
+
+              {/* 제품 추가 버튼 */}
+              <div className="mt-4 flex justify-end">
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={handleAddProduct}
+                  disabled={submitting || uploadingFiles}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold shadow-md hover:shadow-lg transition-shadow"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  제품 추가
+                </Button>
+              </div>
             </div>
 
             <Input
@@ -728,7 +742,7 @@ function CertificateRequestContent() {
                 onChange={handleChange}
                 rows={4}
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                placeholder="추가 요청사항이나 비고를 입력하세요 (선택사항)"
+                placeholder="비고를 입력하세요 (선택사항)"
               />
             </div>
 

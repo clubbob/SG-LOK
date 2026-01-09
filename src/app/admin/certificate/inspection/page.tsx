@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 const ADMIN_SESSION_KEY = 'admin_session';
@@ -90,7 +90,7 @@ export default function InspectionCertiPage() {
           id: docSnapshot.id,
           productName: data.productName || '',
           productCode: data.productCode || '',
-          materials: (data.materials || []).map((m: any) => ({
+          materials: (data.materials || []).map((m: { id?: string; materialType: string; size: string }) => ({
             id: m.id || Date.now().toString(),
             materialType: m.materialType as MaterialType,
             size: m.size || '',
@@ -250,28 +250,6 @@ export default function InspectionCertiPage() {
     }
   };
 
-  // 소재/사이즈 삭제 핸들러
-  const handleDeleteMaterial = async (productId: string, materialId: string) => {
-    const product = productMaterialSizes.find(p => p.id === productId);
-    const material = product?.materials.find(m => m.id === materialId);
-    if (material && confirm(`"${material.materialType} / ${material.size}mm"를 삭제하시겠습니까?`)) {
-      try {
-        const updatedMaterials = product!.materials.filter(m => m.id !== materialId);
-        await updateDoc(doc(db, 'productMaterialSizes', productId), {
-          materials: updatedMaterials.map(m => ({
-            id: m.id,
-            materialType: m.materialType,
-            size: m.size,
-          })),
-          updatedAt: Timestamp.now(),
-        });
-        await loadProductMaterialSizes();
-      } catch (error) {
-        console.error('소재/사이즈 삭제 오류:', error);
-        alert('소재/사이즈 삭제 중 오류가 발생했습니다.');
-      }
-    }
-  };
 
   // 제품 수정 시작 핸들러
   const handleStartEdit = (productId: string) => {
@@ -616,7 +594,7 @@ export default function InspectionCertiPage() {
               {productMaterialSizes.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                    등록된 제품이 없습니다. "제품 추가" 버튼을 클릭하여 제품을 추가하세요.
+                    등록된 제품이 없습니다. &quot;제품 추가&quot; 버튼을 클릭하여 제품을 추가하세요.
                   </td>
                 </tr>
               ) : (

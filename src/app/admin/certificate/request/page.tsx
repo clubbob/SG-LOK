@@ -203,6 +203,15 @@ function AdminCertificateRequestContent() {
       }
       return newProducts;
     });
+    
+    // 해당 필드의 에러 초기화
+    if (fieldErrors[`${field}-${index}`]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[`${field}-${index}`];
+        return newErrors;
+      });
+    }
   };
 
   // 제품 추가 (이전 제품 내용 복사)
@@ -320,19 +329,51 @@ function AdminCertificateRequestContent() {
   const validateForm = () => {
     const errors: Record<string, string> = {};
 
-    // 고객명 필수
+    // 고객명 필수 (1순위)
     if (!formData.customerName.trim()) {
-      errors.customerName = '고객명을 입력해주세요.';
+      errors.customerName = '이 입력란을 작성하세요.';
+      setFieldErrors(errors);
+      return false;
     }
 
-    // 완료요청일 필수
+    // 제품 정보 필수 검증 (2순위)
+    if (!products || products.length === 0) {
+      errors.products = '이 입력란을 작성하세요.';
+      setFieldErrors(errors);
+      return false;
+    } else {
+      // 각 제품의 필수 필드 검증
+      let hasError = false;
+      products.forEach((product, index) => {
+        if (!product.productName?.trim()) {
+          errors[`productName-${index}`] = '이 입력란을 작성하세요.';
+          hasError = true;
+        }
+        if (!product.productCode?.trim()) {
+          errors[`productCode-${index}`] = '이 입력란을 작성하세요.';
+          hasError = true;
+        }
+        if (!product.quantity?.trim()) {
+          errors[`quantity-${index}`] = '이 입력란을 작성하세요.';
+          hasError = true;
+        }
+      });
+      
+      if (hasError) {
+        setFieldErrors(errors);
+        return false;
+      }
+    }
+
+    // 완료요청일 필수 (3순위)
     if (!formData.requestedCompletionDate.trim()) {
-      errors.requestedCompletionDate = '완료요청일을 선택해주세요.';
+      errors.requestedCompletionDate = '이 입력란을 작성하세요.';
+      setFieldErrors(errors);
+      return false;
     }
 
-
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+    setFieldErrors({});
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -559,15 +600,21 @@ function AdminCertificateRequestContent() {
 
           {/* 제품 정보 섹션 */}
           <div className="space-y-4">
-            <div>
+            <div className="relative">
               <label className="block text-sm font-medium text-gray-700 mb-4">
                 제품 정보 *
               </label>
+              {fieldErrors.products && (
+                <div className="absolute left-0 top-6 mt-1 px-2 py-1 bg-orange-100 border border-orange-300 rounded shadow-lg text-xs text-gray-800 whitespace-nowrap z-10">
+                  <div className="flex items-center gap-1">
+                    <svg className="w-4 h-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                    </svg>
+                    <span>{fieldErrors.products}</span>
+                  </div>
+                </div>
+              )}
             </div>
-            
-            {fieldErrors.products && (
-              <p className="text-sm text-red-600">{fieldErrors.products}</p>
-            )}
 
             {products.map((product, index) => (
               <div key={index} className="border-2 border-gray-300 rounded-lg p-5 space-y-4 bg-white shadow-sm mb-6">
@@ -592,45 +639,78 @@ function AdminCertificateRequestContent() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
-                  <div className="md:col-span-3">
+                  <div className="md:col-span-3 relative">
                     <Input
                       type="text"
                       name="productName"
                       id={`productName-${index}`}
-                      label="제품명"
+                      label="제품명 *"
+                      required
                       value={product.productName}
                       onChange={(e) => handleProductChange(index, 'productName', e.target.value)}
                       placeholder="제품명을 입력하세요"
                       style={{ textTransform: 'uppercase' }}
                       disabled={submitting || uploadingFiles}
                     />
+                    {fieldErrors[`productName-${index}`] && (
+                      <div className="absolute left-0 top-full mt-1 px-2 py-1 bg-orange-100 border border-orange-300 rounded shadow-lg text-xs text-gray-800 whitespace-nowrap z-10">
+                        <div className="flex items-center gap-1">
+                          <svg className="w-4 h-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          <span>{fieldErrors[`productName-${index}`]}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="md:col-span-2">
+                  <div className="md:col-span-2 relative">
                     <Input
                       type="text"
                       name="productCode"
                       id={`productCode-${index}`}
-                      label="제품코드"
+                      label="제품코드 *"
+                      required
                       value={product.productCode}
                       onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
                       placeholder="제품코드를 입력하세요"
                       style={{ textTransform: 'uppercase' }}
                       disabled={submitting || uploadingFiles}
                     />
+                    {fieldErrors[`productCode-${index}`] && (
+                      <div className="absolute left-0 top-full mt-1 px-2 py-1 bg-orange-100 border border-orange-300 rounded shadow-lg text-xs text-gray-800 whitespace-nowrap z-10">
+                        <div className="flex items-center gap-1">
+                          <svg className="w-4 h-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          <span>{fieldErrors[`productCode-${index}`]}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="md:col-span-3">
+                  <div className="md:col-span-3 relative">
                     <Input
                       type="text"
                       inputMode="numeric"
-                      label="수량"
+                      label="수량 *"
+                      required
                       value={product.quantity}
                       onChange={(e) => handleProductChange(index, 'quantity', e.target.value)}
                       placeholder="수량을 입력하세요"
                       pattern="[0-9]*"
                       disabled={submitting || uploadingFiles}
                     />
+                    {fieldErrors[`quantity-${index}`] && (
+                      <div className="absolute left-0 top-full mt-1 px-2 py-1 bg-orange-100 border border-orange-300 rounded shadow-lg text-xs text-gray-800 whitespace-nowrap z-10">
+                        <div className="flex items-center gap-1">
+                          <svg className="w-4 h-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          <span>{fieldErrors[`quantity-${index}`]}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

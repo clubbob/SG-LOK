@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
-import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs, query, where, QuerySnapshot, DocumentData } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, getBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { CertificateAttachment, MaterialTestCertificate, CertificateProduct } from '@/types';
@@ -1421,7 +1421,7 @@ function MaterialTestCertificateContent() {
     }
     
     try {
-      const queries: Promise<any>[] = [];
+      const queries: Promise<QuerySnapshot<DocumentData>>[] = [];
       const nameUpper = productName.trim().toUpperCase();
       const codeUpper = productCode.trim().toUpperCase();
       
@@ -1648,7 +1648,7 @@ function MaterialTestCertificateContent() {
       const results = await Promise.all(queries);
       
       // 결과 합치기 (중복 제거)
-      const allDocs = new Map<string, any>();
+      const allDocs = new Map<string, DocumentData>();
       results.forEach(querySnapshot => {
         querySnapshot.forEach(doc => {
           if (!allDocs.has(doc.id)) {

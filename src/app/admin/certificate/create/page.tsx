@@ -1414,6 +1414,37 @@ function MaterialTestCertificateContent() {
     }
   };
 
+  // 제품별 소재/사이즈 조회 함수
+  const fetchProductMaterialSizes = useCallback(async (productName: string, productCode: string): Promise<MaterialSize[] | undefined> => {
+    if (!productName.trim() || !productCode.trim()) {
+      return undefined;
+    }
+    
+    try {
+      const q = query(
+        collection(db, 'productMaterialSizes'),
+        where('productName', '==', productName.trim().toUpperCase()),
+        where('productCode', '==', productCode.trim().toUpperCase())
+      );
+      const querySnapshot = await getDocs(q);
+      
+      if (querySnapshot.empty) {
+        return undefined;
+      }
+      
+      const docData = querySnapshot.docs[0].data();
+      const materials = (docData.materials || []).map((m: { id?: string; materialType: string; size: string }) => ({
+        materialType: m.materialType as 'Hexa' | 'Round',
+        size: m.size || '',
+      }));
+      
+      return materials.length > 0 ? materials : undefined;
+    } catch (error) {
+      console.error('소재/사이즈 조회 오류:', error);
+      return undefined;
+    }
+  }, []);
+
   // 관리자 인증 확인
   useEffect(() => {
     if (!checkAdminAuth()) {
@@ -1809,37 +1840,6 @@ function MaterialTestCertificateContent() {
       });
     }
   };
-
-  // 제품별 소재/사이즈 조회 함수
-  const fetchProductMaterialSizes = useCallback(async (productName: string, productCode: string): Promise<MaterialSize[] | undefined> => {
-    if (!productName.trim() || !productCode.trim()) {
-      return undefined;
-    }
-    
-    try {
-      const q = query(
-        collection(db, 'productMaterialSizes'),
-        where('productName', '==', productName.trim().toUpperCase()),
-        where('productCode', '==', productCode.trim().toUpperCase())
-      );
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) {
-        return undefined;
-      }
-      
-      const docData = querySnapshot.docs[0].data();
-      const materials = (docData.materials || []).map((m: { id?: string; materialType: string; size: string }) => ({
-        materialType: m.materialType as 'Hexa' | 'Round',
-        size: m.size || '',
-      }));
-      
-      return materials.length > 0 ? materials : undefined;
-    } catch (error) {
-      console.error('소재/사이즈 조회 오류:', error);
-      return undefined;
-    }
-  }, []);
 
   // 제품 필드 변경 핸들러
   const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity' | 'heatNo' | 'material', value: string) => {

@@ -1414,26 +1414,256 @@ function MaterialTestCertificateContent() {
     }
   };
 
-  // 제품별 소재/사이즈 조회 함수
+  // 제품별 소재/사이즈 조회 함수 (제품명 또는 제품코드로 조회, 제품코드 마지막 문자 N/R 무시, 부분 일치 지원)
   const fetchProductMaterialSizes = useCallback(async (productName: string, productCode: string): Promise<MaterialSize[] | undefined> => {
-    if (!productName.trim() || !productCode.trim()) {
+    if (!productName.trim() && !productCode.trim()) {
       return undefined;
     }
     
     try {
-      const q = query(
-        collection(db, 'productMaterialSizes'),
-        where('productName', '==', productName.trim().toUpperCase()),
-        where('productCode', '==', productCode.trim().toUpperCase())
-      );
-      const querySnapshot = await getDocs(q);
+      const queries: Promise<any>[] = [];
+      const nameUpper = productName.trim().toUpperCase();
+      const codeUpper = productCode.trim().toUpperCase();
       
-      if (querySnapshot.empty) {
+      // 제품코드 정규화 함수: 숫자 앞의 0을 제거 (예: "04-04N" → "4-4N")
+      const normalizeCode = (code: string): string => {
+        // 숫자 앞의 0을 제거 (단, 단독 숫자 0은 유지)
+        return code.replace(/\b0+(\d+)/g, '$1');
+      };
+      
+      // 제품코드 정규화 (0 제거 버전)
+      const codeNormalized = normalizeCode(codeUpper);
+      
+      // 제품코드가 유효한지 확인 (최소한 숫자나 하이픈이 포함되어야 함, 너무 짧으면 제외)
+      const isValidProductCode = codeUpper.length >= 3 && (/\d/.test(codeUpper) || codeUpper.includes('-'));
+      const isValidNormalizedCode = codeNormalized.length >= 2 && (/\d/.test(codeNormalized) || codeNormalized.includes('-'));
+      
+      // 1. 제품명으로 정확히 일치하는 경우 조회
+      if (nameUpper && nameUpper.length >= 3) {
+        const q1 = query(
+          collection(db, 'productMaterialSizes'),
+          where('productName', '==', nameUpper)
+        );
+        queries.push(getDocs(q1));
+      }
+      
+      // 2. 제품코드로 정확히 일치하는 경우 조회 (유효한 제품코드인 경우만)
+      if (codeUpper && isValidProductCode) {
+        const q2 = query(
+          collection(db, 'productMaterialSizes'),
+          where('productCode', '==', codeUpper)
+        );
+        queries.push(getDocs(q2));
+      }
+      
+      // 2-1. 제품코드 정규화 버전으로 조회 (0 제거 버전)
+      if (codeNormalized && isValidNormalizedCode && codeNormalized !== codeUpper) {
+        const q2_1 = query(
+          collection(db, 'productMaterialSizes'),
+          where('productCode', '==', codeNormalized)
+        );
+        queries.push(getDocs(q2_1));
+      }
+      
+      // 2-2. 제품코드의 0 추가 버전으로도 조회 (예: "4-4N" → "04-04N")
+      if (codeUpper && isValidProductCode) {
+        // 숫자 앞에 0을 추가한 버전 생성
+        const codeWithZeros = codeUpper.replace(/\b(\d+)\b/g, (match) => {
+          const num = parseInt(match, 10);
+          return num < 10 ? `0${num}` : match;
+        });
+        if (codeWithZeros !== codeUpper) {
+          const q2_2 = query(
+            collection(db, 'productMaterialSizes'),
+            where('productCode', '==', codeWithZeros)
+          );
+          queries.push(getDocs(q2_2));
+        }
+      }
+      
+      // 3. 제품코드 마지막 문자가 N 또는 R이면 제거한 버전으로 조회 (유효한 제품코드인 경우만)
+      if (codeUpper && isValidProductCode && (codeUpper.endsWith('N') || codeUpper.endsWith('R'))) {
+        const codeWithoutLastChar = codeUpper.slice(0, -1);
+        if (codeWithoutLastChar.length >= 3) {
+          const q3 = query(
+            collection(db, 'productMaterialSizes'),
+            where('productCode', '==', codeWithoutLastChar)
+          );
+          queries.push(getDocs(q3));
+          
+          // 정규화 버전도 조회
+          const normalizedWithoutLastChar = normalizeCode(codeWithoutLastChar);
+          if (normalizedWithoutLastChar !== codeWithoutLastChar && normalizedWithoutLastChar.length >= 2) {
+            const q3_1 = query(
+              collection(db, 'productMaterialSizes'),
+              where('productCode', '==', normalizedWithoutLastChar)
+            );
+            queries.push(getDocs(q3_1));
+          }
+        }
+      }
+      
+      // 4. 제품코드가 다른 제품코드의 일부인 경우 (예: "04-04R"이 "GMC-04-04R"에 포함)
+      // 유효한 제품코드이고 숫자나 하이픈이 포함된 경우만
+      if (codeUpper && isValidProductCode) {
+        const codeWithoutLastChar = codeUpper.endsWith('N') || codeUpper.endsWith('R') 
+          ? codeUpper.slice(0, -1) 
+          : codeUpper;
+        
+        // 제품코드로 끝나는 경우 조회 (>= codeWithoutLastChar, <= codeWithoutLastChar + '\uf8ff')
+        if (codeWithoutLastChar.length >= 3) {
+          const q4 = query(
+            collection(db, 'productMaterialSizes'),
+            where('productCode', '>=', codeWithoutLastChar),
+            where('productCode', '<=', codeWithoutLastChar + '\uf8ff')
+          );
+          queries.push(getDocs(q4));
+        }
+      }
+      
+      // 5. 제품명과 제품코드를 조합한 형태로 조회 (예: "GMC-04-04R")
+      // 둘 다 유효한 경우만
+      if (nameUpper && nameUpper.length >= 3 && codeUpper && isValidProductCode) {
+        const combinedCode1 = `${nameUpper}-${codeUpper}`;
+        const q5 = query(
+          collection(db, 'productMaterialSizes'),
+          where('productCode', '==', combinedCode1)
+        );
+        queries.push(getDocs(q5));
+        
+        // 정규화 버전 조합도 조회 (예: "GMC-4-4R")
+        if (codeNormalized && isValidNormalizedCode && codeNormalized !== codeUpper) {
+          const combinedCode1_normalized = `${nameUpper}-${codeNormalized}`;
+          const q5_1 = query(
+            collection(db, 'productMaterialSizes'),
+            where('productCode', '==', combinedCode1_normalized)
+          );
+          queries.push(getDocs(q5_1));
+        }
+        
+        // 마지막 문자 제거한 조합도 조회
+        if (codeUpper.endsWith('N') || codeUpper.endsWith('R')) {
+          const codeWithoutLastChar = codeUpper.slice(0, -1);
+          if (codeWithoutLastChar.length >= 3) {
+            const combinedCode2 = `${nameUpper}-${codeWithoutLastChar}`;
+            const q6 = query(
+              collection(db, 'productMaterialSizes'),
+              where('productCode', '==', combinedCode2)
+            );
+            queries.push(getDocs(q6));
+            
+            // 정규화 버전도 조회
+            const normalizedWithoutLastChar = normalizeCode(codeWithoutLastChar);
+            if (normalizedWithoutLastChar !== codeWithoutLastChar && normalizedWithoutLastChar.length >= 2) {
+              const combinedCode2_normalized = `${nameUpper}-${normalizedWithoutLastChar}`;
+              const q6_1 = query(
+                collection(db, 'productMaterialSizes'),
+                where('productCode', '==', combinedCode2_normalized)
+              );
+              queries.push(getDocs(q6_1));
+            }
+          }
+        }
+      }
+      
+      // 6. 제품코드가 하이픈으로 시작하거나 불완전한 경우, 제품명과 조합하여 조회
+      // 예: 제품명 "GMC", 제품코드 "04-04N" -> "GMC-04-04N"으로 조회
+      if (nameUpper && nameUpper.length >= 3 && codeUpper && isValidProductCode) {
+        // 제품코드가 하이픈으로 시작하는 경우 (예: "04-04N")
+        if (codeUpper.startsWith('-')) {
+          const combinedCode = `${nameUpper}${codeUpper}`;
+          const q7 = query(
+            collection(db, 'productMaterialSizes'),
+            where('productCode', '==', combinedCode)
+          );
+          queries.push(getDocs(q7));
+          
+          // 마지막 문자 제거한 조합도 조회
+          if (codeUpper.endsWith('N') || codeUpper.endsWith('R')) {
+            const codeWithoutLastChar = codeUpper.slice(0, -1);
+            if (codeWithoutLastChar.length >= 2) {
+              const combinedCode2 = `${nameUpper}${codeWithoutLastChar}`;
+              const q8 = query(
+                collection(db, 'productMaterialSizes'),
+                where('productCode', '==', combinedCode2)
+              );
+              queries.push(getDocs(q8));
+            }
+          }
+        } else {
+          // 제품코드가 하이픈으로 시작하지 않지만, 제품명과 조합하여 조회 시도
+          // 제품코드가 숫자와 하이픈으로만 구성된 경우 (예: "04-04N")
+          if (/^[\d-]+[NR]?$/.test(codeUpper)) {
+            const combinedCode = `${nameUpper}-${codeUpper}`;
+            const q9 = query(
+              collection(db, 'productMaterialSizes'),
+              where('productCode', '==', combinedCode)
+            );
+            queries.push(getDocs(q9));
+            
+            // 정규화 버전 조합도 조회 (예: "GMC-4-4N")
+            if (codeNormalized && isValidNormalizedCode && codeNormalized !== codeUpper) {
+              const combinedCode_normalized = `${nameUpper}-${codeNormalized}`;
+              const q9_1 = query(
+                collection(db, 'productMaterialSizes'),
+                where('productCode', '==', combinedCode_normalized)
+              );
+              queries.push(getDocs(q9_1));
+            }
+            
+            // 마지막 문자 제거한 조합도 조회
+            if (codeUpper.endsWith('N') || codeUpper.endsWith('R')) {
+              const codeWithoutLastChar = codeUpper.slice(0, -1);
+              if (codeWithoutLastChar.length >= 2) {
+                const combinedCode2 = `${nameUpper}-${codeWithoutLastChar}`;
+                const q10 = query(
+                  collection(db, 'productMaterialSizes'),
+                  where('productCode', '==', combinedCode2)
+                );
+                queries.push(getDocs(q10));
+                
+                // 정규화 버전도 조회
+                const normalizedWithoutLastChar = normalizeCode(codeWithoutLastChar);
+                if (normalizedWithoutLastChar !== codeWithoutLastChar && normalizedWithoutLastChar.length >= 2) {
+                  const combinedCode2_normalized = `${nameUpper}-${normalizedWithoutLastChar}`;
+                  const q10_1 = query(
+                    collection(db, 'productMaterialSizes'),
+                    where('productCode', '==', combinedCode2_normalized)
+                  );
+                  queries.push(getDocs(q10_1));
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      // 6. 제품코드가 제품명을 포함하는 경우는 제거 (제품명만으로는 너무 광범위함)
+      
+      if (queries.length === 0) {
         return undefined;
       }
       
-      const docData = querySnapshot.docs[0].data();
-      const materials = (docData.materials || []).map((m: { id?: string; materialType: string; size: string }) => ({
+      // 모든 쿼리 실행
+      const results = await Promise.all(queries);
+      
+      // 결과 합치기 (중복 제거)
+      const allDocs = new Map<string, any>();
+      results.forEach(querySnapshot => {
+        querySnapshot.forEach(doc => {
+          if (!allDocs.has(doc.id)) {
+            allDocs.set(doc.id, doc.data());
+          }
+        });
+      });
+      
+      if (allDocs.size === 0) {
+        return undefined;
+      }
+      
+      // 첫 번째 매칭된 제품의 소재/사이즈 정보 반환
+      const firstDoc = Array.from(allDocs.values())[0];
+      const materials = (firstDoc.materials || []).map((m: { id?: string; materialType: string; size: string }) => ({
         materialType: m.materialType as 'Hexa' | 'Round',
         size: m.size || '',
       }));
@@ -1530,14 +1760,29 @@ function MaterialTestCertificateContent() {
                   ? mtcWithCerts.inspectionCertificates
                   : (mtc.inspectionCertificate ? [mtc.inspectionCertificate] : []);
                 const { material, heatNo } = collectMaterialAndHeatNo([], existingCerts);
+                
+                // 제품명과 제품코드가 모두 있으면 소재/사이즈 조회
+                const productName = mtc.description || '';
+                const productCode = mtc.code || '';
+                let materialSizes: MaterialSize[] | undefined = undefined;
+                if (productName.trim() && productCode.trim()) {
+                  try {
+                    materialSizes = await fetchProductMaterialSizes(productName, productCode);
+                  } catch (error) {
+                    console.error(`[로드] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
+                    // 에러 발생 시 소재/사이즈 없이 진행
+                  }
+                }
+                
                 setProducts([{
-                  productName: mtc.description || '',
-                  productCode: mtc.code || '',
+                  productName: productName,
+                  productCode: productCode,
                   quantity: mtc.quantity?.toString() || '',
                   heatNo: heatNo || mtc.heatNo || '',
                   material: material || mtc.material || '',
                   inspectionCertiFiles: [],
                   existingInspectionCertis: existingCerts,
+                  materialSizes: materialSizes,
                 }]);
               }
             } else {
@@ -1665,11 +1910,15 @@ function MaterialTestCertificateContent() {
                 let materialSizes: MaterialSize[] | undefined = undefined;
                 if (productName.trim() && productCode.trim()) {
                   try {
+                    console.log(`[로드-수정모드] 제품 "${productName}" / "${productCode}" 소재/사이즈 조회 시작`);
                     materialSizes = await fetchProductMaterialSizes(productName, productCode);
+                    console.log(`[로드-수정모드] 제품 "${productName}" / "${productCode}" 소재/사이즈 조회 결과:`, materialSizes);
                   } catch (error) {
-                    console.error(`[로드] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
+                    console.error(`[로드-수정모드] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
                     // 에러 발생 시 소재/사이즈 없이 진행
                   }
+                } else {
+                  console.log(`[로드-수정모드] 제품명 또는 제품코드가 비어있음: productName="${productName}", productCode="${productCode}"`);
                 }
                 
                 loadedProducts.push({
@@ -1737,11 +1986,15 @@ function MaterialTestCertificateContent() {
               let materialSizes: MaterialSize[] | undefined = undefined;
               if (productName.trim() && productCode.trim()) {
                 try {
+                  console.log(`[로드-수정모드-단일] 제품 "${productName}" / "${productCode}" 소재/사이즈 조회 시작`);
                   materialSizes = await fetchProductMaterialSizes(productName, productCode);
+                  console.log(`[로드-수정모드-단일] 제품 "${productName}" / "${productCode}" 소재/사이즈 조회 결과:`, materialSizes);
                 } catch (error) {
-                  console.error(`[로드] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
+                  console.error(`[로드-수정모드-단일] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
                   // 에러 발생 시 소재/사이즈 없이 진행
                 }
+              } else {
+                console.log(`[로드-수정모드-단일] 제품명 또는 제품코드가 비어있음: productName="${productName}", productCode="${productCode}"`);
               }
               
               loadedProducts = [{
@@ -1776,30 +2029,57 @@ function MaterialTestCertificateContent() {
             
             // 제품 데이터 로드 (products 배열이 있으면 사용, 없으면 기존 단일 제품 필드 사용)
             if (data.products && Array.isArray(data.products) && data.products.length > 0) {
-              setProducts(data.products.map((p: CertificateProduct) => {
+              const loadedProducts = await Promise.all(data.products.map(async (p: CertificateProduct) => {
                 const existingCerts = p.inspectionCertificate ? [p.inspectionCertificate] : [];
                 // 기존 파일들에서 Material과 Heat No. 수집
                 const { material, heatNo } = collectMaterialAndHeatNo([], existingCerts);
+                
+                // 제품명과 제품코드가 모두 있으면 소재/사이즈 조회
+                const productName = p.productName || '';
+                const productCode = p.productCode || '';
+                let materialSizes: MaterialSize[] | undefined = undefined;
+                if (productName.trim() && productCode.trim()) {
+                  try {
+                    materialSizes = await fetchProductMaterialSizes(productName, productCode);
+                  } catch (error) {
+                    console.error(`[로드] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
+                  }
+                }
+                
                 return {
-                  productName: p.productName || '',
-                  productCode: p.productCode || '',
+                  productName: productName,
+                  productCode: productCode,
                   quantity: p.quantity?.toString() || '',
                   heatNo: heatNo || p.heatNo || '',
                   material: material || p.material || '',
                   inspectionCertiFiles: [],
                   existingInspectionCertis: existingCerts,
+                  materialSizes: materialSizes,
                 };
               }));
+              setProducts(loadedProducts);
             } else if (data.productName || data.productCode || data.quantity) {
               // 기존 단일 제품 데이터를 배열로 변환
+              const productName = data.productName || '';
+              const productCode = data.productCode || '';
+              let materialSizes: MaterialSize[] | undefined = undefined;
+              if (productName.trim() && productCode.trim()) {
+                try {
+                  materialSizes = await fetchProductMaterialSizes(productName, productCode);
+                } catch (error) {
+                  console.error(`[로드] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
+                }
+              }
+              
               setProducts([{
-                productName: data.productName || '',
-                productCode: data.productCode || '',
+                productName: productName,
+                productCode: productCode,
                 quantity: data.quantity?.toString() || '',
                 heatNo: data.lotNumber || '',
                 material: '',
                 inspectionCertiFiles: [],
                 existingInspectionCertis: [],
+                materialSizes: materialSizes,
               }]);
             }
           }
@@ -3468,19 +3748,24 @@ function MaterialTestCertificateContent() {
                         disabled={saving || generatingPDF}
                       />
 
-                      <div className="relative">
-                        <Input
-                          type="text"
-                          label="HEAT NO. (히트번호)"
-                          value={product.heatNo}
-                          onChange={(e) => handleProductChange(index, 'heatNo', e.target.value)}
-                          placeholder="히트번호를 입력하세요"
-                          disabled={saving || generatingPDF}
-                        />
-                        {/* 소재/사이즈 표시 (Heat No. 아래) */}
-                        {product.materialSizes && product.materialSizes.length > 0 && (
-                          <div className="mt-2 flex items-center gap-1 text-xs text-gray-600 bg-blue-50 px-2 py-1 rounded border border-blue-200">
-                            <span className="font-medium">소재/사이즈:</span>
+                      <Input
+                        type="text"
+                        label="HEAT NO. (히트번호)"
+                        value={product.heatNo}
+                        onChange={(e) => handleProductChange(index, 'heatNo', e.target.value)}
+                        placeholder="히트번호를 입력하세요"
+                        disabled={saving || generatingPDF}
+                      />
+                    </div>
+
+                    {/* 제품별 Inspection Certi 첨부 */}
+                    <div className="mt-4">
+                      <div className="flex items-center mb-3">
+                        <h3 className="text-md font-semibold text-gray-800">INSPECTION CERTIFICATE 첨부 (제품 {index + 1})</h3>
+                        {/* 제품명/제품코드/소재/사이즈 표시 (제목 우측, 마진 추가) */}
+                        {product.productName && product.productCode && product.materialSizes && product.materialSizes.length > 0 && (
+                          <div className="flex items-center gap-1 text-sm text-gray-600 bg-blue-50 px-2 py-1 rounded border border-blue-200 whitespace-nowrap ml-4">
+                            <span className="font-medium">{product.productName} / {product.productCode} /</span>
                             {product.materialSizes.map((ms, msIndex) => (
                               <span key={msIndex}>
                                 {ms.materialType} / {ms.size}mm
@@ -3490,11 +3775,6 @@ function MaterialTestCertificateContent() {
                           </div>
                         )}
                       </div>
-                    </div>
-
-                    {/* 제품별 Inspection Certi 첨부 */}
-                    <div className="mt-4">
-                      <h3 className="text-md font-semibold text-gray-800 mb-3">INSPECTION CERTIFICATE 첨부 (제품 {index + 1})</h3>
                       
                       {/* 기존 파일 목록 (MTC에 포함되지 않음) */}
                       {product.existingInspectionCertis && product.existingInspectionCertis.length > 0 && (

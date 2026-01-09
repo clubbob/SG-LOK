@@ -1377,6 +1377,7 @@ function MaterialTestCertificateContent() {
   const [generatingPDF, setGeneratingPDF] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // MATERIAL TEST CERTIFICATE 입력 항목
   const [formData, setFormData] = useState({
@@ -1778,6 +1779,15 @@ function MaterialTestCertificateContent() {
       ...prev,
       [name]: processedValue,
     }));
+    
+    // 해당 필드의 에러 초기화
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
   };
 
   // 제품 필드 변경 핸들러
@@ -1790,6 +1800,15 @@ function MaterialTestCertificateContent() {
       newProducts[index] = { ...newProducts[index], [field]: processedValue };
       return newProducts;
     });
+    
+    // 해당 필드의 에러 초기화
+    if (fieldErrors[`${field}-${index}`]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[`${field}-${index}`];
+        return newErrors;
+      });
+    }
   };
 
   // 제품 추가 (이전 제품 내용 복사)
@@ -1887,64 +1906,91 @@ function MaterialTestCertificateContent() {
 
 
   const validateForm = () => {
+    const errors: Record<string, string> = {};
+
+    // CERTIFICATE NO. 필수 (1순위)
     if (!formData.certificateNo.trim()) {
-      setError('CERTIFICATE NO.를 입력해주세요.');
-      setTimeout(() => {
-        const element = document.getElementById('certificateNo');
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          (element as HTMLInputElement).focus();
-        }
-      }, 100);
-      return false;
-    }
-    if (!formData.dateOfIssue.trim()) {
-      setError('DATE OF ISSUE를 선택해주세요.');
-      setTimeout(() => {
-        const element = document.getElementById('dateOfIssue');
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          (element as HTMLInputElement).focus();
-        }
-      }, 100);
-      return false;
-    }
-    if (!formData.customer.trim()) {
-      setError('CUSTOMER를 입력해주세요.');
-      setTimeout(() => {
-        const element = document.getElementById('customer');
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          (element as HTMLInputElement).focus();
-        }
-      }, 100);
-      return false;
-    }
-    
-    // 제품 검증 (최소 1개 제품은 필수)
-    const validProducts = products.filter(p => p.productName.trim() || p.productCode.trim() || p.quantity.trim());
-    if (validProducts.length === 0) {
-      setError('최소 1개 이상의 제품을 입력해주세요.');
-      return false;
-    }
-    
-      // 각 제품의 필수 필드 검증
-      for (let i = 0; i < validProducts.length; i++) {
-        const product = validProducts[i];
-        if (!product.productName.trim()) {
-          setError(`제품 ${i + 1}: 제품명을 입력해주세요.`);
-          return false;
-        }
-        if (!product.productCode.trim()) {
-          setError(`제품 ${i + 1}: CODE를 입력해주세요.`);
-          return false;
-        }
-        if (!product.quantity.trim()) {
-          setError(`제품 ${i + 1}: 수량을 입력해주세요.`);
-          return false;
-        }
+      errors.certificateNo = '이 입력란을 작성하세요.';
+      setFieldErrors(errors);
+      // 브라우저 기본 툴팁 표시
+      const element = document.getElementById('certificateNo');
+      if (element) {
+        (element as HTMLInputElement).focus();
+        (element as HTMLInputElement).reportValidity();
       }
+      return false;
+    }
+
+    // DATE OF ISSUE 필수 (2순위)
+    if (!formData.dateOfIssue.trim()) {
+      errors.dateOfIssue = '이 입력란을 작성하세요.';
+      setFieldErrors(errors);
+      // 브라우저 기본 툴팁 표시
+      const element = document.getElementById('dateOfIssue');
+      if (element) {
+        (element as HTMLInputElement).focus();
+        (element as HTMLInputElement).reportValidity();
+      }
+      return false;
+    }
+
+    // CUSTOMER 필수 (3순위)
+    if (!formData.customer.trim()) {
+      errors.customer = '이 입력란을 작성하세요.';
+      setFieldErrors(errors);
+      // 브라우저 기본 툴팁 표시
+      const element = document.getElementById('customer');
+      if (element) {
+        (element as HTMLInputElement).focus();
+        (element as HTMLInputElement).reportValidity();
+      }
+      return false;
+    }
+
+    // 제품 정보 필수 검증 (4순위)
+    if (!products || products.length === 0) {
+      errors.products = '이 입력란을 작성하세요.';
+      setFieldErrors(errors);
+      return false;
+    }
     
+    // 각 제품의 필수 필드 검증
+    let hasError = false;
+    let firstErrorField: string | null = null;
+    products.forEach((product, index) => {
+      if (!product.productName.trim()) {
+        errors[`productName-${index}`] = '이 입력란을 작성하세요.';
+        if (!firstErrorField) firstErrorField = `productName-${index}`;
+        hasError = true;
+      }
+      if (!product.productCode.trim()) {
+        errors[`productCode-${index}`] = '이 입력란을 작성하세요.';
+        if (!firstErrorField) firstErrorField = `productCode-${index}`;
+        hasError = true;
+      }
+      if (!product.quantity.trim()) {
+        errors[`quantity-${index}`] = '이 입력란을 작성하세요.';
+        if (!firstErrorField) firstErrorField = `quantity-${index}`;
+        hasError = true;
+      }
+    });
+    
+    if (hasError) {
+      setFieldErrors(errors);
+      // 첫 번째 에러 필드에 브라우저 기본 툴팁 표시
+      if (firstErrorField) {
+        setTimeout(() => {
+          const element = document.getElementById(firstErrorField!);
+          if (element) {
+            (element as HTMLInputElement).focus();
+            (element as HTMLInputElement).reportValidity();
+          }
+        }, 100);
+      }
+      return false;
+    }
+
+    setFieldErrors({});
     return true;
   };
 
@@ -3208,7 +3254,13 @@ function MaterialTestCertificateContent() {
       )}
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+        <form onSubmit={(e) => { 
+          e.preventDefault(); 
+          if (!validateForm()) {
+            return;
+          }
+          handleSave(); 
+        }}>
           <div className="space-y-6">
             {/* 기본 정보 섹션 */}
             <div>
@@ -3258,8 +3310,18 @@ function MaterialTestCertificateContent() {
 
               {/* 제품 정보 섹션 */}
               <div className="mt-6">
-                <div className="mb-4">
+                <div className="mb-4 relative">
                   <h2 className="text-lg font-semibold text-gray-900">제품 정보 *</h2>
+                  {fieldErrors.products && (
+                    <div className="absolute left-0 top-6 mt-1 px-2 py-1 bg-orange-100 border border-orange-300 rounded shadow-lg text-xs text-gray-800 whitespace-nowrap z-10">
+                      <div className="flex items-center gap-1">
+                        <svg className="w-4 h-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                        <span>{fieldErrors.products}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {products.map((product, index) => (
@@ -3289,6 +3351,7 @@ function MaterialTestCertificateContent() {
                     <div className="grid grid-cols-2 gap-4">
                       <Input
                         type="text"
+                        id={`productName-${index}`}
                         label="DESCRIPTION (제품명) *"
                         required
                         value={product.productName}
@@ -3299,6 +3362,7 @@ function MaterialTestCertificateContent() {
 
                       <Input
                         type="text"
+                        id={`productCode-${index}`}
                         label="CODE (제품코드) *"
                         required
                         value={product.productCode}
@@ -3309,6 +3373,7 @@ function MaterialTestCertificateContent() {
 
                       <Input
                         type="text"
+                        id={`quantity-${index}`}
                         inputMode="numeric"
                         label="Q'TY (수량) *"
                         required

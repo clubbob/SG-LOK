@@ -308,13 +308,20 @@ export default function InspectionCertiPage() {
       
       const materials: MaterialSize[] = [...product.materials];
       
-      // 사이즈가 입력된 경우 소재/사이즈 추가
+      // 사이즈가 입력된 경우 첫 번째 소재/사이즈를 업데이트 (수정 모드)
       if (editingProduct.size.trim()) {
-        materials.push({
-          id: Date.now().toString(),
+        const updatedMaterial: MaterialSize = {
+          id: materials.length > 0 ? materials[0].id : Date.now().toString(),
           materialType: editingProduct.materialType,
           size: parseFloat(editingProduct.size).toFixed(2),
-        });
+        };
+        
+        // 첫 번째 항목이 있으면 업데이트, 없으면 추가
+        if (materials.length > 0) {
+          materials[0] = updatedMaterial;
+        } else {
+          materials.push(updatedMaterial);
+        }
       }
       
       await updateDoc(doc(db, 'productMaterialSizes', editingProductId), {

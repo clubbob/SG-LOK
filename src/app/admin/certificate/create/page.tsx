@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs, query, where } from 'firebase/firestore';
@@ -1217,37 +1217,6 @@ const generatePDFBlobWithProducts = async (
   }
 };
 
-// PDF 생성 및 다운로드 함수 (기존 함수 유지)
-const generateAndDownloadPDF = async (
-  formData: {
-    certificateNo: string;
-    dateOfIssue: string;
-    customer: string;
-    poNo: string;
-    description: string;
-    code: string;
-    quantity: string;
-    testResult: string;
-    heatNo: string;
-  },
-  inspectionCertificate?: CertificateAttachment | null
-) => {
-  // 제품 데이터 준비
-  const productsDataForDownload: CertificateProduct[] = [];
-  // inspectionCertificate는 더 이상 단일 파일이 아니라 제품별로 처리되므로 빈 배열로 처리
-  const result = await generatePDFBlobWithProducts(formData, productsDataForDownload);
-  const fileName = `MATERIAL_TEST_CERTIFICATE_${formData.certificateNo || 'CERT'}_${new Date().toISOString().split('T')[0]}.pdf`;
-  
-  // Blob을 다운로드
-  const url = URL.createObjectURL(result.blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-};
 
 // 관리자 인증 확인 함수
 const checkAdminAuth = (): boolean => {
@@ -1815,7 +1784,7 @@ function MaterialTestCertificateContent() {
     if (copyFromId || certificateId) {
       loadCertificateData();
     }
-  }, [certificateId, copyFromId, router]);
+  }, [certificateId, copyFromId, router, fetchProductMaterialSizes]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -1842,7 +1811,7 @@ function MaterialTestCertificateContent() {
   };
 
   // 제품별 소재/사이즈 조회 함수
-  const fetchProductMaterialSizes = async (productName: string, productCode: string): Promise<MaterialSize[] | undefined> => {
+  const fetchProductMaterialSizes = useCallback(async (productName: string, productCode: string): Promise<MaterialSize[] | undefined> => {
     if (!productName.trim() || !productCode.trim()) {
       return undefined;
     }
@@ -1860,7 +1829,7 @@ function MaterialTestCertificateContent() {
       }
       
       const docData = querySnapshot.docs[0].data();
-      const materials = (docData.materials || []).map((m: any) => ({
+      const materials = (docData.materials || []).map((m: { id?: string; materialType: string; size: string }) => ({
         materialType: m.materialType as 'Hexa' | 'Round',
         size: m.size || '',
       }));
@@ -1870,7 +1839,7 @@ function MaterialTestCertificateContent() {
       console.error('소재/사이즈 조회 오류:', error);
       return undefined;
     }
-  };
+  }, []);
 
   // 제품 필드 변경 핸들러
   const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity' | 'heatNo' | 'material', value: string) => {
@@ -2009,11 +1978,6 @@ function MaterialTestCertificateContent() {
     });
   };
 
-  // 제품별 기존 Inspection Certi 파일 삭제 (더 이상 사용하지 않음, handleDeleteInspectionCertiFile로 통합)
-  // 하위 호환성을 위해 유지하지만 실제로는 handleDeleteInspectionCertiFile을 호출
-  const handleDeleteExistingInspectionCerti = (productIndex: number, fileIndex: number) => {
-    handleDeleteInspectionCertiFile(productIndex, fileIndex);
-  };
 
 
   const validateForm = () => {

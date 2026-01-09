@@ -63,7 +63,7 @@ export default function InspectionCertiPage() {
   const [newProduct, setNewProduct] = useState({
     productName: '',
     productCode: '',
-    materialType: 'Hexa' as MaterialType,
+    materialType: '' as MaterialType | '',
     size: '',
   });
   
@@ -164,7 +164,14 @@ export default function InspectionCertiPage() {
       return false;
     }
 
-    // 소재 사이즈 필수 (3순위)
+    // 소재 종류 필수 (3순위)
+    if (!newProduct.materialType || (newProduct.materialType as string) === '') {
+      errors.materialType = '이 입력란을 작성하세요.';
+      setFieldErrors(errors);
+      return false;
+    }
+
+    // 소재 사이즈 필수 (4순위)
     if (!newProduct.size.trim()) {
       errors.size = '이 입력란을 작성하세요.';
       setFieldErrors(errors);
@@ -189,6 +196,7 @@ export default function InspectionCertiPage() {
       // HTML5 validation 트리거
       const productNameInput = document.getElementById('new-product-name') as HTMLInputElement;
       const productCodeInput = document.getElementById('new-product-code') as HTMLInputElement;
+      const materialTypeSelect = document.getElementById('new-product-material-type') as HTMLSelectElement;
       const sizeInput = document.getElementById('new-product-size') as HTMLInputElement;
       
       if (productNameInput && !newProduct.productName.trim()) {
@@ -197,6 +205,10 @@ export default function InspectionCertiPage() {
       }
       if (productCodeInput && !newProduct.productCode.trim()) {
         productCodeInput.reportValidity();
+        return;
+      }
+      if (materialTypeSelect && (!newProduct.materialType || (newProduct.materialType as string) === '')) {
+        materialTypeSelect.reportValidity();
         return;
       }
       if (sizeInput && !newProduct.size.trim()) {
@@ -215,10 +227,10 @@ export default function InspectionCertiPage() {
         p => p.productName === productName && p.productCode === productCode
       );
       
-      // 소재/사이즈 추가 (필수)
+      // 소재/사이즈 추가 (필수) - 검증을 통과했으므로 materialType은 MaterialType임
       const materials: MaterialSize[] = [{
         id: Date.now().toString(),
-        materialType: newProduct.materialType,
+        materialType: newProduct.materialType as MaterialType,
         size: parseFloat(newProduct.size).toFixed(2),
       }];
       
@@ -250,7 +262,7 @@ export default function InspectionCertiPage() {
         await loadProductMaterialSizes();
       }
       
-      setNewProduct({ productName: '', productCode: '', materialType: 'Hexa', size: '' });
+      setNewProduct({ productName: '', productCode: '', materialType: '', size: '' });
       setIsAddingProduct(false);
     } catch (error) {
       console.error('제품 추가 오류:', error);
@@ -548,14 +560,32 @@ export default function InspectionCertiPage() {
                 소재 종류 *
               </label>
               <select
+                id="new-product-material-type"
                 value={newProduct.materialType}
-                onChange={(e) => setNewProduct({ ...newProduct, materialType: e.target.value as MaterialType })}
-                className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                onChange={(e) => {
+                  setNewProduct({ ...newProduct, materialType: e.target.value as MaterialType | '' });
+                  if (fieldErrors.materialType) {
+                    setFieldErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.materialType;
+                      return newErrors;
+                    });
+                  }
+                }}
+                className={`flex h-10 w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
+                  fieldErrors.materialType ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'
+                }`}
                 required
               >
+                <option value="">선택</option>
                 <option value="Hexa">Hexa</option>
                 <option value="Round">Round</option>
               </select>
+              {fieldErrors.materialType && (
+                <div className="absolute left-0 top-6 mt-1 px-2 py-1 bg-orange-100 border border-orange-300 rounded shadow-lg text-xs text-gray-800 whitespace-nowrap z-10">
+                  {fieldErrors.materialType}
+                </div>
+              )}
             </div>
             <div>
               <Input
@@ -590,7 +620,7 @@ export default function InspectionCertiPage() {
                 variant="outline"
                 onClick={() => {
                   setIsAddingProduct(false);
-                  setNewProduct({ productName: '', productCode: '', materialType: 'Hexa', size: '' });
+                  setNewProduct({ productName: '', productCode: '', materialType: '', size: '' });
                 }}
                 className="px-6 py-2 whitespace-nowrap"
               >

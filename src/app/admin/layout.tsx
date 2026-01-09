@@ -42,7 +42,7 @@ type MenuItem = {
 const adminMenuItems: MenuItem[] = [
   {
     id: 'home',
-    label: '관리자 대시보드',
+    label: '대시보드',
     path: '/admin/dashboard',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

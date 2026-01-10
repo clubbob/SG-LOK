@@ -1485,12 +1485,34 @@ function MaterialTestCertificateContent() {
       }
       
       // 2. 제품코드로 정확히 일치하는 경우 조회 (유효한 제품코드인 경우만)
+      // 상황: 입력 제품코드가 "GMC-04-4N"인 경우, DB에 "GMC-04-04N"이 있으면
+      // 정규화 후 매칭되지만, 직접 조회도 시도
       if (codeUpper && isValidProductCode) {
         const q2 = query(
           collection(db, 'productMaterialSizes'),
           where('productCode', '==', codeUpper)
         );
         queries.push(getDocs(q2));
+        
+        // 입력 제품코드가 하이픈으로 구분된 형태이고, 첫 번째 부분이 알파벳만으로 구성되어 있으면
+        // 제품명 부분을 제거한 버전으로도 조회 (예: "GMC-04-4N" → "04-4N")
+        if (codeUpper.includes('-')) {
+          const codeParts = codeUpper.split('-');
+          if (codeParts.length >= 2) {
+            const codeFirstPart = codeParts[0];
+            const codeSecondPart = codeParts[1];
+            if (codeFirstPart.length >= 2 && /^[A-Z]+$/i.test(codeFirstPart) && /^\d/.test(codeSecondPart)) {
+              const codeWithoutName = codeParts.slice(1).join('-');
+              if (codeWithoutName.length >= 2) {
+                const q2_withoutName = query(
+                  collection(db, 'productMaterialSizes'),
+                  where('productCode', '==', codeWithoutName)
+                );
+                queries.push(getDocs(q2_withoutName));
+              }
+            }
+          }
+        }
       }
       
       // 2-1. 제품코드 정규화 버전으로 조회 (0 제거 버전)
@@ -1761,8 +1783,28 @@ function MaterialTestCertificateContent() {
       // 제품코드 매칭 함수: 제품코드에서 제품명 부분을 제거한 후 비교 (더 강화된 매칭)
       // 반환값: 매칭 여부와 매칭 점수 (0 = 불일치, 1 = 부분 일치, 2 = 정확 일치)
       const matchProductCode = (storedCode: string, storedName: string, inputCode: string, inputName: string): { matched: boolean; score: number } => {
+        // 입력 제품코드에서 제품명 부분 제거 (상황: 입력 제품코드가 "GMC-4-4N"이고 입력 제품명이 "1"인 경우)
+        // 입력 제품코드가 하이픈으로 구분된 형태이고, 첫 번째 부분이 알파벳만으로 구성되어 있으면 제품명으로 간주하여 제거
+        let inputCodeWithoutName = inputCode;
+        if (inputCode.includes('-')) {
+          const inputParts = inputCode.split('-');
+          if (inputParts.length >= 2) {
+            const inputFirstPart = inputParts[0];
+            const inputSecondPart = inputParts[1];
+            // 첫 번째 부분이 알파벳만으로 구성되어 있고, 두 번째 부분이 숫자로 시작하면 제품명으로 간주
+            if (inputFirstPart.length >= 2 && /^[A-Z]+$/i.test(inputFirstPart) && /^\d/.test(inputSecondPart)) {
+              inputCodeWithoutName = inputParts.slice(1).join('-');
+              console.log('[제품코드매칭] 입력 제품코드에서 제품명 부분 제거:', {
+                inputCode,
+                inputFirstPart,
+                inputCodeWithoutName
+              });
+            }
+          }
+        }
+        
         // 입력 제품코드 정규화 (N/R 제거, 0 제거)
-        const inputCodeNormalized = normalizeCode(inputCode);
+        const inputCodeNormalized = normalizeCode(inputCodeWithoutName);
         const inputCodeWithoutSuffix = (inputCodeNormalized.endsWith('N') || inputCodeNormalized.endsWith('R') || inputCodeNormalized.endsWith('G'))
           ? inputCodeNormalized.slice(0, -1)
           : inputCodeNormalized;
@@ -1831,6 +1873,30 @@ function MaterialTestCertificateContent() {
           }
         }
         
+        // 6. 저장된 제품코드가 하이픈으로 구분된 형태라면, 첫 번째 부분을 제품명으로 간주하고 제거
+        // 상황: 입력 제품명이 "MALE CONNECTOR"이고 제품코드가 "4-4N"인 경우,
+        // DB에 "GMC-04-04N"이 저장되어 있으면 "GMC"를 제거해야 "04-04N"을 얻을 수 있음
+        // 하지만 입력 제품명 "MALE CONNECTOR"에는 "GMC"가 포함되어 있지 않으므로
+        // 제품코드의 첫 번째 부분(알파벳만으로 구성)을 자동으로 제품명으로 간주하여 제거
+        // 예: "GMC-04-04N" → "04-04N" (입력 제품명이 "MALE CONNECTOR"인 경우에도)
+        if (!nameRemoved && storedCode.includes('-')) {
+          const parts = storedCode.split('-');
+          if (parts.length >= 2) {
+            // 첫 번째 부분이 알파벳만으로 구성되어 있고, 두 번째 부분이 숫자로 시작하면 제품명으로 간주
+            const firstPart = parts[0];
+            const secondPart = parts[1];
+            if (firstPart.length >= 2 && /^[A-Z]+$/i.test(firstPart) && /^\d/.test(secondPart)) {
+              storedCodeWithoutName = parts.slice(1).join('-');
+              nameRemoved = true;
+              console.log('[제품코드매칭] 하이픈 구분 패턴 감지 - 첫 번째 부분을 제품명으로 간주하여 제거:', {
+                storedCode,
+                firstPart,
+                storedCodeWithoutName
+              });
+            }
+          }
+        }
+        
         // 저장된 제품코드 정규화 (N/R 제거, 0 제거)
         const storedCodeNormalized = normalizeCode(storedCodeWithoutName);
         const storedCodeWithoutSuffix = (storedCodeNormalized.endsWith('N') || storedCodeNormalized.endsWith('R') || storedCodeNormalized.endsWith('G'))
@@ -1843,11 +1909,12 @@ function MaterialTestCertificateContent() {
           storedName,
           inputCode,
           inputName,
+          inputCodeWithoutName,
+          inputCodeNormalized,
+          inputCodeWithoutSuffix,
           storedCodeWithoutName,
           storedCodeNormalized,
           storedCodeWithoutSuffix,
-          inputCodeNormalized,
-          inputCodeWithoutSuffix,
           match: inputCodeWithoutSuffix === storedCodeWithoutSuffix
         });
         

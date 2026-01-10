@@ -1420,6 +1420,8 @@ function MaterialTestCertificateContent() {
       return undefined;
     }
     
+    console.log('[소재조회] 시작:', { productName, productCode });
+    
     try {
       const queries: Promise<QuerySnapshot<DocumentData>>[] = [];
       const nameUpper = productName.trim().toUpperCase();
@@ -1445,6 +1447,29 @@ function MaterialTestCertificateContent() {
           where('productName', '==', nameUpper)
         );
         queries.push(getDocs(q1));
+      }
+      
+      // 1-1. 제품명으로 시작하는 경우 조회 (예: "GMC"로 시작하는 제품명 찾기)
+      if (nameUpper && nameUpper.length >= 3) {
+        const q1_1 = query(
+          collection(db, 'productMaterialSizes'),
+          where('productName', '>=', nameUpper),
+          where('productName', '<=', nameUpper + '\uf8ff')
+        );
+        queries.push(getDocs(q1_1));
+      }
+      
+      // 1-2. 제품명이 포함되는 경우를 찾기 위해 모든 제품 조회 (제품명이 짧은 경우)
+      // 제품명이 3자 이상이면 prefix 검색으로 충분하지만, 더 넓은 범위로 검색하기 위해
+      // 제품명의 첫 글자로 시작하는 모든 제품 조회 (예: "G"로 시작하는 모든 제품)
+      if (nameUpper && nameUpper.length >= 2) {
+        const firstChar = nameUpper[0];
+        const q1_2 = query(
+          collection(db, 'productMaterialSizes'),
+          where('productName', '>=', firstChar),
+          where('productName', '<=', firstChar + '\uf8ff')
+        );
+        queries.push(getDocs(q1_2));
       }
       
       // 2. 제품코드로 정확히 일치하는 경우 조회 (유효한 제품코드인 경우만)
@@ -1481,8 +1506,8 @@ function MaterialTestCertificateContent() {
         }
       }
       
-      // 3. 제품코드 마지막 문자가 N 또는 R이면 제거한 버전으로 조회 (유효한 제품코드인 경우만)
-      if (codeUpper && isValidProductCode && (codeUpper.endsWith('N') || codeUpper.endsWith('R'))) {
+      // 3. 제품코드 마지막 문자가 N, R, G 중 하나이면 제거한 버전으로 조회 (유효한 제품코드인 경우만)
+      if (codeUpper && isValidProductCode && (codeUpper.endsWith('N') || codeUpper.endsWith('R') || codeUpper.endsWith('G'))) {
         const codeWithoutLastChar = codeUpper.slice(0, -1);
         if (codeWithoutLastChar.length >= 3) {
           const q3 = query(
@@ -1506,7 +1531,7 @@ function MaterialTestCertificateContent() {
       // 4. 제품코드가 다른 제품코드의 일부인 경우 (예: "04-04R"이 "GMC-04-04R"에 포함)
       // 유효한 제품코드이고 숫자나 하이픈이 포함된 경우만
       if (codeUpper && isValidProductCode) {
-        const codeWithoutLastChar = codeUpper.endsWith('N') || codeUpper.endsWith('R') 
+        const codeWithoutLastChar = (codeUpper.endsWith('N') || codeUpper.endsWith('R') || codeUpper.endsWith('G'))
           ? codeUpper.slice(0, -1) 
           : codeUpper;
         
@@ -1542,7 +1567,7 @@ function MaterialTestCertificateContent() {
         }
         
         // 마지막 문자 제거한 조합도 조회
-        if (codeUpper.endsWith('N') || codeUpper.endsWith('R')) {
+        if (codeUpper.endsWith('N') || codeUpper.endsWith('R') || codeUpper.endsWith('G')) {
           const codeWithoutLastChar = codeUpper.slice(0, -1);
           if (codeWithoutLastChar.length >= 3) {
             const combinedCode2 = `${nameUpper}-${codeWithoutLastChar}`;
@@ -1579,7 +1604,7 @@ function MaterialTestCertificateContent() {
           queries.push(getDocs(q7));
           
           // 마지막 문자 제거한 조합도 조회
-          if (codeUpper.endsWith('N') || codeUpper.endsWith('R')) {
+          if (codeUpper.endsWith('N') || codeUpper.endsWith('R') || codeUpper.endsWith('G')) {
             const codeWithoutLastChar = codeUpper.slice(0, -1);
             if (codeWithoutLastChar.length >= 2) {
               const combinedCode2 = `${nameUpper}${codeWithoutLastChar}`;
@@ -1661,12 +1686,207 @@ function MaterialTestCertificateContent() {
         return undefined;
       }
       
-      // 첫 번째 매칭된 제품의 소재/사이즈 정보 반환
-      const firstDoc = Array.from(allDocs.values())[0];
+      // 제품코드 매칭 함수: 제품코드에서 제품명 부분을 제거한 후 비교 (더 강화된 매칭)
+      // 반환값: 매칭 여부와 매칭 점수 (0 = 불일치, 1 = 부분 일치, 2 = 정확 일치)
+      const matchProductCode = (storedCode: string, storedName: string, inputCode: string, inputName: string): { matched: boolean; score: number } => {
+        // 입력 제품코드 정규화 (N/R 제거, 0 제거)
+        const inputCodeNormalized = normalizeCode(inputCode);
+        const inputCodeWithoutSuffix = (inputCodeNormalized.endsWith('N') || inputCodeNormalized.endsWith('R') || inputCodeNormalized.endsWith('G'))
+          ? inputCodeNormalized.slice(0, -1)
+          : inputCodeNormalized;
+        
+        // 저장된 제품코드에서 제품명 부분 제거 (여러 방법 시도)
+        let storedCodeWithoutName = storedCode;
+        let nameRemoved = false;
+        
+        // 1. 저장된 제품명으로 시작하는 경우
+        if (storedName && storedCode.startsWith(storedName)) {
+          storedCodeWithoutName = storedCode.substring(storedName.length);
+          if (storedCodeWithoutName.startsWith('-')) {
+            storedCodeWithoutName = storedCodeWithoutName.substring(1);
+          }
+          nameRemoved = true;
+        }
+        // 2. 입력 제품명으로 시작하는 경우 (예: "GMC-06-06R"에서 "GMC" 제거)
+        else if (inputName && storedCode.startsWith(inputName)) {
+          storedCodeWithoutName = storedCode.substring(inputName.length);
+          if (storedCodeWithoutName.startsWith('-')) {
+            storedCodeWithoutName = storedCodeWithoutName.substring(1);
+          }
+          nameRemoved = true;
+        }
+        // 3. 입력 제품명 + 하이픈으로 시작하는 경우
+        else if (inputName && storedCode.startsWith(inputName + '-')) {
+          storedCodeWithoutName = storedCode.substring(inputName.length + 1);
+          nameRemoved = true;
+        }
+        // 4. 저장된 제품명의 단어들로 시작하는 경우 시도
+        else if (storedName) {
+          const storedWords = storedName.split(/[\s\-_]+/).filter(w => w.length > 0);
+          for (const word of storedWords) {
+            if (storedCode.startsWith(word)) {
+              storedCodeWithoutName = storedCode.substring(word.length);
+              if (storedCodeWithoutName.startsWith('-')) {
+                storedCodeWithoutName = storedCodeWithoutName.substring(1);
+              }
+              nameRemoved = true;
+              break;
+            }
+            if (storedCode.startsWith(word + '-')) {
+              storedCodeWithoutName = storedCode.substring(word.length + 1);
+              nameRemoved = true;
+              break;
+            }
+          }
+        }
+        // 5. 입력 제품명의 단어들로 시작하는 경우 시도
+        if (!nameRemoved && inputName) {
+          const inputWords = inputName.split(/[\s\-_]+/).filter(w => w.length > 0);
+          for (const word of inputWords) {
+            if (storedCode.startsWith(word)) {
+              storedCodeWithoutName = storedCode.substring(word.length);
+              if (storedCodeWithoutName.startsWith('-')) {
+                storedCodeWithoutName = storedCodeWithoutName.substring(1);
+              }
+              nameRemoved = true;
+              break;
+            }
+            if (storedCode.startsWith(word + '-')) {
+              storedCodeWithoutName = storedCode.substring(word.length + 1);
+              nameRemoved = true;
+              break;
+            }
+          }
+        }
+        
+        // 저장된 제품코드 정규화 (N/R 제거, 0 제거)
+        const storedCodeNormalized = normalizeCode(storedCodeWithoutName);
+        const storedCodeWithoutSuffix = (storedCodeNormalized.endsWith('N') || storedCodeNormalized.endsWith('R') || storedCodeNormalized.endsWith('G'))
+          ? storedCodeNormalized.slice(0, -1)
+          : storedCodeNormalized;
+        
+        // 정규화된 코드 비교
+        if (inputCodeWithoutSuffix === storedCodeWithoutSuffix) {
+          return { matched: true, score: 2 }; // 정확 일치
+        }
+        
+        // 부분 일치도 허용 (제품코드의 끝부분이 일치하는 경우)
+        // 예: "06-06R"과 "6-6R" 매칭
+        if (storedCodeWithoutSuffix.endsWith(inputCodeWithoutSuffix) || inputCodeWithoutSuffix.endsWith(storedCodeWithoutSuffix)) {
+          return { matched: true, score: 1 }; // 부분 일치
+        }
+        
+        // 입력 제품명이 저장된 제품명에 포함되거나, 저장된 제품명이 입력 제품명으로 시작하는 경우
+        if (inputName && storedName) {
+          if (matchProductName(storedName, inputName)) {
+            // 제품코드 부분만 비교
+            if (inputCodeWithoutSuffix === storedCodeWithoutSuffix) {
+              return { matched: true, score: 2 }; // 정확 일치
+            }
+            // 부분 일치도 허용
+            if (storedCodeWithoutSuffix.endsWith(inputCodeWithoutSuffix) || inputCodeWithoutSuffix.endsWith(storedCodeWithoutSuffix)) {
+              return { matched: true, score: 1 }; // 부분 일치
+            }
+          }
+        }
+        
+        return { matched: false, score: 0 };
+      };
+      
+      // 제품명 매칭 함수 (더 강화된 부분 매칭)
+      const matchProductName = (storedName: string, inputName: string): boolean => {
+        if (!inputName || !storedName) return false;
+        
+        // 정확히 일치
+        if (storedName === inputName) return true;
+        
+        // 저장된 제품명이 입력 제품명으로 시작
+        if (storedName.startsWith(inputName)) return true;
+        
+        // 입력 제품명이 저장된 제품명으로 시작
+        if (inputName.startsWith(storedName)) return true;
+        
+        // 저장된 제품명이 입력 제품명을 포함
+        if (storedName.includes(inputName)) return true;
+        
+        // 입력 제품명이 저장된 제품명을 포함
+        if (inputName.includes(storedName)) return true;
+        
+        // 단어 단위로 매칭 (예: "GMC"가 "MALE CONNECTOR"의 일부 단어와 일치)
+        const storedWords = storedName.split(/[\s\-_]+/).filter(w => w.length > 0);
+        const inputWords = inputName.split(/[\s\-_]+/).filter(w => w.length > 0);
+        
+        // 입력 단어 중 하나라도 저장된 단어와 일치하면 매칭
+        for (const inputWord of inputWords) {
+          for (const storedWord of storedWords) {
+            if (storedWord === inputWord || storedWord.startsWith(inputWord) || inputWord.startsWith(storedWord)) {
+              return true;
+            }
+          }
+        }
+        
+        return false;
+      };
+      
+      // 매칭된 제품 찾기 (제품명 또는 제품코드로 매칭, 점수 기반으로 가장 정확한 매칭 선택)
+      let bestMatch: { doc: DocumentData; score: number } | null = null;
+      
+      // 각 제품에 대해 매칭 점수 계산
+      for (const doc of allDocs.values()) {
+        const docName = (doc.productName || '').toUpperCase();
+        const docCode = (doc.productCode || '').toUpperCase();
+        let score = 0;
+        
+        // 제품명 매칭 점수
+        const nameMatched = matchProductName(docName, nameUpper);
+        if (nameMatched) {
+          // 정확히 일치: 100점
+          if (docName === nameUpper) score += 100;
+          // 저장된 제품명이 입력 제품명으로 시작: 80점
+          else if (docName.startsWith(nameUpper)) score += 80;
+          // 입력 제품명이 저장된 제품명으로 시작: 70점
+          else if (nameUpper.startsWith(docName)) score += 70;
+          // 포함 관계: 50점
+          else if (docName.includes(nameUpper) || nameUpper.includes(docName)) score += 50;
+          // 단어 단위 매칭: 30점
+          else score += 30;
+        }
+        
+        // 제품코드 매칭 점수
+        const codeMatchResult = matchProductCode(docCode, docName, codeUpper, nameUpper);
+        if (codeMatchResult.matched) {
+          // 정확히 일치: 100점
+          if (codeMatchResult.score === 2) score += 100;
+          // 부분 일치: 50점
+          else if (codeMatchResult.score === 1) score += 50;
+        }
+        
+        // 제품명과 제품코드 모두 매칭되면 보너스 점수
+        if (nameMatched && codeMatchResult.matched) {
+          score += 50;
+        }
+        
+        // 가장 높은 점수의 제품 선택
+        if (score > 0 && (!bestMatch || score > bestMatch.score)) {
+          bestMatch = { doc, score };
+        }
+      }
+      
+      // 매칭된 제품이 없으면 첫 번째 결과 사용
+      const firstDoc = bestMatch ? bestMatch.doc : Array.from(allDocs.values())[0];
+      
+      console.log('[소재조회] 매칭 결과:', {
+        totalDocs: allDocs.size,
+        bestMatch: bestMatch ? { name: bestMatch.doc.productName, code: bestMatch.doc.productCode, score: bestMatch.score } : null,
+        firstDoc: firstDoc ? { name: firstDoc.productName, code: firstDoc.productCode, materials: firstDoc.materials } : null,
+      });
+      
       const materials = (firstDoc.materials || []).map((m: { id?: string; materialType: string; size: string }) => ({
         materialType: m.materialType as 'Hexa' | 'Round',
         size: m.size || '',
       }));
+      
+      console.log('[소재조회] 최종 반환:', materials);
       
       return materials.length > 0 ? materials : undefined;
     } catch (error) {
@@ -2035,15 +2255,19 @@ function MaterialTestCertificateContent() {
                 const { material, heatNo } = collectMaterialAndHeatNo([], existingCerts);
                 
                 // 제품명과 제품코드가 모두 있으면 소재/사이즈 조회
-                const productName = p.productName || '';
-                const productCode = p.productCode || '';
+                const productName = (p.productName || '').trim().toUpperCase();
+                const productCode = (p.productCode || '').trim().toUpperCase();
                 let materialSizes: MaterialSize[] | undefined = undefined;
-                if (productName.trim() && productCode.trim()) {
+                if (productName && productCode) {
                   try {
+                    console.log(`[로드-요청데이터] 제품 "${productName}" / "${productCode}" 소재/사이즈 조회 시작`);
                     materialSizes = await fetchProductMaterialSizes(productName, productCode);
+                    console.log(`[로드-요청데이터] 제품 "${productName}" / "${productCode}" 소재/사이즈 조회 결과:`, materialSizes);
                   } catch (error) {
-                    console.error(`[로드] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
+                    console.error(`[로드-요청데이터] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
                   }
+                } else {
+                  console.log(`[로드-요청데이터] 제품명 또는 제품코드가 비어있음: productName="${productName}", productCode="${productCode}"`);
                 }
                 
                 return {
@@ -2060,15 +2284,19 @@ function MaterialTestCertificateContent() {
               setProducts(loadedProducts);
             } else if (data.productName || data.productCode || data.quantity) {
               // 기존 단일 제품 데이터를 배열로 변환
-              const productName = data.productName || '';
-              const productCode = data.productCode || '';
+              const productName = (data.productName || '').trim().toUpperCase();
+              const productCode = (data.productCode || '').trim().toUpperCase();
               let materialSizes: MaterialSize[] | undefined = undefined;
-              if (productName.trim() && productCode.trim()) {
+              if (productName && productCode) {
                 try {
+                  console.log(`[로드-요청데이터-단일] 제품 "${productName}" / "${productCode}" 소재/사이즈 조회 시작`);
                   materialSizes = await fetchProductMaterialSizes(productName, productCode);
+                  console.log(`[로드-요청데이터-단일] 제품 "${productName}" / "${productCode}" 소재/사이즈 조회 결과:`, materialSizes);
                 } catch (error) {
-                  console.error(`[로드] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
+                  console.error(`[로드-요청데이터-단일] 제품 "${productName}" 소재/사이즈 조회 오류:`, error);
                 }
+              } else {
+                console.log(`[로드-요청데이터-단일] 제품명 또는 제품코드가 비어있음: productName="${productName}", productCode="${productCode}"`);
               }
               
               setProducts([{
@@ -2140,7 +2368,9 @@ function MaterialTestCertificateContent() {
         
         if (productName.trim() && productCode.trim()) {
           // 비동기로 소재/사이즈 조회 (상태 업데이트는 즉시, 조회는 나중에)
+          console.log('[제품변경] 소재/사이즈 조회 시작:', { productName, productCode, index });
           fetchProductMaterialSizes(productName, productCode).then(materialSizes => {
+            console.log('[제품변경] 소재/사이즈 조회 완료:', { productName, productCode, materialSizes, index });
             setProducts(prevProducts => {
               const updatedProducts = [...prevProducts];
               if (updatedProducts[index]) {
@@ -2149,7 +2379,7 @@ function MaterialTestCertificateContent() {
               return updatedProducts;
             });
           }).catch(error => {
-            console.error('소재/사이즈 조회 오류:', error);
+            console.error('[제품변경] 소재/사이즈 조회 오류:', error);
           });
         } else {
           // 제품명 또는 제품코드가 비어있으면 소재/사이즈 정보 제거

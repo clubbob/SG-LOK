@@ -2005,20 +2005,40 @@ function MaterialTestCertificateContent() {
           score += 50;
         }
         
-        // 제품코드가 정확히 일치하는 경우 선택 (제품코드 정확 일치가 가장 중요)
-        // 제품명이 일치하지 않아도 제품코드가 정확히 일치하면 매칭
+        // 제품코드가 정확히 일치하는 경우 선택
+        // 제품명이 완전히 다른 경우 매칭하지 않음 (제품명도 어느 정도 일치해야 함)
         if (codeMatchResult.matched && codeMatchResult.score === 2) {
-          // 제품코드 정확 일치 시 우선순위 높은 점수 부여
-          const finalScore = score + (nameMatched ? 100 : 0); // 제품명도 일치하면 보너스
-          console.log('[소재조회] 제품코드 정확 일치 발견:', {
-            docName,
-            docCode,
-            nameMatched,
-            score,
-            finalScore,
-          });
-          if (!bestMatch || finalScore > bestMatch.score) {
-            bestMatch = { doc, score: finalScore };
+          // 제품명이 완전히 다른 경우 매칭하지 않음
+          // 제품명이 일치하거나, 제품명의 일부 단어가 일치하거나, 제품코드에 제품명이 포함된 경우만 허용
+          const nameMatches = nameMatched || 
+            (nameUpper && docCode.includes(nameUpper)) || 
+            (docName && codeUpper.includes(docName)) ||
+            (nameUpper && docName && (
+              nameUpper.length >= 2 && docName.includes(nameUpper) ||
+              docName.length >= 2 && nameUpper.includes(docName)
+            ));
+          
+          if (nameMatches) {
+            // 제품코드 정확 일치 시 우선순위 높은 점수 부여
+            const finalScore = score + (nameMatched ? 100 : 50); // 제품명도 일치하면 보너스
+            console.log('[소재조회] 제품코드 정확 일치 발견:', {
+              docName,
+              docCode,
+              nameMatched,
+              nameMatches,
+              score,
+              finalScore,
+            });
+            if (!bestMatch || finalScore > bestMatch.score) {
+              bestMatch = { doc, score: finalScore };
+            }
+          } else {
+            console.log('[소재조회] 제품코드는 일치하지만 제품명이 완전히 달라 매칭 제외:', {
+              docName,
+              docCode,
+              inputName: nameUpper,
+              inputCode: codeUpper,
+            });
           }
         }
       }

@@ -2620,6 +2620,7 @@ function MaterialTestCertificateContent() {
         quantity: lastProduct?.quantity || '',
         heatNo: lastProduct?.heatNo || '',
         material: lastProduct?.material || '',
+        remark: lastProduct?.remark || '',
         inspectionCertiFiles: [], // 새 파일은 복사하지 않음
         existingInspectionCertis: [], // 기존 파일도 복사하지 않음
         materialSizes: undefined, // 소재/사이즈는 복사하지 않음 (제품명/코드 입력 시 자동 조회)

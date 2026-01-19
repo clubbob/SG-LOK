@@ -187,6 +187,7 @@ export interface CertificateProduct {
   lotNumber?: string;           // 로트번호
   heatNo?: string;              // HEAT NO.
   material?: string;            // MATERIAL (소재 정보, 예: 316/316L, 304)
+  remark?: string;               // 비고 (REMARK)
   inspectionCertificate?: CertificateAttachment; // 제품별 Inspection Certi
 }
 

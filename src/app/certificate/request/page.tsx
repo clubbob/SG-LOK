@@ -41,12 +41,13 @@ function CertificateRequestContent() {
     memo: '',
   });
 
-  // 제품 배열 (제품명, 제품코드, 수량 셋트)
+  // 제품 배열 (제품명, 제품코드, 수량, 비고 셋트)
   const [products, setProducts] = useState<Array<{
     productName: string;
     productCode: string;
     quantity: string;
-  }>>([{ productName: '', productCode: '', quantity: '' }]);
+    remark: string;
+  }>>([{ productName: '', productCode: '', quantity: '', remark: '' }]);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -88,6 +89,7 @@ function CertificateRequestContent() {
               productName: p.productName || '',
               productCode: p.productCode || '',
               quantity: p.quantity?.toString() || '',
+              remark: p.remark || '',
             })));
           } else if (data.productName || data.productCode || data.quantity) {
             // 기존 단일 제품 데이터를 배열로 변환
@@ -95,6 +97,7 @@ function CertificateRequestContent() {
               productName: data.productName || '',
               productCode: data.productCode || '',
               quantity: data.quantity?.toString() || '',
+              remark: '',
             }]);
           }
           
@@ -167,12 +170,15 @@ function CertificateRequestContent() {
   
 
   // 제품 필드 변경 핸들러
-  const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity', value: string) => {
+  const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity' | 'remark', value: string) => {
     setProducts(prev => {
       const newProducts = [...prev];
       if (field === 'quantity') {
         // 수량은 숫자만 허용
         newProducts[index] = { ...newProducts[index], [field]: value.replace(/[^0-9]/g, '') };
+      } else if (field === 'remark') {
+        // 비고는 영문을 대문자로 변환
+        newProducts[index] = { ...newProducts[index], [field]: value.toUpperCase() };
       } else {
         // 제품명, 제품코드는 대문자로 변환
         newProducts[index] = { ...newProducts[index], [field]: value.toUpperCase() };
@@ -199,6 +205,7 @@ function CertificateRequestContent() {
         productName: lastProduct?.productName || '',
         productCode: lastProduct?.productCode || '',
         quantity: lastProduct?.quantity || '',
+        remark: lastProduct?.remark || '',
       };
       return [...prev, newProduct];
     });
@@ -212,7 +219,7 @@ function CertificateRequestContent() {
       setProducts(prev => {
         const newProducts = prev.filter((_, i) => i !== index);
         // 제품이 모두 삭제되면 빈 제품 1개 추가
-        return newProducts.length > 0 ? newProducts : [{ productName: '', productCode: '', quantity: '' }];
+        return newProducts.length > 0 ? newProducts : [{ productName: '', productCode: '', quantity: '', remark: '' }];
       });
     }
   };
@@ -374,6 +381,11 @@ function CertificateRequestContent() {
           productCode: product.productCode.trim() || undefined,
           quantity: product.quantity.trim() ? parseInt(product.quantity, 10) : undefined,
         };
+
+        // 비고는 값이 있을 때만 추가
+        if (product.remark?.trim()) {
+          productData.remark = product.remark.trim();
+        }
 
         productsData.push(productData);
       }
@@ -574,7 +586,7 @@ function CertificateRequestContent() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                     <div className="md:col-span-3 relative">
                       <Input
                         type="text"
@@ -600,7 +612,7 @@ function CertificateRequestContent() {
                       )}
                     </div>
 
-                    <div className="md:col-span-2 relative">
+                    <div className="md:col-span-3 relative">
                       <Input
                         type="text"
                         name="productCode"
@@ -625,7 +637,7 @@ function CertificateRequestContent() {
                       )}
                     </div>
 
-                    <div className="md:col-span-3 relative">
+                    <div className="md:col-span-2 relative">
                       <Input
                         type="text"
                         inputMode="numeric"
@@ -647,6 +659,18 @@ function CertificateRequestContent() {
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    <div className="md:col-span-4 relative">
+                      <Input
+                        type="text"
+                        label="비고"
+                        value={product.remark}
+                        onChange={(e) => handleProductChange(index, 'remark', e.target.value)}
+                        placeholder="비고를 입력하세요 (선택사항)"
+                        style={{ textTransform: 'uppercase' }}
+                        disabled={submitting || uploadingFiles}
+                      />
                     </div>
                   </div>
                 </div>

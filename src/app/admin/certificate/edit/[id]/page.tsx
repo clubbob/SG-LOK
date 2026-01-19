@@ -448,18 +448,20 @@ const generatePDFBlobWithProducts = async (
   doc.text('PRODUCT INFORMATION:', margin, yPosition);
   yPosition += 10;
 
-  // 제품 테이블 헤더 (DESCRIPTION을 더 넓게, Q'ty, Material, Result, Heat No.는 조금씩 줄임)
+  // 제품 테이블 헤더 (DESCRIPTION과 Code 길이 통일, Q'ty, Material, Result, Heat No., Remark는 조금씩 줄임)
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   const colNo = margin; // 12mm
   const colDescription = margin + 8; // 20mm
-  const colCode = margin + 70; // Code를 오른쪽으로 이동하여 Description 공간 확대 (60 -> 70, 10mm 증가)
-  const colQty = margin + 108; // Q'ty를 조금 오른쪽으로 이동 (103.3 -> 108, 4.7mm 증가)
+  // Description과 Code를 동일한 너비로 설정 (각각 50mm)
+  const colCode = margin + 58; // Description과 Code 길이 통일 (8 + 50 = 58)
+  const colQty = margin + 108; // Q'ty 위치 (기존과 동일)
   const colMaterial = margin + 148; // Material을 조금 오른쪽으로 이동 (143.75 -> 148, 4.25mm 증가)
-  // Material, Result, Heat No. 간격을 동일하게 배치
+  // Material, Result, Heat No., Remark 간격을 동일하게 배치
   const availableWidth = pageWidth - margin - colMaterial; // 사용 가능한 너비
-  const colResult = colMaterial + availableWidth / 3; // Material, Result, Heat No. 간격 동일하게
-  const colHeatNo = colMaterial + (availableWidth * 2) / 3; // Material, Result, Heat No. 간격 동일하게
+  const colResult = colMaterial + availableWidth / 4; // Material, Result, Heat No., Remark 간격 동일하게
+  const colHeatNo = colMaterial + (availableWidth * 2) / 4; // Material, Result, Heat No., Remark 간격 동일하게
+  const colRemark = colMaterial + (availableWidth * 3) / 4; // REMARK 열 위치
   
   doc.text('No.', colNo, yPosition);
   doc.text('DESCRIPTION', colDescription, yPosition);
@@ -468,6 +470,7 @@ const generatePDFBlobWithProducts = async (
   doc.text('MATERIAL', colMaterial, yPosition);
   doc.text('RESULT', colResult, yPosition);
   doc.text('HEAT NO.', colHeatNo, yPosition);
+  doc.text('REMARK', colRemark, yPosition);
   yPosition += 8;
   
   // 구분선
@@ -485,16 +488,16 @@ const generatePDFBlobWithProducts = async (
     
     doc.text(`${index + 1}.`, colNo, yPosition);
     const descriptionText = product.productName || '-';
-    // DESCRIPTION 열 너비 조정 (더 넓게 설정하여 한 줄로 표시)
-    const descriptionWidth = colCode - colDescription - 2; // 약 60mm (Code 이동으로 10mm 증가)
+    // DESCRIPTION 열 너비 (Code와 동일한 너비로 통일)
+    const descriptionWidth = colCode - colDescription - 2; // 약 48mm (Description과 Code 동일)
     const descriptionLines = doc.splitTextToSize(descriptionText, descriptionWidth);
     let descY = yPosition;
     descriptionLines.forEach((line: string) => {
       renderKoreanText(doc, line, colDescription, descY, 10);
       descY += 5;
     });
-    // CODE 열 너비 조정 (10% 넓게 설정하여 한 줄로 표시)
-    const codeWidth = colQty - colCode - 2; // 약 30.8mm (10% 증가)
+    // CODE 열 너비 (Description과 동일한 너비로 통일)
+    const codeWidth = colQty - colCode - 2; // 약 48mm (Description과 Code 동일)
     const codeLines = doc.splitTextToSize(product.productCode || '-', codeWidth);
     let codeY = yPosition;
     codeLines.forEach((line: string) => {
@@ -504,7 +507,7 @@ const generatePDFBlobWithProducts = async (
     // Q'TY 열 (간격 확보)
     doc.text((product.quantity || 0).toString(), colQty, yPosition);
     // HEAT NO. 열 처리
-    const heatNoWidth = (pageWidth - margin) - colHeatNo - 2; // 약 20mm
+    const heatNoWidth = colRemark - colHeatNo - 2; // Heat No.와 Remark 사이 너비
     const heatNoText = product.heatNo || '-';
     
     // 쉼표로 구분된 Heat No. 값들 (각각 한 줄씩 표시)
@@ -526,7 +529,16 @@ const generatePDFBlobWithProducts = async (
     // 실제 표시될 줄 수 계산 (각 Heat No. 값이 여러 줄로 나뉠 수 있음)
     const heatNoLineCount = heatNoLines.length;
     
-    // MATERIAL 열 (Q'TY 우측에 배치, Heat No. 줄 수와 동일하게 맞춤)
+    // REMARK 열 처리하여 줄 수 확인
+    const remarkWidth = (pageWidth - margin) - colRemark - 2; // Remark 열 너비
+    const remarkText = product.remark || '-';
+    const remarkLines = doc.splitTextToSize(remarkText, remarkWidth);
+    const remarkLineCount = remarkLines.length;
+    
+    // 최대 줄 수 계산 (Material, Heat No., Remark 중 가장 긴 줄 수)
+    const maxLineCount = Math.max(heatNoLineCount, remarkLineCount);
+    
+    // MATERIAL 열 (Q'TY 우측에 배치, 최대 줄 수와 동일하게 맞춤)
     const materialText = product.material || '-'; // Material이 없으면 '-' 표시
     
     // Material 표시
@@ -534,8 +546,8 @@ const generatePDFBlobWithProducts = async (
     // 쉼표로 구분된 Material 값들
     const materialValues = materialText.split(',').map(m => m.trim()).filter(m => m.length > 0);
     
-    // Material 값 개수와 Heat No. 줄 수 중 더 큰 값만큼 표시 (모든 Material이 표시되도록)
-    const materialDisplayCount = Math.max(materialValues.length, heatNoLineCount);
+    // Material 값 개수와 최대 줄 수 중 더 큰 값만큼 표시 (모든 Material이 표시되도록)
+    const materialDisplayCount = Math.max(materialValues.length, maxLineCount);
     
     for (let i = 0; i < materialDisplayCount; i++) {
       // Material 값이 있으면 해당 값을 사용, 없으면 마지막 값 반복 또는 '-' 표시
@@ -567,7 +579,15 @@ const generatePDFBlobWithProducts = async (
       renderKoreanText(doc, line, colHeatNo, heatNoY, 10);
       heatNoY += 5;
     });
-    yPosition = Math.max(descY, Math.max(codeY, Math.max(materialY, Math.max(heatNoY, yPosition + 5)))) + 3;
+    
+    // REMARK 열 표시
+    let remarkY = yPosition;
+    remarkLines.forEach((line: string) => {
+      renderKoreanText(doc, line, colRemark, remarkY, 10);
+      remarkY += 5;
+    });
+    
+    yPosition = Math.max(descY, Math.max(codeY, Math.max(materialY, Math.max(heatNoY, Math.max(remarkY, yPosition + 5))))) + 3;
   });
 
   // 기본 인증 문구 추가 (INSPECTION POINT 위에 배치)
@@ -1516,7 +1536,7 @@ function MaterialTestCertificateEditContent() {
   const [originalFormData, setOriginalFormData] = useState<typeof formData | null>(null);
   const [originalProducts, setOriginalProducts] = useState<typeof products | null>(null);
 
-  // 제품 배열 (제품명, 제품코드, 수량, 히트번호, Material, Inspection Certi)
+  // 제품 배열 (제품명, 제품코드, 수량, 히트번호, Material, Remark, Inspection Certi)
   // 파일 구분 제거: 모든 파일을 하나의 배열로 통합 (File 객체는 새 파일, CertificateAttachment는 기존 파일)
   const [products, setProducts] = useState<Array<{
     productName: string;
@@ -1524,8 +1544,9 @@ function MaterialTestCertificateEditContent() {
     quantity: string;
     heatNo: string;
     material: string;
+    remark: string;
     inspectionCertificates: Array<CertificateAttachment | File>;
-  }>>([{ productName: '', productCode: '', quantity: '', heatNo: '', material: '', inspectionCertificates: [] }]);
+  }>>([{ productName: '', productCode: '', quantity: '', heatNo: '', material: '', remark: '', inspectionCertificates: [] }]);
 
   // 성적서 번호 자동 생성 함수
   const generateCertificateNo = async (): Promise<string> => {
@@ -1593,6 +1614,9 @@ function MaterialTestCertificateEditContent() {
 
         const data = certDoc.data();
 
+        // 원본 성적서 요청 데이터에서 remark 정보 가져오기 (fallback용)
+        const originalRequestProducts = data.products && Array.isArray(data.products) ? data.products : [];
+
         // 기존 MATERIAL TEST CERTIFICATE 내용이 있으면 불러오기 (수정 모드)
         if (data.materialTestCertificate) {
             const mtc = data.materialTestCertificate;
@@ -1610,7 +1634,21 @@ function MaterialTestCertificateEditContent() {
             // 제품 데이터 로드 (products 배열이 있으면 사용, 없으면 기존 단일 제품 필드 사용)
             let loadedProducts: typeof products = [];
             if (mtc.products && Array.isArray(mtc.products) && mtc.products.length > 0) {
-              loadedProducts = mtc.products.map((p: CertificateProduct) => {
+              loadedProducts = mtc.products.map((p: CertificateProduct, index: number) => {
+                // 원본 성적서 요청 데이터에서 remark 가져오기 (materialTestCertificate에 없을 경우 fallback)
+                // 제품명과 제품코드로 매칭하여 더 정확하게 찾기
+                const originalProduct = originalRequestProducts.find((op: CertificateProduct) => 
+                  op.productName === p.productName && op.productCode === p.productCode
+                ) || originalRequestProducts[index] as CertificateProduct | undefined;
+                
+                const remarkValue = p.remark || originalProduct?.remark || '';
+                console.log(`[로드] 제품 "${p.productName || '이름 없음'}" remark 로드:`, {
+                  mtcRemark: p.remark,
+                  originalRemark: originalProduct?.remark,
+                  finalRemark: remarkValue,
+                  hasOriginalProduct: !!originalProduct
+                });
+                
                 // inspectionCertificates 배열이 있으면 사용, 없으면 inspectionCertificate 단일 객체를 배열로 변환
                 const productWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
                 let existingCerts: CertificateAttachment[] = [];
@@ -1675,6 +1713,7 @@ function MaterialTestCertificateEditContent() {
                   quantity: p.quantity?.toString() || '',
                   heatNo: heatNo || p.heatNo || '',
                   material: material || p.material || '',
+                  remark: remarkValue,
                   inspectionCertificates: existingCerts, // 모든 파일을 하나의 배열로 통합
                 };
               });
@@ -1723,12 +1762,26 @@ function MaterialTestCertificateEditContent() {
               const { material, heatNo } = collectMaterialAndHeatNo(existingCerts);
               console.log(`[로드] 단일 제품 "${mtc.description || '이름 없음'}" 기존 파일에서 추출한 Material:`, material, 'Heat No.:', heatNo);
               
+              // 원본 성적서 요청 데이터에서 remark 가져오기 (fallback)
+              // 제품명과 제품코드로 매칭하여 더 정확하게 찾기
+              const originalProduct = originalRequestProducts.find((op: CertificateProduct) => 
+                op.productName === mtc.description && op.productCode === mtc.code
+              ) || originalRequestProducts[0] as CertificateProduct | undefined;
+              
+              const remarkValue = originalProduct?.remark || '';
+              console.log(`[로드] 단일 제품 "${mtc.description || '이름 없음'}" remark 로드:`, {
+                originalRemark: originalProduct?.remark,
+                finalRemark: remarkValue,
+                hasOriginalProduct: !!originalProduct
+              });
+              
               loadedProducts = [{
                 productName: mtc.description || '',
                 productCode: mtc.code || '',
                 quantity: mtc.quantity?.toString() || '',
                 heatNo: heatNo || mtc.heatNo || '',
                 material: material || mtc.material || '',
+                remark: remarkValue,
                 inspectionCertificates: existingCerts, // 모든 파일을 하나의 배열로 통합
               }];
             }
@@ -1776,12 +1829,12 @@ function MaterialTestCertificateEditContent() {
   };
 
   // 제품 필드 변경 핸들러
-  const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity' | 'heatNo' | 'material', value: string) => {
+  const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity' | 'heatNo' | 'material' | 'remark', value: string) => {
     setProducts(prev => {
       const newProducts = [...prev];
       const currentProduct = newProducts[index];
-      // 제품명, 제품코드, 히트번호, Material은 대문자로 변환
-      const uppercaseFields = ['productName', 'productCode', 'heatNo', 'material'];
+      // 제품명, 제품코드, 히트번호, Material, Remark는 대문자로 변환
+      const uppercaseFields = ['productName', 'productCode', 'heatNo', 'material', 'remark'];
       const processedValue = uppercaseFields.includes(field) ? value.toUpperCase() : value;
       
       // 파일들을 유지하면서 필드만 업데이트
@@ -1806,6 +1859,7 @@ function MaterialTestCertificateEditContent() {
         quantity: lastProduct?.quantity || '',
         heatNo: lastProduct?.heatNo || '',
         material: lastProduct?.material || '',
+        remark: lastProduct?.remark || '',
         inspectionCertificates: [], // 파일은 복사하지 않음
       };
       return [...prev, newProduct];
@@ -2171,7 +2225,8 @@ function MaterialTestCertificateEditContent() {
           current.productCode.trim() !== original.productCode.trim() ||
           current.quantity.trim() !== original.quantity.trim() ||
           current.heatNo.trim() !== original.heatNo.trim() ||
-          current.material.trim() !== original.material.trim()
+          current.material.trim() !== original.material.trim() ||
+          (current.remark || '') !== (original.remark || '')
         ) {
           console.log(`[변경사항 확인] 제품 ${i + 1} 내용 변경됨`);
           return true;
@@ -2421,6 +2476,11 @@ function MaterialTestCertificateEditContent() {
           heatNo: collectedHeatNo || product.heatNo.trim() || undefined, // 파일에서 추출한 값 우선 사용
           material: collectedMaterial || product.material.trim() || undefined, // 파일에서 추출한 값 우선 사용
         };
+
+        // 비고는 값이 있을 때만 추가
+        if (product.remark?.trim()) {
+          productData.remark = product.remark.trim();
+        }
         
         // 생성 페이지와 동일한 방식으로 inspectionCertificates 설정
         const productDataWithCerts = productData as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
@@ -2692,6 +2752,11 @@ function MaterialTestCertificateEditContent() {
               heatNo: p.heatNo,
               material: p.material,
             };
+
+            // 비고는 값이 있을 때만 추가
+            if (p.remark?.trim()) {
+              productCopy.remark = p.remark.trim();
+            }
             
             // inspectionCertificates 배열 깊은 복사 (모든 파일 포함, URL이 없어도 포함)
             const productCopyWithCerts = productCopy as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
@@ -2948,6 +3013,11 @@ function MaterialTestCertificateEditContent() {
             heatNo: p.heatNo || null,
             material: p.material || null,
           };
+
+          // 비고는 값이 있을 때만 추가
+          if (p.remark?.trim()) {
+            productForFirestore.remark = p.remark.trim();
+          }
           
           // inspectionCertificates 배열이 있으면 저장 (여러 파일 지원)
           const productWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
@@ -3747,7 +3817,7 @@ function MaterialTestCertificateEditContent() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
                         <Input
                           id={`productName-${index}`}
@@ -3849,6 +3919,16 @@ function MaterialTestCertificateEditContent() {
                         value={product.heatNo}
                         onChange={(e) => handleProductChange(index, 'heatNo', e.target.value)}
                         placeholder="히트번호를 입력하세요"
+                        disabled={saving || generatingPDF}
+                      />
+
+                      <Input
+                        type="text"
+                        label="REMARK (비고)"
+                        value={product.remark}
+                        onChange={(e) => handleProductChange(index, 'remark', e.target.value)}
+                        placeholder="비고를 입력하세요"
+                        style={{ textTransform: 'uppercase' }}
                         disabled={saving || generatingPDF}
                       />
                     </div>

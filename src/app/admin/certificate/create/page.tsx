@@ -419,15 +419,15 @@ const generatePDFBlobWithProducts = async (
   doc.setFont('helvetica', 'bold');
   const colNo = margin; // 12mm
   const colDescription = margin + 8; // 20mm
-  // Description과 Code를 동일한 너비로 설정 (각각 50mm)
-  const colCode = margin + 58; // Description과 Code 길이 통일 (8 + 50 = 58)
-  const colQty = margin + 108; // Q'ty 위치 (기존과 동일)
-  const colMaterial = margin + 148; // Material을 조금 오른쪽으로 이동 (143.75 -> 148, 4.25mm 증가)
-  // Material, Result, Heat No., Remark 간격을 동일하게 배치
+  // Description과 Code 너비 조정 (Code 열 너비 우측으로 확대, Description 열 공간 보존)
+  const colCode = margin + 50; // Code 시작 위치 (원래 위치로 복원하여 Description 열 공간 보존)
+  const colQty = margin + 95; // Q'ty 위치 (75 -> 95, Code 열 우측으로 확대, Q'TY 열 너비 축소)
+  const colMaterial = margin + 130; // Material 위치 (Q'TY 열 축소에 맞춰 조정)
+  // Material, Result, Heat No., Remark 배치 (Material 열 너비 확대)
   const availableWidth = pageWidth - margin - colMaterial; // 사용 가능한 너비
-  const colResult = colMaterial + availableWidth / 4; // Material, Result, Heat No., Remark 간격 동일하게
-  const colHeatNo = colMaterial + (availableWidth * 2) / 4; // Material, Result, Heat No., Remark 간격 동일하게
-  const colRemark = colMaterial + (availableWidth * 3) / 4; // REMARK 열 위치
+  const colResult = colMaterial + availableWidth * 0.22; // Material과 Result 사이 (18% -> 22%, Material 열 너비 확대)
+  const colHeatNo = colMaterial + availableWidth * 0.38; // Heat No. 시작 위치 (38%, 더 왼쪽으로 이동)
+  const colRemark = colMaterial + availableWidth * 0.75; // REMARK 열 위치 (75%, Heat No. 열 너비 확대)
   
   doc.text('No.', colNo, yPosition);
   doc.text('DESCRIPTION', colDescription, yPosition);
@@ -462,8 +462,8 @@ const generatePDFBlobWithProducts = async (
       renderKoreanText(doc, line, colDescription, descY, 10);
       descY += 5;
     });
-    // CODE 열 너비 (Description과 동일한 너비로 통일)
-    const codeWidth = colQty - colCode - 2; // 약 48mm (Description과 Code 동일)
+    // CODE 열 너비 (Code 열 너비 확대)
+    const codeWidth = colQty - colCode - 2; // Code 열 너비 확대됨
     const codeLines = doc.splitTextToSize(product.productCode || '-', codeWidth);
     let codeY = yPosition;
     codeLines.forEach((line: string) => {
@@ -472,10 +472,33 @@ const generatePDFBlobWithProducts = async (
     });
     // Q'TY 열 (간격 확보)
     doc.text((product.quantity || 0).toString(), colQty, yPosition);
-    // HEAT NO. 열 먼저 처리하여 줄 수 확인
+    
+    // HEAT NO. 열 먼저 처리하여 각 줄의 Y 위치 계산
     const heatNoWidth = colRemark - colHeatNo - 2; // Heat No.와 Remark 사이 너비
     const heatNoText = product.heatNo || '-';
-    const heatNoLines = doc.splitTextToSize(heatNoText, heatNoWidth);
+    
+    // 쉼표로 구분된 Heat No. 값들 (각각 한 줄씩 표시)
+    const heatNoValues = heatNoText.split(',').map(h => h.trim()).filter(h => h.length > 0);
+    
+    // Heat No.를 각 값별로 줄바꿈하여 표시할 수 있도록 처리
+    // 각 Heat No. 값이 몇 줄로 나뉘었는지 추적하여 Material 표시 위치 결정
+    const heatNoLines: string[] = [];
+    const heatNoValueStartIndices: number[] = []; // 각 Heat No. 값의 첫 번째 줄 인덱스
+    
+    for (const heatNoValue of heatNoValues) {
+      // 각 Heat No. 값이 너무 길면 자동 줄바꿈
+      const wrappedLines = doc.splitTextToSize(heatNoValue, heatNoWidth);
+      // 첫 번째 줄의 인덱스 저장
+      heatNoValueStartIndices.push(heatNoLines.length);
+      heatNoLines.push(...wrappedLines);
+    }
+    
+    // Heat No. 값이 없으면 '-' 표시
+    if (heatNoLines.length === 0) {
+      heatNoLines.push('-');
+      heatNoValueStartIndices.push(0);
+    }
+    
     const heatNoLineCount = heatNoLines.length;
     
     // REMARK 열 처리하여 줄 수 확인
@@ -484,37 +507,40 @@ const generatePDFBlobWithProducts = async (
     const remarkLines = doc.splitTextToSize(remarkText, remarkWidth);
     const remarkLineCount = remarkLines.length;
     
-    // 최대 줄 수 계산 (Material, Heat No., Remark 중 가장 긴 줄 수)
+    // 최대 줄 수 계산 (Heat No., Remark 중 가장 긴 줄 수)
     const maxLineCount = Math.max(heatNoLineCount, remarkLineCount);
     
-    // MATERIAL 열 (Q'TY 우측에 배치, 최대 줄 수와 동일하게 맞춤)
+    // MATERIAL 열 (Q'TY 우측에 배치, 각 Heat No. 값의 첫 번째 줄과 같은 높이에 표시)
     const materialText = product.material || '-'; // Material이 없으면 '-' 표시
-    
-    // 최대 줄 수에 맞춰 Material 표시
-    let materialY = yPosition;
     // 쉼표로 구분된 Material 값들
     const materialValues = materialText.split(',').map(m => m.trim()).filter(m => m.length > 0);
-    const hasMultipleMaterials = materialValues.length > 1;
-    
-    // 최대 줄 수만큼 Material 표시
-    for (let i = 0; i < maxLineCount; i++) {
-      // Material 값이 여러 개면 순환 사용, 하나면 동일한 값 반복
-      const materialValue = hasMultipleMaterials 
-        ? (materialValues[i] || materialValues[materialValues.length - 1])
-        : (materialValues[0] || materialText || '-');
-      
-      // Material 값을 한 줄로 표시
-      doc.text(materialValue, colMaterial, materialY);
-      materialY += 5;
-    }
     
     // RESULT 열 (더 넓은 공간 확보)
     doc.text('GOOD', colResult, yPosition);
     
-    // HEAT NO. 열 표시
+    // HEAT NO. 열과 MATERIAL 열을 함께 표시 (각 Heat No. 값의 첫 번째 줄에만 Material 표시)
     let heatNoY = yPosition;
-    heatNoLines.forEach((line: string) => {
+    heatNoLines.forEach((line: string, index: number) => {
+      // Heat No. 표시
       renderKoreanText(doc, line, colHeatNo, heatNoY, 10);
+      
+      // 해당 줄이 Heat No. 값의 첫 번째 줄인지 확인
+      const isFirstLineOfHeatNoValue = heatNoValueStartIndices.includes(index);
+      
+      if (isFirstLineOfHeatNoValue) {
+        // 첫 번째 줄인 경우에만 Material 표시
+        const heatNoValueIndex = heatNoValueStartIndices.indexOf(index);
+        if (materialValues.length > 0) {
+          // Material 값이 있으면 해당 Heat No. 값 인덱스에 맞는 Material 사용 (없으면 마지막 값 반복)
+          const materialValue = materialValues[heatNoValueIndex] || materialValues[materialValues.length - 1];
+          doc.text(materialValue, colMaterial, heatNoY);
+        } else {
+          // Material 값이 없으면 '-' 표시
+          doc.text('-', colMaterial, heatNoY);
+        }
+      }
+      // 첫 번째 줄이 아닌 경우 Material을 표시하지 않음 (중복 방지)
+      
       heatNoY += 5;
     });
     
@@ -525,7 +551,7 @@ const generatePDFBlobWithProducts = async (
       remarkY += 5;
     });
     
-    yPosition = Math.max(descY, Math.max(codeY, Math.max(materialY, Math.max(heatNoY, Math.max(remarkY, yPosition + 5))))) + 3;
+    yPosition = Math.max(descY, Math.max(codeY, Math.max(heatNoY, Math.max(remarkY, yPosition + 5)))) + 3;
   });
 
   // 기본 인증 문구 추가 (INSPECTION POINT 위에 배치)

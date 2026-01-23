@@ -252,6 +252,35 @@ const generatePDFBlobWithProducts = async (
   const margin = 12; // 상단 여백 줄임 (20 → 12)
   let yPosition = margin;
 
+  // 워터마크 추가 함수 (페이지 중앙에 SG-LOK 표시 - 배경처럼 아주 흐리게)
+  const addWatermark = () => {
+    // 현재 폰트 설정 저장
+    const currentFontSize = doc.getFontSize();
+    const currentFont = doc.getFont();
+    
+    // 페이지 중앙 위치
+    const centerX = pageWidth / 2;
+    const centerY = pageHeight / 2;
+    
+    // 워터마크 스타일 설정 (크고 굵게, 현재보다 20% 더 흐리게)
+    doc.setFontSize(100); // 큰 폰트 크기
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(236, 236, 236); // 더 밝은 회색 (현재보다 20% 더 흐리게)
+    
+    // 페이지 중앙에 텍스트 그리기 (회전 없음)
+    doc.text('SG-LOK', centerX, centerY, { 
+      align: 'center'
+    });
+    
+    // 워터마크를 그린 후 본문 텍스트 설정 복원
+    doc.setFontSize(currentFontSize); // 원래 폰트 크기로 복원
+    doc.setFont(currentFont.fontName, currentFont.fontStyle); // 원래 폰트 스타일로 복원
+    doc.setTextColor(0, 0, 0); // 검은색으로 설정
+  };
+
+  // 첫 페이지에 워터마크 추가
+  addWatermark();
+
   // 제목: MATERIAL TEST CERTIFICATE (로고와 같은 높이에 배치하기 위해 먼저 yPosition 계산)
   const titleYPosition = margin + 6; // 타이틀 y 위치 (로고와 같은 높이, 여백 줄임)
   
@@ -450,17 +479,57 @@ const generatePDFBlobWithProducts = async (
     if (yPosition > pageHeight - 30) {
       doc.addPage();
       yPosition = margin + 10;
+      // 새 페이지에도 워터마크 추가
+      addWatermark();
     }
     
     doc.text(`${index + 1}.`, colNo, yPosition);
     const descriptionText = product.productName || '-';
     // DESCRIPTION 열 너비 (Code와 동일한 너비로 통일)
     const descriptionWidth = colCode - colDescription - 2; // 약 48mm (Description과 Code 동일)
-    const descriptionLines = doc.splitTextToSize(descriptionText, descriptionWidth);
+    
+    // 텍스트 분할 (한 글자씩 나뉘는 것을 방지)
+    let descriptionLines: string[] = [];
+    if (descriptionText && descriptionText.trim().length > 0) {
+      // 먼저 splitTextToSize로 분할
+      const splitLines = doc.splitTextToSize(descriptionText, descriptionWidth);
+      
+      // 한 글자씩 나뉜 경우를 병합
+      const mergedLines: string[] = [];
+      for (let i = 0; i < splitLines.length; i++) {
+        const currentLine = splitLines[i].trim();
+        
+        // 현재 줄이 너무 짧고 (1-2글자) 다음 줄이 있으면 병합 시도
+        if (currentLine.length <= 2 && i < splitLines.length - 1) {
+          const nextLine = splitLines[i + 1].trim();
+          const merged = currentLine + (currentLine && !currentLine.endsWith(' ') ? ' ' : '') + nextLine;
+          
+          // 병합된 텍스트가 너비를 초과하는지 확인
+          const mergedSplit = doc.splitTextToSize(merged, descriptionWidth);
+          if (mergedSplit.length === 1) {
+            // 병합 가능하면 병합
+            mergedLines.push(merged);
+            i++; // 다음 줄 건너뛰기
+          } else {
+            // 병합 불가능하면 현재 줄만 추가
+            mergedLines.push(currentLine);
+          }
+        } else {
+          mergedLines.push(currentLine);
+        }
+      }
+      
+      descriptionLines = mergedLines.length > 0 ? mergedLines : [descriptionText];
+    } else {
+      descriptionLines = ['-'];
+    }
+    
     let descY = yPosition;
     descriptionLines.forEach((line: string) => {
-      renderKoreanText(doc, line, colDescription, descY, 10);
-      descY += 5;
+      if (line.trim().length > 0) {
+        renderKoreanText(doc, line, colDescription, descY, 10);
+        descY += 5;
+      }
     });
     // CODE 열 너비 (Code 열 너비 확대)
     const codeWidth = colQty - colCode - 2; // Code 열 너비 확대됨
@@ -560,6 +629,8 @@ const generatePDFBlobWithProducts = async (
       if (yPosition > pageHeight - 50) {
         doc.addPage();
         yPosition = margin + 10;
+        // 새 페이지에도 워터마크 추가
+        addWatermark();
       }
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10); // 9pt → 10pt로 한 단계 크게
@@ -576,6 +647,8 @@ const generatePDFBlobWithProducts = async (
   if (yPosition > pageHeight - 50) {
     doc.addPage();
     yPosition = margin + 10;
+    // 새 페이지에도 워터마크 추가
+    addWatermark();
   }
   
   // INSPECTION POINT 제목

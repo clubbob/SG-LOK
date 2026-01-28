@@ -370,7 +370,7 @@ const generatePDFBlobWithProducts = async (
   doc.setFontSize(20 * 1.3); // 26 (기존 20의 1.3배)
   doc.setFont('helvetica', 'bold');
   doc.text('MATERIAL TEST CERTIFICATE', pageWidth / 2, titleYPosition, { align: 'center' });
-  yPosition = titleYPosition + 10;
+  yPosition = titleYPosition + 12; // 여유 공간 추가 (10 -> 12)
 
   // 회사 정보
   doc.setFontSize(9);
@@ -699,7 +699,7 @@ const generatePDFBlobWithProducts = async (
     'Manufactured Products : Dimension, Go/No Gauge',
     'Cleaning : Cleaning Condition',
     'Marking : Code, Others',
-    'Leak (Valves) : Air Test by Leak Tester',
+    'Leak Test (Valves) : Air Test (10kg/cm²)',
     'Packaging : Labeling, Q\'ty'
   ];
   

@@ -3,10 +3,10 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
-import { collection, addDoc, Timestamp, doc, getDoc, updateDoc, getDocs, query, limit } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import { CertificateType, InquiryAttachment, CertificateAttachment, CertificateProduct } from '@/types';
+import { InquiryAttachment, CertificateAttachment, CertificateProduct } from '@/types';
 import { getProductMappingByCode, addProductMapping, getAllProductMappings, updateProductMapping, deleteProductMapping } from '@/lib/productMappings';
 import { ProductMapping } from '@/types';
 
@@ -48,7 +48,7 @@ function AdminCertificateRequestContent() {
   const [uploadingFiles, setUploadingFiles] = useState(false);
   const [certificateFile, setCertificateFile] = useState<File | null>(null);
   const [uploadingCertificateFile, setUploadingCertificateFile] = useState(false);
-  const [existingCertificateFile, setExistingCertificateFile] = useState<CertificateAttachment | null>(null);
+  const [, setExistingCertificateFile] = useState<CertificateAttachment | null>(null);
   
   // 오늘 날짜를 YYYY-MM-DD 형식으로 변환
   const today = new Date().toISOString().split('T')[0];
@@ -307,9 +307,10 @@ function AdminCertificateRequestContent() {
       setShowMappingModal(false);
       setCurrentProductIndex(null);
       setCurrentProductCode('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('매핑 추가 오류:', error);
-      alert(error.message || '매핑 추가에 실패했습니다.');
+      const message = error instanceof Error ? error.message : '매핑 추가에 실패했습니다.';
+      alert(message);
     }
   };
 

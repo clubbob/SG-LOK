@@ -5,18 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button, Input } from '@/components/ui';
-import { collection, addDoc, Timestamp, doc, getDoc, updateDoc, getDocs, query, limit } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import { CertificateType, InquiryAttachment, CertificateProduct, CertificateAttachment, ProductMapping } from '@/types';
+import { InquiryAttachment, CertificateProduct, ProductMapping } from '@/types';
 import { getProductMappingByCode, addProductMapping, getAllProductMappings, updateProductMapping, deleteProductMapping } from '@/lib/productMappings';
-
-const CERTIFICATE_TYPES: { value: CertificateType; label: string }[] = [
-  { value: 'quality', label: '품질' },
-  { value: 'safety', label: '안전' },
-  { value: 'environmental', label: '환경' },
-  { value: 'other', label: '기타' },
-];
 
 function CertificateRequestContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
@@ -296,9 +289,10 @@ function CertificateRequestContent() {
       setShowMappingModal(false);
       setCurrentProductIndex(null);
       setCurrentProductCode('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('매핑 추가 오류:', error);
-      alert(error.message || '매핑 추가에 실패했습니다.');
+      const message = error instanceof Error ? error.message : '매핑 추가에 실패했습니다.';
+      alert(message);
     }
   };
 

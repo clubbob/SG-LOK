@@ -1930,7 +1930,7 @@ function MaterialTestCertificateEditContent() {
           newProducts[index] = {
             ...current,
             productName: mapping.productName,
-            productCode: current.productCode.trim() || mapping.productCode,
+            productCode: mapping.productCode,
             inspectionCertificates: current.inspectionCertificates || [],
           };
           return newProducts;

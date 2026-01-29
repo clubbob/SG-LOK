@@ -6,6 +6,7 @@ import { Button, Input } from '@/components/ui';
 import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
+import { getProductMappingByCode } from '@/lib/productMappings';
 import { CertificateAttachment, MaterialTestCertificate, CertificateProduct } from '@/types';
 
 const ADMIN_SESSION_KEY = 'admin_session';
@@ -1913,6 +1914,31 @@ function MaterialTestCertificateEditContent() {
       ...prev,
       [name]: processedValue,
     }));
+  };
+
+  // 제품명(DESCRIPTION) 포커스 아웃 시 매핑 조회 및 자동 변환 (성적서요청 등록과 동일)
+  const handleProductNameBlur = async (index: number) => {
+    const product = products[index];
+    const productNameCode = product.productName.trim().toUpperCase();
+    if (!productNameCode) return;
+    try {
+      const mapping = await getProductMappingByCode(productNameCode);
+      if (mapping) {
+        setProducts(prev => {
+          const newProducts = [...prev];
+          const current = newProducts[index];
+          newProducts[index] = {
+            ...current,
+            productName: mapping.productName,
+            productCode: current.productCode.trim() || mapping.productCode,
+            inspectionCertificates: current.inspectionCertificates || [],
+          };
+          return newProducts;
+        });
+      }
+    } catch (error) {
+      console.error('제품명코드 매핑 조회 오류:', error);
+    }
   };
 
   // 제품 필드 변경 핸들러
@@ -3925,7 +3951,8 @@ function MaterialTestCertificateEditContent() {
                               });
                             }
                           }}
-                          placeholder="제품명을 입력하세요"
+                          onBlur={() => handleProductNameBlur(index)}
+                          placeholder="제품명 코드 입력 (예: GMC)"
                           disabled={saving || generatingPDF}
                         />
                         {formErrors.products && formErrors.products[index]?.productName && (

@@ -183,12 +183,24 @@ export interface CertificateAttachment {
 export interface CertificateProduct {
   productName: string;         // 제품명
   productCode?: string;         // 제품코드
+  productNameCode?: string;     // 제품명코드 (예: GMC, GME 등)
   quantity?: number;            // 수량
   lotNumber?: string;           // 로트번호
   heatNo?: string;              // HEAT NO.
   material?: string;            // MATERIAL (소재 정보, 예: 316/316L, 304)
   remark?: string;               // 비고 (REMARK)
   inspectionCertificate?: CertificateAttachment; // 제품별 Inspection Certi
+}
+
+// 제품명코드 매핑 타입
+export interface ProductMapping {
+  id?: string;                  // Firestore 문서 ID
+  productCode: string;          // 제품명코드 (예: GMC, GME)
+  productName: string;          // 제품명 (예: MALE CONNECTOR, MALE ELBOW)
+  createdAt?: Date;             // 생성일
+  updatedAt?: Date;             // 수정일
+  createdBy?: string;           // 생성자 ID
+  updatedBy?: string;           // 수정자 ID
 }
 
 // MATERIAL TEST CERTIFICATE 관련 타입

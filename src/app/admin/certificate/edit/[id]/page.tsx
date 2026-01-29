@@ -477,20 +477,24 @@ const generatePDFBlobWithProducts = async (
   doc.text('PRODUCT INFORMATION:', margin, yPosition);
   yPosition += 10;
 
-  // 제품 테이블 헤더 (DESCRIPTION과 Code 길이 통일, Q'ty, Material, Result, Heat No., Remark는 조금씩 줄임)
+  // 제품 테이블 헤더 (DESCRIPTION 열 너비 확대, Q'TY 열 너비 축소, HEAT NO. 우측 확대, REMARK 확대)
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
   const colNo = margin; // 12mm
   const colDescription = margin + 8; // 20mm
-  // Description과 Code 너비 조정 (Code 열 너비 우측으로 확대, Description 열 공간 보존)
-  const colCode = margin + 50; // Code 시작 위치 (원래 위치로 복원하여 Description 열 공간 보존)
-  const colQty = margin + 95; // Q'ty 위치 (75 -> 95, Code 열 우측으로 확대, Q'TY 열 너비 축소)
-  const colMaterial = margin + 130; // Material 위치 (Q'TY 열 축소에 맞춰 조정)
-  // Material, Result, Heat No., Remark 배치 (Material 열 너비 확대)
+  // DESCRIPTION 열 너비 확대 (제품명이 한 줄로 보이도록)
+  const colCode = margin + 65; // Code 시작 위치 (DESCRIPTION 열 확대)
+  const colQty = margin + 108; // Q'ty 위치 (Q'TY 열 너비 축소, CODE 열 확대)
+  const colMaterial = margin + 130; // Material 위치
+  // Material, Result, Heat No., Remark 배치 (HEAT NO.와 REMARK 열 너비 동일하게)
   const availableWidth = pageWidth - margin - colMaterial; // 사용 가능한 너비
-  const colResult = colMaterial + availableWidth * 0.22; // Material과 Result 사이 (18% -> 22%, Material 열 너비 확대)
-  const colHeatNo = colMaterial + availableWidth * 0.38; // Heat No. 시작 위치 (38%, 더 왼쪽으로 이동)
-  const colRemark = colMaterial + availableWidth * 0.75; // REMARK 열 위치 (75%, Heat No. 열 너비 확대)
+  const colResult = colMaterial + availableWidth * 0.20; // Material과 Result 사이 (RESULT 열 너비 확보)
+  // HEAT NO.와 REMARK 열을 동일한 너비로 설정
+  const heatNoAndRemarkStart = colMaterial + availableWidth * 0.40; // HEAT NO. 시작 위치
+  const heatNoAndRemarkEnd = pageWidth - margin; // REMARK 끝 위치 (페이지 끝까지)
+  const heatNoAndRemarkWidth = (heatNoAndRemarkEnd - heatNoAndRemarkStart) / 2; // 각 열의 너비 (동일)
+  const colHeatNo = heatNoAndRemarkStart; // Heat No. 시작 위치
+  const colRemark = heatNoAndRemarkStart + heatNoAndRemarkWidth; // REMARK 시작 위치 (HEAT NO.와 동일한 너비)
   
   doc.text('No.', colNo, yPosition);
   doc.text('DESCRIPTION', colDescription, yPosition);
@@ -519,8 +523,8 @@ const generatePDFBlobWithProducts = async (
     
     doc.text(`${index + 1}.`, colNo, yPosition);
     const descriptionText = product.productName || '-';
-    // DESCRIPTION 열 너비 (Code와 동일한 너비로 통일)
-    const descriptionWidth = colCode - colDescription - 2; // 약 48mm (Description과 Code 동일)
+    // DESCRIPTION 열 너비 (제품명이 한 줄로 보이도록 확대)
+    const descriptionWidth = colCode - colDescription - 2; // 약 55mm (DESCRIPTION 열 확대)
     
     // 텍스트 분할 (한 글자씩 나뉘는 것을 방지)
     let descriptionLines: string[] = [];
@@ -1778,9 +1782,21 @@ function MaterialTestCertificateEditContent() {
                 const { material, heatNo } = collectMaterialAndHeatNo(existingCerts);
                 console.log(`[로드] 제품 "${p.productName || '이름 없음'}" 기존 파일에서 추출한 Material:`, material, 'Heat No.:', heatNo);
                 
+                // productNameCode가 있고 productCode가 "제품명코드-" 형식이면 CODE 자동 생성
+                let finalProductCode = p.productCode || '';
+                if (p.productNameCode && finalProductCode) {
+                  // 이미 "제품명코드-제품코드" 형식이면 그대로 사용
+                  if (finalProductCode.startsWith(`${p.productNameCode}-`)) {
+                    // 그대로 사용
+                  } else {
+                    // "제품명코드-"로 시작하지 않으면 자동 생성
+                    finalProductCode = `${p.productNameCode}-${finalProductCode}`;
+                  }
+                }
+                
                 return {
                   productName: p.productName || '',
-                  productCode: p.productCode || '',
+                  productCode: finalProductCode,
                   quantity: p.quantity?.toString() || '',
                   heatNo: heatNo || p.heatNo || '',
                   material: material || p.material || '',

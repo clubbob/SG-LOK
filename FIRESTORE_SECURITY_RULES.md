@@ -88,6 +88,36 @@ service cloud.firestore {
       // 프로덕션에서는 관리자 권한 체크 추가 권장
       allow delete: if true;
     }
+    
+    // productMappings 컬렉션: 제품명코드 매핑 관리
+    match /productMappings/{mappingId} {
+      // 모든 사용자가 제품명코드 매핑을 읽을 수 있음 (자동완성 기능을 위해)
+      allow read: if true;
+      
+      // 인증된 사용자는 제품명코드 매핑을 추가할 수 있음
+      allow create: if request.auth != null;
+      
+      // 인증된 사용자는 제품명코드 매핑을 수정할 수 있음
+      allow update: if request.auth != null;
+      
+      // 인증된 사용자는 제품명코드 매핑을 삭제할 수 있음
+      allow delete: if request.auth != null;
+    }
+    
+    // productMaterialSizes 컬렉션: 제품 소재/사이즈 정보 관리
+    match /productMaterialSizes/{materialSizeId} {
+      // 모든 사용자가 제품 소재/사이즈 정보를 읽을 수 있음 (성적서 작성 시 자동완성 기능을 위해)
+      allow read: if true;
+      
+      // 인증된 사용자는 제품 소재/사이즈 정보를 추가할 수 있음
+      allow create: if request.auth != null;
+      
+      // 인증된 사용자는 제품 소재/사이즈 정보를 수정할 수 있음
+      allow update: if request.auth != null;
+      
+      // 인증된 사용자는 제품 소재/사이즈 정보를 삭제할 수 있음
+      allow delete: if request.auth != null;
+    }
   }
 }
 ```
@@ -163,6 +193,36 @@ service cloud.firestore {
       // 관리자만 답변 작성 가능 (실제로는 서버 측에서 관리자 권한 체크 필요)
       allow update: if request.auth != null && 
                        request.resource.data.userId == resource.data.userId;
+    }
+    
+    // productMappings 컬렉션: 제품명코드 매핑 관리
+    match /productMappings/{mappingId} {
+      // 인증된 사용자는 제품명코드 매핑을 읽을 수 있음
+      allow read: if request.auth != null;
+      
+      // 인증된 사용자는 제품명코드 매핑을 추가할 수 있음
+      allow create: if request.auth != null;
+      
+      // 인증된 사용자는 제품명코드 매핑을 수정할 수 있음
+      allow update: if request.auth != null;
+      
+      // 인증된 사용자는 제품명코드 매핑을 삭제할 수 있음
+      allow delete: if request.auth != null;
+    }
+    
+    // productMaterialSizes 컬렉션: 제품 소재/사이즈 정보 관리
+    match /productMaterialSizes/{materialSizeId} {
+      // 인증된 사용자는 제품 소재/사이즈 정보를 읽을 수 있음
+      allow read: if request.auth != null;
+      
+      // 인증된 사용자는 제품 소재/사이즈 정보를 추가할 수 있음
+      allow create: if request.auth != null;
+      
+      // 인증된 사용자는 제품 소재/사이즈 정보를 수정할 수 있음
+      allow update: if request.auth != null;
+      
+      // 인증된 사용자는 제품 소재/사이즈 정보를 삭제할 수 있음
+      allow delete: if request.auth != null;
     }
   }
 }

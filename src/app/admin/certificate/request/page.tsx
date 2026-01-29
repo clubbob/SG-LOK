@@ -7,6 +7,8 @@ import { collection, addDoc, Timestamp, doc, getDoc, updateDoc, getDocs, query, 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { CertificateType, InquiryAttachment, CertificateAttachment, CertificateProduct } from '@/types';
+import { getProductMappingByCode, addProductMapping, getAllProductMappings, updateProductMapping, deleteProductMapping } from '@/lib/productMappings';
+import { ProductMapping } from '@/types';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -64,7 +66,17 @@ function AdminCertificateRequestContent() {
     productCode: string;
     quantity: string;
     remark: string;
+    productNameCode?: string; // 제품명코드 (GMC, GME 등)
   }>>([{ productName: '', productCode: '', quantity: '', remark: '' }]);
+
+  // 제품명코드 매핑 관련 상태
+  const [showMappingModal, setShowMappingModal] = useState(false);
+  const [currentProductIndex, setCurrentProductIndex] = useState<number | null>(null);
+  const [currentProductCode, setCurrentProductCode] = useState<string>('');
+  const [allMappings, setAllMappings] = useState<ProductMapping[]>([]);
+  const [showMappingList, setShowMappingList] = useState(false);
+  const [mappingSearchQuery, setMappingSearchQuery] = useState('');
+  const [editingMapping, setEditingMapping] = useState<ProductMapping | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [certificateStatus, setCertificateStatus] = useState<'pending' | 'in_progress' | 'completed' | 'cancelled' | null>(null);
@@ -103,6 +115,7 @@ function AdminCertificateRequestContent() {
               productCode: p.productCode || '',
               quantity: p.quantity?.toString() || '',
               remark: p.remark || '',
+              productNameCode: p.productNameCode || '',
             })));
           } else if (data.productName || data.productCode || data.quantity) {
             // 기존 단일 제품 데이터를 배열로 변환
@@ -220,19 +233,130 @@ function AdminCertificateRequestContent() {
     }
   };
 
-  // 제품 추가 (이전 제품 내용 복사)
+  // 제품명 입력란 포커스 아웃 핸들러 (매핑 조회 및 자동 변환)
+  const handleProductNameBlur = async (index: number) => {
+    const product = products[index];
+    const productNameCode = product.productName.trim().toUpperCase();
+    
+    if (!productNameCode) return;
+    
+    try {
+      // Firestore에서 매핑 조회
+      const mapping = await getProductMappingByCode(productNameCode);
+      
+      if (mapping) {
+        // 매핑이 있으면 자동 변환
+        setProducts(prev => {
+          const newProducts = [...prev];
+          newProducts[index] = {
+            ...newProducts[index],
+            productName: mapping.productName,
+            productNameCode: mapping.productCode,
+            // 제품코드가 비어있으면 제품명코드 자동 입력
+            productCode: newProducts[index].productCode || mapping.productCode,
+          };
+          return newProducts;
+        });
+      } else {
+        // 매핑이 없으면 모달 표시
+        setCurrentProductIndex(index);
+        setCurrentProductCode(productNameCode);
+        setShowMappingModal(true);
+      }
+    } catch (error) {
+      console.error('제품명코드 매핑 조회 오류:', error);
+    }
+  };
+
+  // 매핑 목록 로드
+  useEffect(() => {
+    const loadMappings = async () => {
+      try {
+        const mappings = await getAllProductMappings();
+        setAllMappings(mappings);
+      } catch (error) {
+        console.error('매핑 목록 로드 오류:', error);
+      }
+    };
+    loadMappings();
+  }, []);
+
+  // 매핑 추가 핸들러
+  const handleAddMapping = async (productCode: string, productName: string) => {
+    try {
+      await addProductMapping(productCode, productName);
+      
+      // 매핑 목록 새로고침
+      const mappings = await getAllProductMappings();
+      setAllMappings(mappings);
+      
+      // 현재 제품에 적용
+      if (currentProductIndex !== null) {
+        setProducts(prev => {
+          const newProducts = [...prev];
+          newProducts[currentProductIndex] = {
+            ...newProducts[currentProductIndex],
+            productName: productName,
+            productNameCode: productCode,
+            productCode: productCode, // 제품명코드만 입력 (사용자가 직접 "-" 및 나머지 코드 입력)
+          };
+          return newProducts;
+        });
+      }
+      
+      setShowMappingModal(false);
+      setCurrentProductIndex(null);
+      setCurrentProductCode('');
+    } catch (error: any) {
+      console.error('매핑 추가 오류:', error);
+      alert(error.message || '매핑 추가에 실패했습니다.');
+    }
+  };
+
+  // 매핑 수정 핸들러
+  const handleUpdateMapping = async (id: string, productName: string) => {
+    try {
+      await updateProductMapping(id, productName);
+      
+      // 매핑 목록 새로고침
+      const mappings = await getAllProductMappings();
+      setAllMappings(mappings);
+      
+      setEditingMapping(null);
+    } catch (error) {
+      console.error('매핑 수정 오류:', error);
+      alert('매핑 수정에 실패했습니다.');
+    }
+  };
+
+  // 매핑 삭제 핸들러
+  const handleDeleteMapping = async (id: string) => {
+    if (!confirm('이 매핑을 삭제하시겠습니까?')) return;
+    
+    try {
+      await deleteProductMapping(id);
+      
+      // 매핑 목록 새로고침
+      const mappings = await getAllProductMappings();
+      setAllMappings(mappings);
+    } catch (error) {
+      console.error('매핑 삭제 오류:', error);
+      alert('매핑 삭제에 실패했습니다.');
+    }
+  };
+
+  // 제품 추가 (빈 입력란으로 새 행 추가)
   const handleAddProduct = () => {
-    setProducts(prev => {
-      const lastProduct = prev[prev.length - 1];
-      // 마지막 제품의 내용을 복사
-      const newProduct = {
-        productName: lastProduct?.productName || '',
-        productCode: lastProduct?.productCode || '',
-        quantity: lastProduct?.quantity || '',
-        remark: lastProduct?.remark || '',
-      };
-      return [...prev, newProduct];
-    });
+    setProducts(prev => [
+      ...prev,
+      {
+        productName: '',
+        productCode: '',
+        quantity: '',
+        remark: '',
+        productNameCode: '',
+      },
+    ]);
   };
 
   // 제품 삭제
@@ -451,6 +575,11 @@ function AdminCertificateRequestContent() {
           quantity: product.quantity.trim() ? parseInt(product.quantity, 10) : undefined,
         };
 
+        // 제품명코드는 값이 있을 때만 추가
+        if (product.productNameCode?.trim()) {
+          productData.productNameCode = product.productNameCode.trim();
+        }
+
         // 비고는 값이 있을 때만 추가
         if (product.remark?.trim()) {
           productData.remark = product.remark.trim();
@@ -650,20 +779,38 @@ function AdminCertificateRequestContent() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                  <div className="md:col-span-3 relative">
-                    <Input
-                      type="text"
-                      name="productName"
-                      id={`productName-${index}`}
-                      label="제품명 *"
-                      required
-                      value={product.productName}
-                      onChange={(e) => handleProductChange(index, 'productName', e.target.value)}
-                      placeholder="제품명을 입력하세요"
-                      style={{ textTransform: 'uppercase' }}
-                      disabled={submitting || uploadingFiles}
-                    />
+                <div className="grid grid-cols-1 md:grid-cols-[5fr_3fr_1.8fr_2.2fr] gap-4">
+                  <div className="relative">
+                    <div className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <Input
+                          type="text"
+                          name="productName"
+                          id={`productName-${index}`}
+                          label="제품명 *"
+                          required
+                          value={product.productName}
+                          onChange={(e) => handleProductChange(index, 'productName', e.target.value)}
+                          onBlur={() => handleProductNameBlur(index)}
+                          placeholder="제품명코드 입력 (예: GMC)"
+                          style={{ textTransform: 'uppercase' }}
+                          disabled={submitting || uploadingFiles}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCurrentProductIndex(index);
+                          setCurrentProductCode('');
+                          setShowMappingModal(true);
+                        }}
+                        disabled={submitting || uploadingFiles}
+                        className="mb-0.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="제품명코드 매핑 추가"
+                      >
+                        +
+                      </button>
+                    </div>
                     {fieldErrors[`productName-${index}`] && (
                       <div className="absolute left-0 top-full mt-1 px-2 py-1 bg-orange-100 border border-orange-300 rounded shadow-lg text-xs text-gray-800 whitespace-nowrap z-10">
                         <div className="flex items-center gap-1">
@@ -676,7 +823,7 @@ function AdminCertificateRequestContent() {
                     )}
                   </div>
 
-                  <div className="md:col-span-3 relative">
+                  <div className="relative">
                     <Input
                       type="text"
                       name="productCode"
@@ -684,8 +831,8 @@ function AdminCertificateRequestContent() {
                       label="제품코드 *"
                       required
                       value={product.productCode}
-                      onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
-                      placeholder="제품코드를 입력하세요"
+                      onChange={(e) => handleProductChange(index, 'productCode', e.target.value.toUpperCase())}
+                      placeholder={product.productNameCode ? `${product.productNameCode}-04-04N 또는 ${product.productNameCode} 04-04N 형식으로 입력` : "제품코드를 입력하세요"}
                       style={{ textTransform: 'uppercase' }}
                       disabled={submitting || uploadingFiles}
                     />
@@ -701,7 +848,7 @@ function AdminCertificateRequestContent() {
                     )}
                   </div>
 
-                  <div className="md:col-span-2 relative">
+                  <div className="relative">
                     <Input
                       type="text"
                       inputMode="numeric"
@@ -709,7 +856,7 @@ function AdminCertificateRequestContent() {
                       required
                       value={product.quantity}
                       onChange={(e) => handleProductChange(index, 'quantity', e.target.value)}
-                      placeholder="수량을 입력하세요"
+                      placeholder="수량 입력"
                       pattern="[0-9]*"
                       disabled={submitting || uploadingFiles}
                     />
@@ -725,13 +872,13 @@ function AdminCertificateRequestContent() {
                     )}
                   </div>
 
-                  <div className="md:col-span-4 relative">
+                  <div className="relative">
                       <Input
                         type="text"
                         label="비고"
                         value={product.remark}
                         onChange={(e) => handleProductChange(index, 'remark', e.target.value)}
-                        placeholder="비고를 입력하세요 (선택사항)"
+                        placeholder="비고 입력"
                         style={{ textTransform: 'uppercase' }}
                         disabled={submitting || uploadingFiles}
                       />
@@ -928,7 +1075,7 @@ function AdminCertificateRequestContent() {
               onChange={handleChange}
               rows={4}
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              placeholder="비고를 입력하세요 (선택사항)"
+              placeholder="비고 입력"
               disabled={isEditMode}
             />
           </div>
@@ -953,8 +1100,269 @@ function AdminCertificateRequestContent() {
             </Button>
           </div>
         </form>
+
+        {/* 제품명코드 매핑 모달 */}
+        {showMappingModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {currentProductCode ? `제품명코드 "${currentProductCode}" 매핑 추가` : '제품명코드 매핑 관리'}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowMappingModal(false);
+                    setCurrentProductIndex(null);
+                    setCurrentProductCode('');
+                    setEditingMapping(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                  type="button"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {editingMapping ? (
+                // 수정 모드
+                <EditMappingForm
+                  mapping={editingMapping}
+                  onSave={(productName) => {
+                    if (editingMapping.id) {
+                      handleUpdateMapping(editingMapping.id, productName);
+                    }
+                  }}
+                  onCancel={() => setEditingMapping(null)}
+                />
+              ) : (
+                // 추가 모드
+                <AddMappingForm
+                  initialProductCode={currentProductCode}
+                  onSave={(productCode, productName) => {
+                    handleAddMapping(productCode, productName);
+                  }}
+                  onCancel={() => {
+                    setShowMappingModal(false);
+                    setCurrentProductIndex(null);
+                    setCurrentProductCode('');
+                  }}
+                />
+              )}
+
+              {/* 매핑 목록 */}
+              <div className="mt-6 border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-700">등록된 매핑 목록</h3>
+                  <button
+                    onClick={() => setShowMappingList(!showMappingList)}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    {showMappingList ? '접기' : '펼치기'}
+                  </button>
+                </div>
+                {showMappingList && (
+                  <>
+                    <div className="mb-3">
+                      <input
+                        type="text"
+                        value={mappingSearchQuery}
+                        onChange={(e) => setMappingSearchQuery(e.target.value)}
+                        placeholder="제품코드 또는 제품명으로 검색"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    {(() => {
+                      const q = mappingSearchQuery.trim().toLowerCase();
+                      const filtered = q
+                        ? allMappings.filter(
+                            (m) =>
+                              m.productCode.toLowerCase().includes(q) ||
+                              m.productName.toLowerCase().includes(q)
+                          )
+                        : allMappings;
+                      return (
+                        <>
+                          {allMappings.length > 0 && (
+                            <p className="text-xs text-gray-500 mb-2">
+                              {q
+                                ? `검색 결과 ${filtered.length}개 / 총 ${allMappings.length}개`
+                                : `총 ${allMappings.length}개`}
+                              {filtered.length > 5 && ' · 아래 목록 스크롤 가능'}
+                            </p>
+                          )}
+                          <div
+                            className="space-y-2 min-h-[6rem] max-h-72 overflow-y-auto overscroll-y-contain rounded border border-gray-200 bg-gray-50/50 px-2 py-2"
+                          >
+                            {filtered.length === 0 ? (
+                              <p className="text-sm text-gray-500 text-center py-4">
+                                {allMappings.length === 0 ? '등록된 매핑이 없습니다.' : '검색 결과가 없습니다.'}
+                              </p>
+                            ) : (
+                          filtered.map((mapping) => (
+                            <div
+                              key={mapping.id}
+                              className="flex items-center justify-between p-2 bg-gray-50 rounded hover:bg-gray-100"
+                            >
+                              <div className="flex-1">
+                                <span className="text-sm font-medium text-gray-900">{mapping.productCode}</span>
+                                <span className="text-sm text-gray-500 mx-2">→</span>
+                                <span className="text-sm text-gray-700">{mapping.productName}</span>
+                              </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setEditingMapping(mapping)}
+                              className="text-blue-600 hover:text-blue-800 text-sm"
+                            >
+                              수정
+                            </button>
+                            <button
+                              onClick={() => mapping.id && handleDeleteMapping(mapping.id)}
+                              className="text-red-600 hover:text-red-800 text-sm"
+                            >
+                              삭제
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+// 매핑 추가 폼 컴포넌트
+function AddMappingForm({
+  initialProductCode,
+  onSave,
+  onCancel,
+}: {
+  initialProductCode: string;
+  onSave: (productCode: string, productName: string) => void;
+  onCancel: () => void;
+}) {
+  const [productCode, setProductCode] = useState(initialProductCode);
+  const [productName, setProductName] = useState('');
+
+  // 모달이 열릴 때 이미 입력된 제품명코드(GMC 등)가 있으면 해당 필드에 반영
+  useEffect(() => {
+    setProductCode(initialProductCode);
+  }, [initialProductCode]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!productCode.trim() || !productName.trim()) {
+      alert('제품명코드와 제품명을 모두 입력해주세요.');
+      return;
+    }
+    onSave(productCode.trim().toUpperCase(), productName.trim());
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          제품명코드 *
+        </label>
+        <Input
+          type="text"
+          value={productCode}
+          onChange={(e) => setProductCode(e.target.value.toUpperCase())}
+          placeholder="예: GMC"
+          required
+          style={{ textTransform: 'uppercase' }}
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          제품명 *
+        </label>
+        <Input
+          type="text"
+          value={productName}
+          onChange={(e) => setProductName(e.target.value)}
+          placeholder="예: MALE CONNECTOR"
+          required
+        />
+      </div>
+      <div className="flex justify-end gap-3 pt-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          취소
+        </Button>
+        <Button type="submit" variant="primary">
+          저장
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// 매핑 수정 폼 컴포넌트
+function EditMappingForm({
+  mapping,
+  onSave,
+  onCancel,
+}: {
+  mapping: ProductMapping;
+  onSave: (productName: string) => void;
+  onCancel: () => void;
+}) {
+  const [productName, setProductName] = useState(mapping.productName);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!productName.trim()) {
+      alert('제품명을 입력해주세요.');
+      return;
+    }
+    onSave(productName.trim());
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          제품명코드
+        </label>
+        <Input
+          type="text"
+          value={mapping.productCode}
+          disabled
+          className="bg-gray-100"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          제품명 *
+        </label>
+        <Input
+          type="text"
+          value={productName}
+          onChange={(e) => setProductName(e.target.value)}
+          placeholder="예: MALE CONNECTOR"
+          required
+        />
+      </div>
+      <div className="flex justify-end gap-3 pt-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          취소
+        </Button>
+        <Button type="submit" variant="primary">
+          저장
+        </Button>
+      </div>
+    </form>
   );
 }
 

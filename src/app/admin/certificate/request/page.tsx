@@ -1292,9 +1292,10 @@ function AddMappingForm({
         <Input
           type="text"
           value={productName}
-          onChange={(e) => setProductName(e.target.value)}
+          onChange={(e) => setProductName(e.target.value.toUpperCase())}
           placeholder="예: MALE CONNECTOR"
           required
+          style={{ textTransform: 'uppercase' }}
         />
       </div>
       <div className="flex justify-end gap-3 pt-2">
@@ -1350,9 +1351,10 @@ function EditMappingForm({
         <Input
           type="text"
           value={productName}
-          onChange={(e) => setProductName(e.target.value)}
+          onChange={(e) => setProductName(e.target.value.toUpperCase())}
           placeholder="예: MALE CONNECTOR"
           required
+          style={{ textTransform: 'uppercase' }}
         />
       </div>
       <div className="flex justify-end gap-3 pt-2">

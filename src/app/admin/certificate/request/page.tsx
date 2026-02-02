@@ -1169,9 +1169,10 @@ function AdminCertificateRequestContent() {
                       <input
                         type="text"
                         value={mappingSearchQuery}
-                        onChange={(e) => setMappingSearchQuery(e.target.value)}
+                        onChange={(e) => setMappingSearchQuery(e.target.value.toUpperCase())}
                         placeholder="제품코드 또는 제품명으로 검색"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        style={{ textTransform: 'uppercase' }}
                       />
                     </div>
                     {(() => {

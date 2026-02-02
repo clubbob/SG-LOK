@@ -1907,13 +1907,23 @@ function MaterialTestCertificateEditContent() {
     if (name === 'certificateNo') {
       return;
     }
-    // 영문 입력 필드는 자동으로 대문자로 변환
-    const uppercaseFields = ['customer', 'poNo'];
-    const processedValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
+    // 입력 중에는 변환하지 않고 그대로 저장 (CSS로 대문자 표시)
     setFormData(prev => ({
       ...prev,
-      [name]: processedValue,
+      [name]: value,
     }));
+  };
+
+  const handleFormBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    // customer, poNo는 포커스를 잃을 때 대문자로 변환
+    const uppercaseFields = ['customer', 'poNo'];
+    if (uppercaseFields.includes(name)) {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value.toUpperCase(),
+      }));
+    }
   };
 
   // 제품명(DESCRIPTION) 포커스 아웃 시 매핑 조회 및 자동 변환 (성적서요청 등록과 동일)
@@ -1943,22 +1953,35 @@ function MaterialTestCertificateEditContent() {
 
   // 제품 필드 변경 핸들러
   const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity' | 'heatNo' | 'material' | 'remark', value: string) => {
+    // 입력 중에는 변환하지 않고 그대로 저장 (CSS로 대문자 표시)
     setProducts(prev => {
       const newProducts = [...prev];
       const currentProduct = newProducts[index];
-      // 제품명, 제품코드, 히트번호, Material, Remark는 대문자로 변환
-      const uppercaseFields = ['productName', 'productCode', 'heatNo', 'material', 'remark'];
-      const processedValue = uppercaseFields.includes(field) ? value.toUpperCase() : value;
-      
-      // 파일들을 유지하면서 필드만 업데이트
       newProducts[index] = {
         ...currentProduct,
-        [field]: processedValue,
+        [field]: value,
         // inspectionCertificates를 명시적으로 유지
         inspectionCertificates: currentProduct.inspectionCertificates || [],
       };
       return newProducts;
     });
+  };
+
+  // 제품 필드 포커스 아웃 핸들러 (대문자 변환)
+  const handleProductBlur = (index: number, field: 'productName' | 'productCode' | 'heatNo' | 'material' | 'remark', value: string) => {
+    const uppercaseFields = ['productName', 'productCode', 'heatNo', 'material', 'remark'];
+    if (uppercaseFields.includes(field)) {
+      setProducts(prev => {
+        const newProducts = [...prev];
+        const currentProduct = newProducts[index];
+        newProducts[index] = {
+          ...currentProduct,
+          [field]: value.toUpperCase(),
+          inspectionCertificates: currentProduct.inspectionCertificates || [],
+        };
+        return newProducts;
+      });
+    }
   };
 
   // 제품 추가 (이전 제품 내용 복사)
@@ -3889,7 +3912,9 @@ function MaterialTestCertificateEditContent() {
                         setFormErrors(prev => ({ ...prev, customer: undefined }));
                       }
                     }}
+                    onBlur={handleFormBlur}
                     placeholder="고객명"
+                    style={{ textTransform: 'uppercase' }}
                   />
                   {formErrors.customer && (
                     <p className="mt-1 text-sm text-red-600">{formErrors.customer}</p>
@@ -3903,7 +3928,9 @@ function MaterialTestCertificateEditContent() {
                     label="PO NO."
                     value={formData.poNo}
                     onChange={handleChange}
+                    onBlur={handleFormBlur}
                     placeholder="발주번호"
+                    style={{ textTransform: 'uppercase' }}
                   />
                 </div>
               </div>
@@ -3951,8 +3978,12 @@ function MaterialTestCertificateEditContent() {
                               });
                             }
                           }}
-                          onBlur={() => handleProductNameBlur(index)}
+                          onBlur={(e) => {
+                            handleProductBlur(index, 'productName', e.target.value);
+                            handleProductNameBlur(index);
+                          }}
                           placeholder="제품명 코드 입력 (예: GMC)"
+                          style={{ textTransform: 'uppercase' }}
                           disabled={saving || generatingPDF}
                         />
                         {formErrors.products && formErrors.products[index]?.productName && (
@@ -3980,7 +4011,9 @@ function MaterialTestCertificateEditContent() {
                               });
                             }
                           }}
+                          onBlur={(e) => handleProductBlur(index, 'productCode', e.target.value)}
                           placeholder="제품코드를 입력하세요"
+                          style={{ textTransform: 'uppercase' }}
                           disabled={saving || generatingPDF}
                         />
                         {formErrors.products && formErrors.products[index]?.productCode && (
@@ -4023,7 +4056,9 @@ function MaterialTestCertificateEditContent() {
                         label="MATERIAL (소재)"
                         value={product.material}
                         onChange={(e) => handleProductChange(index, 'material', e.target.value)}
+                        onBlur={(e) => handleProductBlur(index, 'material', e.target.value)}
                         placeholder="소재를 입력하세요 (예: 316/316L, 304)"
+                        style={{ textTransform: 'uppercase' }}
                         disabled={saving || generatingPDF}
                       />
 
@@ -4032,7 +4067,9 @@ function MaterialTestCertificateEditContent() {
                         label="HEAT NO. (히트번호)"
                         value={product.heatNo}
                         onChange={(e) => handleProductChange(index, 'heatNo', e.target.value)}
+                        onBlur={(e) => handleProductBlur(index, 'heatNo', e.target.value)}
                         placeholder="히트번호를 입력하세요"
+                        style={{ textTransform: 'uppercase' }}
                         disabled={saving || generatingPDF}
                       />
 
@@ -4041,6 +4078,7 @@ function MaterialTestCertificateEditContent() {
                         label="REMARK (비고)"
                         value={product.remark}
                         onChange={(e) => handleProductChange(index, 'remark', e.target.value)}
+                        onBlur={(e) => handleProductBlur(index, 'remark', e.target.value)}
                         placeholder="비고를 입력하세요"
                         style={{ textTransform: 'uppercase' }}
                         disabled={saving || generatingPDF}

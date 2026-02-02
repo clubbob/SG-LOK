@@ -156,11 +156,8 @@ function CertificateRequestContent() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    
-    // 고객명, 발주번호는 영문을 대문자로 변환
-    const fieldsToUpperCase = ['customerName', 'orderNumber'];
-    const processedValue = fieldsToUpperCase.includes(name) ? value.toUpperCase() : value;
-    setFormData(prev => ({ ...prev, [name]: processedValue }));
+    // 입력 중에는 변환하지 않고 그대로 저장 (CSS로 대문자 표시)
+    setFormData(prev => ({ ...prev, [name]: value }));
     
     // 필드 에러 초기화
     if (fieldErrors[name]) {
@@ -172,6 +169,15 @@ function CertificateRequestContent() {
     }
     if (error) setError('');
   };
+
+  const handleFormBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    // 고객명, 발주번호는 포커스를 잃을 때 대문자로 변환
+    const fieldsToUpperCase = ['customerName', 'orderNumber'];
+    if (fieldsToUpperCase.includes(name)) {
+      setFormData(prev => ({ ...prev, [name]: value.toUpperCase() }));
+    }
+  };
   
 
   // 제품 필드 변경 핸들러
@@ -181,12 +187,9 @@ function CertificateRequestContent() {
       if (field === 'quantity') {
         // 수량은 숫자만 허용
         newProducts[index] = { ...newProducts[index], [field]: value.replace(/[^0-9]/g, '') };
-      } else if (field === 'remark') {
-        // 비고는 영문을 대문자로 변환
-        newProducts[index] = { ...newProducts[index], [field]: value.toUpperCase() };
       } else {
-        // 제품명, 제품코드는 대문자로 변환
-        newProducts[index] = { ...newProducts[index], [field]: value.toUpperCase() };
+        // 입력 중에는 변환하지 않고 그대로 저장 (CSS로 대문자 표시)
+        newProducts[index] = { ...newProducts[index], [field]: value };
       }
       return newProducts;
     });
@@ -651,6 +654,7 @@ function CertificateRequestContent() {
                 required
                 value={formData.customerName}
                 onChange={handleChange}
+                onBlur={handleFormBlur}
                 placeholder="고객명을 입력하세요"
                 error={fieldErrors.customerName}
                 style={{ textTransform: 'uppercase' }}
@@ -663,6 +667,7 @@ function CertificateRequestContent() {
                 label="발주번호"
                 value={formData.orderNumber}
                 onChange={handleChange}
+                onBlur={handleFormBlur}
                 placeholder="발주번호를 입력하세요 (선택사항)"
                 style={{ textTransform: 'uppercase' }}
               />
@@ -760,7 +765,8 @@ function CertificateRequestContent() {
                         label="제품코드 *"
                         required
                         value={product.productCode}
-                        onChange={(e) => handleProductChange(index, 'productCode', e.target.value.toUpperCase())}
+                        onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
+                        onBlur={(e) => handleProductChange(index, 'productCode', e.target.value.toUpperCase())}
                         placeholder={product.productNameCode ? `${product.productNameCode}-04-04N 또는 ${product.productNameCode} 04-04N 형식으로 입력` : "제품코드를 입력하세요"}
                         style={{ textTransform: 'uppercase' }}
                         disabled={submitting || uploadingFiles}
@@ -807,6 +813,7 @@ function CertificateRequestContent() {
                         label="비고"
                         value={product.remark}
                         onChange={(e) => handleProductChange(index, 'remark', e.target.value)}
+                        onBlur={(e) => handleProductChange(index, 'remark', e.target.value.toUpperCase())}
                         placeholder="비고 입력"
                         style={{ textTransform: 'uppercase' }}
                         disabled={submitting || uploadingFiles}
@@ -1165,11 +1172,20 @@ function AddMappingForm({
 }) {
   const [productCode, setProductCode] = useState(initialProductCode);
   const [productName, setProductName] = useState('');
+  const productCodeInputRef = React.useRef<HTMLInputElement>(null);
 
   // 모달이 열릴 때 이미 입력된 제품명코드(GMC 등)가 있으면 해당 필드에 반영
   useEffect(() => {
     setProductCode(initialProductCode);
   }, [initialProductCode]);
+
+  const handleProductCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setProductCode(e.target.value);
+  };
+
+  const handleProductCodeBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    setProductCode(e.target.value.toUpperCase());
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1187,9 +1203,11 @@ function AddMappingForm({
           제품명코드 *
         </label>
         <Input
+          ref={productCodeInputRef}
           type="text"
           value={productCode}
-          onChange={(e) => setProductCode(e.target.value.toUpperCase())}
+          onChange={handleProductCodeChange}
+          onBlur={handleProductCodeBlur}
           placeholder="예: GMC"
           required
           style={{ textTransform: 'uppercase' }}
@@ -1202,7 +1220,8 @@ function AddMappingForm({
         <Input
           type="text"
           value={productName}
-          onChange={(e) => setProductName(e.target.value.toUpperCase())}
+          onChange={(e) => setProductName(e.target.value)}
+          onBlur={(e) => setProductName(e.target.value.toUpperCase())}
           placeholder="예: MALE CONNECTOR"
           required
           style={{ textTransform: 'uppercase' }}
@@ -1261,7 +1280,8 @@ function EditMappingForm({
         <Input
           type="text"
           value={productName}
-          onChange={(e) => setProductName(e.target.value.toUpperCase())}
+          onChange={(e) => setProductName(e.target.value)}
+          onBlur={(e) => setProductName(e.target.value.toUpperCase())}
           placeholder="예: MALE CONNECTOR"
           required
           style={{ textTransform: 'uppercase' }}

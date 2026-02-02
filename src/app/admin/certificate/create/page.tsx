@@ -2691,12 +2691,10 @@ function MaterialTestCertificateContent() {
     if (name === 'certificateNo') {
       return;
     }
-    // 영문 입력 필드는 자동으로 대문자로 변환
-    const uppercaseFields = ['customer', 'poNo'];
-    const processedValue = uppercaseFields.includes(name) ? value.toUpperCase() : value;
+    // 입력 중에는 변환하지 않고 그대로 저장 (CSS로 대문자 표시)
     setFormData(prev => ({
       ...prev,
-      [name]: processedValue,
+      [name]: value,
     }));
     
     // 해당 필드의 에러 초기화
@@ -2706,6 +2704,18 @@ function MaterialTestCertificateContent() {
         delete newErrors[name];
         return newErrors;
       });
+    }
+  };
+
+  const handleFormBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    // customer, poNo는 포커스를 잃을 때 대문자로 변환
+    const uppercaseFields = ['customer', 'poNo'];
+    if (uppercaseFields.includes(name)) {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value.toUpperCase(),
+      }));
     }
   };
 
@@ -2826,20 +2836,17 @@ function MaterialTestCertificateContent() {
 
   // 제품 필드 변경 핸들러
   const handleProductChange = (index: number, field: 'productName' | 'productCode' | 'quantity' | 'heatNo' | 'material' | 'remark', value: string) => {
-    // 제품명, 제품코드, 히트번호, Material, Remark는 대문자로 변환
-    const uppercaseFields = ['productName', 'productCode', 'heatNo', 'material', 'remark'];
-    const processedValue = uppercaseFields.includes(field) ? value.toUpperCase() : value;
-    
+    // 입력 중에는 변환하지 않고 그대로 저장 (CSS로 대문자 표시)
     setProducts(prev => {
       const newProducts = [...prev];
       const currentProduct = newProducts[index];
-      const updatedProduct = { ...currentProduct, [field]: processedValue };
+      const updatedProduct = { ...currentProduct, [field]: value };
       newProducts[index] = updatedProduct;
       
       // 제품명 또는 제품코드가 변경된 경우 소재/사이즈 조회 (비동기로 처리)
       if (field === 'productName' || field === 'productCode') {
-        const productName = field === 'productName' ? processedValue : updatedProduct.productName;
-        const productCode = field === 'productCode' ? processedValue : updatedProduct.productCode;
+        const productName = field === 'productName' ? value : updatedProduct.productName;
+        const productCode = field === 'productCode' ? value : updatedProduct.productCode;
         
         if (productName.trim() && productCode.trim()) {
           // 비동기로 소재/사이즈 조회 (상태 업데이트는 즉시, 조회는 나중에)
@@ -2871,6 +2878,18 @@ function MaterialTestCertificateContent() {
         const newErrors = { ...prev };
         delete newErrors[`${field}-${index}`];
         return newErrors;
+      });
+    }
+  };
+
+  // 제품 필드 포커스 아웃 핸들러 (대문자 변환)
+  const handleProductBlur = (index: number, field: 'productName' | 'productCode' | 'heatNo' | 'material' | 'remark', value: string) => {
+    const uppercaseFields = ['productName', 'productCode', 'heatNo', 'material', 'remark'];
+    if (uppercaseFields.includes(field)) {
+      setProducts(prev => {
+        const newProducts = [...prev];
+        newProducts[index] = { ...newProducts[index], [field]: value.toUpperCase() };
+        return newProducts;
       });
     }
   };
@@ -4379,7 +4398,9 @@ function MaterialTestCertificateContent() {
                   required
                   value={formData.customer}
                   onChange={handleChange}
+                  onBlur={handleFormBlur}
                   placeholder="고객명"
+                  style={{ textTransform: 'uppercase' }}
                 />
                 <Input
                   id="poNo"
@@ -4388,7 +4409,9 @@ function MaterialTestCertificateContent() {
                   label="PO NO."
                   value={formData.poNo}
                   onChange={handleChange}
+                  onBlur={handleFormBlur}
                   placeholder="발주번호"
+                  style={{ textTransform: 'uppercase' }}
                 />
               </div>
 
@@ -4440,8 +4463,12 @@ function MaterialTestCertificateContent() {
                         required
                         value={product.productName}
                         onChange={(e) => handleProductChange(index, 'productName', e.target.value)}
-                        onBlur={() => handleProductNameBlur(index)}
+                        onBlur={(e) => {
+                          handleProductBlur(index, 'productName', e.target.value);
+                          handleProductNameBlur(index);
+                        }}
                         placeholder="제품명 코드 입력 (예: GMC)"
+                        style={{ textTransform: 'uppercase' }}
                         disabled={saving || generatingPDF}
                       />
 
@@ -4452,7 +4479,9 @@ function MaterialTestCertificateContent() {
                         required
                         value={product.productCode}
                         onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
+                        onBlur={(e) => handleProductBlur(index, 'productCode', e.target.value)}
                         placeholder="제품코드를 입력하세요"
+                        style={{ textTransform: 'uppercase' }}
                         disabled={saving || generatingPDF}
                       />
 
@@ -4474,7 +4503,9 @@ function MaterialTestCertificateContent() {
                         label="MATERIAL (소재)"
                         value={product.material}
                         onChange={(e) => handleProductChange(index, 'material', e.target.value)}
+                        onBlur={(e) => handleProductBlur(index, 'material', e.target.value)}
                         placeholder="소재를 입력하세요 (예: 316/316L, 304)"
+                        style={{ textTransform: 'uppercase' }}
                         disabled={saving || generatingPDF}
                       />
 
@@ -4483,7 +4514,9 @@ function MaterialTestCertificateContent() {
                         label="HEAT NO. (히트번호)"
                         value={product.heatNo}
                         onChange={(e) => handleProductChange(index, 'heatNo', e.target.value)}
+                        onBlur={(e) => handleProductBlur(index, 'heatNo', e.target.value)}
                         placeholder="히트번호를 입력하세요"
+                        style={{ textTransform: 'uppercase' }}
                         disabled={saving || generatingPDF}
                       />
 
@@ -4492,6 +4525,7 @@ function MaterialTestCertificateContent() {
                         label="REMARK (비고)"
                         value={product.remark}
                         onChange={(e) => handleProductChange(index, 'remark', e.target.value)}
+                        onBlur={(e) => handleProductBlur(index, 'remark', e.target.value)}
                         placeholder="비고를 입력하세요"
                         style={{ textTransform: 'uppercase' }}
                         disabled={saving || generatingPDF}
@@ -4839,10 +4873,19 @@ function CertificateCreateAddMappingForm({
 }) {
   const [productCode, setProductCode] = useState(initialProductCode);
   const [productName, setProductName] = useState('');
+  const productCodeInputRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setProductCode(initialProductCode);
   }, [initialProductCode]);
+
+  const handleProductCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setProductCode(e.target.value);
+  };
+
+  const handleProductCodeBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    setProductCode(e.target.value.toUpperCase());
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -4858,9 +4901,11 @@ function CertificateCreateAddMappingForm({
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">제품명코드 *</label>
         <Input
+          ref={productCodeInputRef}
           type="text"
           value={productCode}
-          onChange={(e) => setProductCode(e.target.value.toUpperCase())}
+          onChange={handleProductCodeChange}
+          onBlur={handleProductCodeBlur}
           placeholder="예: GMC"
           required
           style={{ textTransform: 'uppercase' }}
@@ -4871,7 +4916,8 @@ function CertificateCreateAddMappingForm({
         <Input
           type="text"
           value={productName}
-          onChange={(e) => setProductName(e.target.value.toUpperCase())}
+          onChange={(e) => setProductName(e.target.value)}
+          onBlur={(e) => setProductName(e.target.value.toUpperCase())}
           placeholder="예: MALE CONNECTOR"
           required
           style={{ textTransform: 'uppercase' }}
@@ -4917,7 +4963,8 @@ function CertificateCreateEditMappingForm({
         <Input
           type="text"
           value={productName}
-          onChange={(e) => setProductName(e.target.value.toUpperCase())}
+          onChange={(e) => setProductName(e.target.value)}
+          onBlur={(e) => setProductName(e.target.value.toUpperCase())}
           placeholder="예: MALE CONNECTOR"
           required
           style={{ textTransform: 'uppercase' }}

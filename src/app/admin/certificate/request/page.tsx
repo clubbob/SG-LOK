@@ -1204,12 +1204,12 @@ function AdminCertificateRequestContent() {
                           filtered.map((mapping) => (
                             <div
                               key={mapping.id}
-                              className="flex items-center justify-between p-2 bg-gray-50 rounded hover:bg-gray-100"
+                              className="flex items-center justify-between p-2 bg-gray-50 rounded hover:bg-gray-100 flex-nowrap"
                             >
-                              <div className="flex-1">
-                                <span className="text-sm font-medium text-gray-900">{mapping.productCode}</span>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium text-gray-900 whitespace-nowrap">{mapping.productCode}</span>
                                 <span className="text-sm text-gray-500 mx-2">→</span>
-                                <span className="text-sm text-gray-700">{mapping.productName}</span>
+                                <span className="text-sm text-gray-700 whitespace-nowrap">{mapping.productName}</span>
                               </div>
                           <div className="flex gap-2">
                             <button

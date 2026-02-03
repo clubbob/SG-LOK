@@ -822,7 +822,7 @@ export default function AdminCertificatePage() {
                                       alert('성적서 ID가 없습니다. 페이지를 새로고침해주세요.');
                                       return;
                                     }
-                                    const url = `/admin/certificate/create?id=${certificate.id}`;
+                                    const url = `/admin/certificate/edit/${certificate.id}`;
                                     console.log('이동할 URL:', url);
                                     try {
                                       router.push(url);

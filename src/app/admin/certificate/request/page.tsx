@@ -9,6 +9,8 @@ import { db, storage } from '@/lib/firebase';
 import { InquiryAttachment, CertificateAttachment, CertificateProduct } from '@/types';
 import { getProductMappingByCode, addProductMapping, getAllProductMappings, updateProductMapping, deleteProductMapping } from '@/lib/productMappings';
 import { ProductMapping } from '@/types';
+import { signInAnonymously } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -31,6 +33,19 @@ const checkAdminAuth = (): boolean => {
     return session.authenticated === true;
   } catch {
     return false;
+  }
+};
+
+// Firebase 인증 상태 확인 및 익명 인증 시도 (Firestore 접근을 위해)
+const ensureFirebaseAuth = async (): Promise<void> => {
+  if (!auth.currentUser) {
+    try {
+      await signInAnonymously(auth);
+      console.log('[관리자] Firebase 익명 인증 완료');
+    } catch (error) {
+      console.warn('[관리자] Firebase 익명 인증 실패:', error);
+      // 실패해도 계속 진행 (관리자 세션이 있으면)
+    }
   }
 };
 
@@ -81,11 +96,14 @@ function AdminCertificateRequestContent() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [certificateStatus, setCertificateStatus] = useState<'pending' | 'in_progress' | 'completed' | 'cancelled' | null>(null);
 
-  // 관리자 인증 확인
+  // 관리자 인증 확인 및 Firebase 인증 확인
   useEffect(() => {
     if (!checkAdminAuth()) {
       router.push('/admin/login');
+      return;
     }
+    // 관리자 세션이 있으면 Firebase 인증 상태 확인 및 익명 인증 시도
+    ensureFirebaseAuth();
   }, [router]);
 
   // 수정 모드: 기존 데이터 불러오기

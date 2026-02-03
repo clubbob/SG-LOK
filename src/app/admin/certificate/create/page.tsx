@@ -5,9 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs, query, where, QuerySnapshot, DocumentData } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, getBytes } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { db, storage, auth } from '@/lib/firebase';
 import { getProductMappingByCode, getAllProductMappings, addProductMapping, updateProductMapping, deleteProductMapping } from '@/lib/productMappings';
 import { CertificateAttachment, MaterialTestCertificate, CertificateProduct, ProductMapping } from '@/types';
+import { signInAnonymously } from 'firebase/auth';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -1364,6 +1365,19 @@ const checkAdminAuth = (): boolean => {
   }
 };
 
+// Firebase 인증 상태 확인 및 익명 인증 시도 (Firestore 접근을 위해)
+const ensureFirebaseAuth = async (): Promise<void> => {
+  if (!auth.currentUser) {
+    try {
+      await signInAnonymously(auth);
+      console.log('[관리자] Firebase 익명 인증 완료');
+    } catch (error) {
+      console.warn('[관리자] Firebase 익명 인증 실패:', error);
+      // 실패해도 계속 진행 (관리자 세션이 있으면)
+    }
+  }
+};
+
 // 파일명에서 Material과 Heat No. 추출하는 헬퍼 함수
 const extractMaterialAndHeatNo = (fileName: string): { material: string; heatNo: string } => {
   let material = '';
@@ -2209,11 +2223,14 @@ function MaterialTestCertificateContent() {
     }
   }, []);
 
-  // 관리자 인증 확인
+  // 관리자 인증 확인 및 Firebase 인증 확인
   useEffect(() => {
     if (!checkAdminAuth()) {
       router.push('/admin/login');
+      return;
     }
+    // 관리자 세션이 있으면 Firebase 인증 상태 확인 및 익명 인증 시도
+    ensureFirebaseAuth();
   }, [router]);
 
   // 성적서 요청 정보 불러오기 (certificateId 또는 copyFromId 필수)
@@ -4456,21 +4473,38 @@ function MaterialTestCertificateContent() {
                     </div>
 
                     <div className="grid grid-cols-3 gap-4">
-                      <Input
-                        type="text"
-                        id={`productName-${index}`}
-                        label="DESCRIPTION (제품명) *"
-                        required
-                        value={product.productName}
-                        onChange={(e) => handleProductChange(index, 'productName', e.target.value)}
-                        onBlur={(e) => {
-                          handleProductBlur(index, 'productName', e.target.value);
-                          handleProductNameBlur(index);
-                        }}
-                        placeholder="제품명 코드 입력 (예: GMC)"
-                        style={{ textTransform: 'uppercase' }}
-                        disabled={saving || generatingPDF}
-                      />
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                          <Input
+                            type="text"
+                            id={`productName-${index}`}
+                            label="DESCRIPTION (제품명) *"
+                            required
+                            value={product.productName}
+                            onChange={(e) => handleProductChange(index, 'productName', e.target.value)}
+                            onBlur={(e) => {
+                              handleProductBlur(index, 'productName', e.target.value);
+                              handleProductNameBlur(index);
+                            }}
+                            placeholder="제품명 코드 입력 (예: GMC)"
+                            style={{ textTransform: 'uppercase' }}
+                            disabled={saving || generatingPDF}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCurrentProductIndex(index);
+                            setCurrentProductCode('');
+                            setShowMappingModal(true);
+                          }}
+                          disabled={saving || generatingPDF}
+                          className="mb-0.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="제품명코드 매핑 추가"
+                        >
+                          +
+                        </button>
+                      </div>
 
                       <Input
                         type="text"

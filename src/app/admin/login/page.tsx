@@ -5,8 +5,8 @@ import { Header, Footer } from '@/components/layout';
 import { Button, Input } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-// Firebase Auth는 선택적으로 사용 (Firestore 접근을 위해)
-import { signInWithEmailAndPassword } from 'firebase/auth';
+// Firebase Auth는 Firestore 접근을 위해 필요
+import { signInAnonymously } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 
 const ADMIN_SESSION_KEY = 'admin_session';
@@ -39,7 +39,7 @@ export default function AdminLoginPage() {
     setError('');
 
     try {
-      // 관리자 인증 확인 (아이디와 비밀번호만 확인, Firebase Auth와 무관)
+      // 관리자 인증 확인 (아이디와 비밀번호만 확인)
       if (formData.id === ADMIN_ID && formData.password === ADMIN_PASSWORD) {
         // 세션 저장 (24시간 유지)
         const sessionData = {
@@ -49,8 +49,15 @@ export default function AdminLoginPage() {
         };
         localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(sessionData));
         
-        // Firebase Auth 로그인은 선택사항 (Firestore 접근을 위해 시도하지만 실패해도 계속 진행)
-        // 관리자 로그인은 localStorage 기반이므로 Firebase Auth와 무관하게 작동
+        // Firestore 접근을 위해 Firebase 익명 인증 수행
+        // 사용자가 로그아웃한 상태에서도 Firestore 권한이 필요하므로 익명 인증 사용
+        try {
+          await signInAnonymously(auth);
+          console.log('관리자 Firebase 익명 인증 완료');
+        } catch (authError) {
+          console.warn('Firebase 익명 인증 실패 (계속 진행):', authError);
+          // 익명 인증 실패해도 관리자 세션이 있으면 계속 진행
+        }
         
         // 관리자 홈 페이지로 리다이렉트
         router.push('/admin/dashboard');

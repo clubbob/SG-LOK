@@ -5,9 +5,10 @@ import { useRouter, useParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
-import { getProductMappingByCode } from '@/lib/productMappings';
-import { CertificateAttachment, MaterialTestCertificate, CertificateProduct } from '@/types';
+import { db, storage, auth } from '@/lib/firebase';
+import { getProductMappingByCode, getAllProductMappings, addProductMapping, updateProductMapping, deleteProductMapping } from '@/lib/productMappings';
+import { CertificateAttachment, MaterialTestCertificate, CertificateProduct, ProductMapping } from '@/types';
+import { signInAnonymously } from 'firebase/auth';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -1489,6 +1490,19 @@ const checkAdminAuth = (): boolean => {
   }
 };
 
+// Firebase 인증 상태 확인 및 익명 인증 시도 (Firestore 접근을 위해)
+const ensureFirebaseAuth = async (): Promise<void> => {
+  if (!auth.currentUser) {
+    try {
+      await signInAnonymously(auth);
+      console.log('[관리자] Firebase 익명 인증 완료');
+    } catch (error) {
+      console.warn('[관리자] Firebase 익명 인증 실패:', error);
+      // 실패해도 계속 진행 (관리자 세션이 있으면)
+    }
+  }
+};
+
 // 파일명에서 Material과 Heat No. 추출하는 헬퍼 함수
 const extractMaterialAndHeatNo = (fileName: string): { material: string; heatNo: string } => {
   let material = '';
@@ -1624,6 +1638,15 @@ function MaterialTestCertificateEditContent() {
     inspectionCertificates: Array<CertificateAttachment | File>;
   }>>([{ productName: '', productCode: '', quantity: '', heatNo: '', material: '', remark: '', inspectionCertificates: [] }]);
 
+  // 제품명코드 매핑 모달 (새 제품명 입력 시 매핑 없을 때 팝업)
+  const [showMappingModal, setShowMappingModal] = useState(false);
+  const [currentProductIndex, setCurrentProductIndex] = useState<number | null>(null);
+  const [currentProductCode, setCurrentProductCode] = useState<string>('');
+  const [allMappings, setAllMappings] = useState<ProductMapping[]>([]);
+  const [showMappingList, setShowMappingList] = useState(false);
+  const [mappingSearchQuery, setMappingSearchQuery] = useState('');
+  const [editingMapping, setEditingMapping] = useState<ProductMapping | null>(null);
+
   // 성적서 번호 자동 생성 함수
   const generateCertificateNo = async (): Promise<string> => {
     const today = new Date();
@@ -1658,11 +1681,14 @@ function MaterialTestCertificateEditContent() {
     }
   };
 
-  // 관리자 인증 확인
+  // 관리자 인증 확인 및 Firebase 인증 확인
   useEffect(() => {
     if (!checkAdminAuth()) {
       router.push('/admin/login');
+      return;
     }
+    // 관리자 세션이 있으면 Firebase 인증 상태 확인 및 익명 인증 시도
+    ensureFirebaseAuth();
   }, [router]);
 
   // 성적서 정보 불러오기 (수정 모드)
@@ -1926,6 +1952,19 @@ function MaterialTestCertificateEditContent() {
     }
   };
 
+  // 매핑 목록 로드
+  useEffect(() => {
+    const loadMappings = async () => {
+      try {
+        const mappings = await getAllProductMappings();
+        setAllMappings(mappings);
+      } catch (error) {
+        console.error('매핑 목록 로드 오류:', error);
+      }
+    };
+    loadMappings();
+  }, []);
+
   // 제품명(DESCRIPTION) 포커스 아웃 시 매핑 조회 및 자동 변환 (성적서요청 등록과 동일)
   const handleProductNameBlur = async (index: number) => {
     const product = products[index];
@@ -1945,9 +1984,66 @@ function MaterialTestCertificateEditContent() {
           };
           return newProducts;
         });
+      } else {
+        // 매핑이 없으면 모달 표시 (성적서요청 등록과 동일)
+        setCurrentProductIndex(index);
+        setCurrentProductCode(productNameCode);
+        setShowMappingModal(true);
       }
     } catch (error) {
       console.error('제품명코드 매핑 조회 오류:', error);
+    }
+  };
+
+  // 매핑 추가 핸들러 (모달에서 저장 시 현재 제품에 적용)
+  const handleAddMapping = async (productCode: string, productName: string) => {
+    try {
+      await addProductMapping(productCode, productName);
+      const mappings = await getAllProductMappings();
+      setAllMappings(mappings);
+      if (currentProductIndex !== null) {
+        setProducts(prev => {
+          const newProducts = [...prev];
+          newProducts[currentProductIndex] = {
+            ...newProducts[currentProductIndex],
+            productName,
+            productCode: newProducts[currentProductIndex].productCode.trim() || productCode,
+            inspectionCertificates: newProducts[currentProductIndex].inspectionCertificates || [],
+          };
+          return newProducts;
+        });
+      }
+      setShowMappingModal(false);
+      setCurrentProductIndex(null);
+      setCurrentProductCode('');
+    } catch (error: unknown) {
+      console.error('매핑 추가 오류:', error);
+      const message = error instanceof Error ? error.message : '매핑 추가에 실패했습니다.';
+      alert(message);
+    }
+  };
+
+  const handleUpdateMapping = async (id: string, productName: string) => {
+    try {
+      await updateProductMapping(id, productName);
+      const mappings = await getAllProductMappings();
+      setAllMappings(mappings);
+      setEditingMapping(null);
+    } catch (error) {
+      console.error('매핑 수정 오류:', error);
+      alert('매핑 수정에 실패했습니다.');
+    }
+  };
+
+  const handleDeleteMapping = async (id: string) => {
+    if (!confirm('이 매핑을 삭제하시겠습니까?')) return;
+    try {
+      await deleteProductMapping(id);
+      const mappings = await getAllProductMappings();
+      setAllMappings(mappings);
+    } catch (error) {
+      console.error('매핑 삭제 오류:', error);
+      alert('매핑 삭제에 실패했습니다.');
     }
   };
 
@@ -3959,33 +4055,50 @@ function MaterialTestCertificateEditContent() {
 
                     <div className="grid grid-cols-3 gap-4">
                       <div>
-                        <Input
-                          id={`productName-${index}`}
-                          type="text"
-                          label="DESCRIPTION (제품명) *"
-                          required
-                          value={product.productName}
-                          onChange={(e) => {
-                            handleProductChange(index, 'productName', e.target.value);
-                            // 입력 시 해당 필드 에러 제거
-                            if (formErrors.products && formErrors.products[index]?.productName) {
-                              setFormErrors(prev => {
-                                const newErrors = { ...prev };
-                                if (newErrors.products && newErrors.products[index]) {
-                                  newErrors.products[index] = { ...newErrors.products[index], productName: undefined };
+                        <div className="flex items-end gap-2">
+                          <div className="flex-1">
+                            <Input
+                              id={`productName-${index}`}
+                              type="text"
+                              label="DESCRIPTION (제품명) *"
+                              required
+                              value={product.productName}
+                              onChange={(e) => {
+                                handleProductChange(index, 'productName', e.target.value);
+                                // 입력 시 해당 필드 에러 제거
+                                if (formErrors.products && formErrors.products[index]?.productName) {
+                                  setFormErrors(prev => {
+                                    const newErrors = { ...prev };
+                                    if (newErrors.products && newErrors.products[index]) {
+                                      newErrors.products[index] = { ...newErrors.products[index], productName: undefined };
+                                    }
+                                    return newErrors;
+                                  });
                                 }
-                                return newErrors;
-                              });
-                            }
-                          }}
-                          onBlur={(e) => {
-                            handleProductBlur(index, 'productName', e.target.value);
-                            handleProductNameBlur(index);
-                          }}
-                          placeholder="제품명 코드 입력 (예: GMC)"
-                          style={{ textTransform: 'uppercase' }}
-                          disabled={saving || generatingPDF}
-                        />
+                              }}
+                              onBlur={(e) => {
+                                handleProductBlur(index, 'productName', e.target.value);
+                                handleProductNameBlur(index);
+                              }}
+                              placeholder="제품명 코드 입력 (예: GMC)"
+                              style={{ textTransform: 'uppercase' }}
+                              disabled={saving || generatingPDF}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCurrentProductIndex(index);
+                              setCurrentProductCode('');
+                              setShowMappingModal(true);
+                            }}
+                            disabled={saving || generatingPDF}
+                            className="mb-0.5 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 hover:border-blue-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="제품명코드 매핑 추가"
+                          >
+                            +
+                          </button>
+                        </div>
                         {formErrors.products && formErrors.products[index]?.productName && (
                           <p className="mt-1 text-sm text-red-600">{formErrors.products[index].productName}</p>
                         )}
@@ -4223,8 +4336,245 @@ function MaterialTestCertificateEditContent() {
             </div>
           </div>
         </form>
+
+        {/* 제품명코드 매핑 추가 모달 (새 제품명 입력 시 매핑 없을 때) */}
+        {showMappingModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">
+                  {currentProductCode ? `제품명코드 "${currentProductCode}" 매핑 추가` : '제품명코드 매핑 관리'}
+                </h2>
+                <button
+                  onClick={() => {
+                    setShowMappingModal(false);
+                    setCurrentProductIndex(null);
+                    setCurrentProductCode('');
+                    setEditingMapping(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                  type="button"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {editingMapping ? (
+                <CertificateEditEditMappingForm
+                  mapping={editingMapping}
+                  onSave={(productName) => {
+                    if (editingMapping.id) handleUpdateMapping(editingMapping.id, productName);
+                  }}
+                  onCancel={() => setEditingMapping(null)}
+                />
+              ) : (
+                <CertificateEditAddMappingForm
+                  initialProductCode={currentProductCode}
+                  onSave={(productCode, productName) => handleAddMapping(productCode, productName)}
+                  onCancel={() => {
+                    setShowMappingModal(false);
+                    setCurrentProductIndex(null);
+                    setCurrentProductCode('');
+                  }}
+                />
+              )}
+
+              <div className="mt-6 border-t pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-700">등록된 매핑 목록</h3>
+                  <button
+                    onClick={() => setShowMappingList(!showMappingList)}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                  >
+                    {showMappingList ? '접기' : '펼치기'}
+                  </button>
+                </div>
+                {showMappingList && (
+                  <>
+                    <div className="mb-3">
+                      <input
+                        type="text"
+                        value={mappingSearchQuery}
+                        onChange={(e) => setMappingSearchQuery(e.target.value.toUpperCase())}
+                        placeholder="제품코드 또는 제품명으로 검색"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        style={{ textTransform: 'uppercase' }}
+                      />
+                    </div>
+                    <div className="space-y-2 min-h-[6rem] max-h-72 overflow-y-auto overscroll-y-contain rounded border border-gray-200 bg-gray-50/50 px-2 py-2">
+                      {(() => {
+                        const q = mappingSearchQuery.trim().toLowerCase();
+                        const filtered = q
+                          ? allMappings.filter(
+                              (m) =>
+                                m.productCode.toLowerCase().includes(q) ||
+                                m.productName.toLowerCase().includes(q)
+                            )
+                          : allMappings;
+                        if (filtered.length === 0) {
+                          return (
+                            <p className="text-sm text-gray-500 text-center py-4">
+                              {allMappings.length === 0 ? '등록된 매핑이 없습니다.' : '검색 결과가 없습니다.'}
+                            </p>
+                          );
+                        }
+                        return filtered.map((mapping) => (
+                          <div
+                            key={mapping.id}
+                            className="flex items-center justify-between p-2 bg-gray-50 rounded hover:bg-gray-100 flex-nowrap"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <span className="text-sm font-medium text-gray-900 whitespace-nowrap">{mapping.productCode}</span>
+                              <span className="text-sm text-gray-500 mx-2">→</span>
+                              <span className="text-sm text-gray-700 whitespace-nowrap">{mapping.productName}</span>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setEditingMapping(mapping)}
+                                className="text-blue-600 hover:text-blue-800 text-sm"
+                              >
+                                수정
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => mapping.id && handleDeleteMapping(mapping.id)}
+                                className="text-red-600 hover:text-red-800 text-sm"
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+// 성적서 수정용 매핑 추가 폼
+function CertificateEditAddMappingForm({
+  initialProductCode,
+  onSave,
+  onCancel,
+}: {
+  initialProductCode: string;
+  onSave: (productCode: string, productName: string) => void;
+  onCancel: () => void;
+}) {
+  const [productCode, setProductCode] = useState(initialProductCode);
+  const [productName, setProductName] = useState('');
+  const productCodeInputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setProductCode(initialProductCode);
+  }, [initialProductCode]);
+
+  const handleProductCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setProductCode(e.target.value);
+  };
+
+  const handleProductCodeBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    setProductCode(e.target.value.toUpperCase());
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!productCode.trim() || !productName.trim()) {
+      alert('제품명코드와 제품명을 모두 입력해주세요.');
+      return;
+    }
+    onSave(productCode.trim().toUpperCase(), productName.trim().toUpperCase());
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">제품명코드 *</label>
+        <Input
+          ref={productCodeInputRef}
+          type="text"
+          value={productCode}
+          onChange={handleProductCodeChange}
+          onBlur={handleProductCodeBlur}
+          placeholder="예: GMC"
+          required
+          style={{ textTransform: 'uppercase' }}
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">제품명 *</label>
+        <Input
+          type="text"
+          value={productName}
+          onChange={(e) => setProductName(e.target.value)}
+          onBlur={(e) => setProductName(e.target.value.toUpperCase())}
+          placeholder="예: MALE CONNECTOR"
+          required
+          style={{ textTransform: 'uppercase' }}
+        />
+      </div>
+      <div className="flex justify-end gap-3 pt-2">
+        <Button type="button" variant="outline" onClick={onCancel}>취소</Button>
+        <Button type="submit" variant="primary">저장</Button>
+      </div>
+    </form>
+  );
+}
+
+// 성적서 수정용 매핑 수정 폼
+function CertificateEditEditMappingForm({
+  mapping,
+  onSave,
+  onCancel,
+}: {
+  mapping: ProductMapping;
+  onSave: (productName: string) => void;
+  onCancel: () => void;
+}) {
+  const [productName, setProductName] = useState(mapping.productName);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!productName.trim()) {
+      alert('제품명을 입력해주세요.');
+      return;
+    }
+    onSave(productName.trim().toUpperCase());
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">제품명코드</label>
+        <Input type="text" value={mapping.productCode} disabled className="bg-gray-100" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">제품명 *</label>
+        <Input
+          type="text"
+          value={productName}
+          onChange={(e) => setProductName(e.target.value)}
+          onBlur={(e) => setProductName(e.target.value.toUpperCase())}
+          placeholder="예: MALE CONNECTOR"
+          required
+          style={{ textTransform: 'uppercase' }}
+        />
+      </div>
+      <div className="flex justify-end gap-3 pt-2">
+        <Button type="button" variant="outline" onClick={onCancel}>취소</Button>
+        <Button type="submit" variant="primary">저장</Button>
+      </div>
+    </form>
   );
 }
 

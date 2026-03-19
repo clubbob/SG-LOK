@@ -221,11 +221,13 @@ function AdminProductionRequestContent() {
       errors.productName = '제품명을 입력해주세요.';
     }
 
-    // 2) 생산목적이 주문인 경우 고객사명/수주량 필수
+    // 2) 고객사명 필수
+    if (!formData.customerName.trim()) {
+      errors.customerName = '고객사명을 입력해주세요.';
+    }
+
+    // 3) 생산목적이 주문인 경우 수주량 필수
     if (formData.productionReason === 'order') {
-      if (!formData.customerName.trim()) {
-        errors.customerName = '고객사명을 입력해주세요.';
-      }
       if (!formData.orderQuantity.trim()) {
         errors.orderQuantity = '수주수량을 입력해주세요.';
       } else {
@@ -236,7 +238,7 @@ function AdminProductionRequestContent() {
       }
     }
 
-    // 3) 생산수량
+    // 4) 생산수량
     if (!formData.quantity.trim()) {
       errors.quantity = '생산수량을 입력해주세요.';
     } else {
@@ -246,7 +248,7 @@ function AdminProductionRequestContent() {
       }
     }
 
-    // 4) 완료요청일
+    // 5) 완료요청일
     if (!formData.requestedCompletionDate) {
       errors.requestedCompletionDate = '완료요청일을 선택해주세요.';
     } else {
@@ -287,8 +289,8 @@ function AdminProductionRequestContent() {
           updatedAt: Timestamp.now(),
         };
 
-        // customerName은 주문인 경우에만 추가
-        if (formData.productionReason === 'order' && formData.customerName.trim()) {
+        // customerName은 항상 저장
+        if (formData.customerName.trim()) {
           productionRequestData.customerName = formData.customerName.trim();
         }
         if (formData.productionReason === 'order' && formData.orderQuantity.trim()) {
@@ -355,8 +357,8 @@ function AdminProductionRequestContent() {
           createdBy: 'admin',
         };
 
-        // customerName은 주문인 경우에만 추가
-        if (formData.productionReason === 'order' && formData.customerName.trim()) {
+        // customerName은 항상 저장
+        if (formData.customerName.trim()) {
           productionRequestData.customerName = formData.customerName.trim();
         }
 
@@ -488,46 +490,44 @@ function AdminProductionRequestContent() {
               </select>
             </div>
 
-            {formData.productionReason === 'order' && (
-              <div className="relative">
-                <Input
-                  id="customerName"
-                  name="customerName"
-                  type="text"
-                  label="고객사명 *"
-                  value={formData.customerName}
-                  onChange={handleChange}
-                  onFocus={() => setShowCustomerSuggestions(formData.customerName.length > 0)}
-                  onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
-                  placeholder="고객사명을 입력하거나 선택하세요"
-                  error={fieldErrors.customerName}
-                  required
-                  list="customerNameList"
-                  disabled={isEditMode}
-                />
-                <datalist id="customerNameList">
-                  {customerNameSuggestions.map((name, index) => (
-                    <option key={index} value={name} />
+            <div className="relative">
+              <Input
+                id="customerName"
+                name="customerName"
+                type="text"
+                label="고객사명 *"
+                value={formData.customerName}
+                onChange={handleChange}
+                onFocus={() => setShowCustomerSuggestions(formData.customerName.length > 0)}
+                onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
+                placeholder="고객사명을 입력하세요"
+                error={fieldErrors.customerName}
+                required
+                list="customerNameList"
+                disabled={isEditMode}
+              />
+              <datalist id="customerNameList">
+                {customerNameSuggestions.map((name, index) => (
+                  <option key={index} value={name} />
+                ))}
+              </datalist>
+              
+              {/* 커스텀 자동완성 드롭다운 */}
+              {showCustomerSuggestions && filteredCustomerSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                  {filteredCustomerSuggestions.map((name, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handleCustomerNameSelect(name)}
+                      className="w-full text-left px-4 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
+                    >
+                      {name}
+                    </button>
                   ))}
-                </datalist>
-                
-                {/* 커스텀 자동완성 드롭다운 */}
-                {showCustomerSuggestions && filteredCustomerSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                    {filteredCustomerSuggestions.map((name, index) => (
-                      <button
-                        key={index}
-                        type="button"
-                        onClick={() => handleCustomerNameSelect(name)}
-                        className="w-full text-left px-4 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
-                      >
-                        {name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </div>
 
             {formData.productionReason === 'order' && (
               <div>

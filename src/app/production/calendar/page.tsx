@@ -380,10 +380,14 @@ function ProductionCalendarContent() {
       const productName = request.productName?.toLowerCase() || '';
       const userName = request.userName?.toLowerCase() || '';
       const statusLabel = STATUS_LABELS[request.status]?.toLowerCase() || request.status || '';
+      const productionStatusLabel = request.productionStatus
+        ? (PRODUCTION_STATUS_LABELS[request.productionStatus] || request.productionStatus).toLowerCase()
+        : '';
       return (
         productName.includes(query) ||
         userName.includes(query) ||
-        statusLabel.includes(query)
+        statusLabel.includes(query) ||
+        productionStatusLabel.includes(query)
       );
     });
   }, [searchQuery, requests]);
@@ -575,7 +579,7 @@ function ProductionCalendarContent() {
             {lines.length === 0 ? (
               <div className="p-12 text-center">
                 <p className="text-gray-600">표시할 생산 일정이 없습니다.</p>
-                <p className="text-sm text-gray-500 mt-2">생산라인과 완료예정일이 확정된 요청만 표시됩니다.</p>
+                <p className="text-sm text-gray-500 mt-2">검색어를 지우거나 조건을 변경해 다시 확인해주세요.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -737,7 +741,8 @@ function ProductionCalendarContent() {
                                     left: `${x}px`,
                                     top: `${topOffset}px`,
                                     width: `${width}px`,
-                                    zIndex: 10 - taskIdx,
+                                    // 태스크 수가 많아져도 음수 z-index가 되지 않도록 보정
+                                    zIndex: lineTasks.length - taskIdx,
                                   }}
                                 >
                                   <div

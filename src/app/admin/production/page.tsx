@@ -34,16 +34,16 @@ const checkAdminAuth = (): boolean => {
 };
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
-  pending_review: '검토 대기',
-  confirmed: '계획 확정',
-  in_progress: '생산 중',
+  pending_review: '대기중',
+  confirmed: '진행중',
+  in_progress: '진행중',
   completed: '생산 완료',
   cancelled: '취소',
 };
 
 const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
   pending_review: 'bg-yellow-400 text-white',
-  confirmed: 'bg-blue-500 text-white',
+  confirmed: 'bg-green-500 text-white',
   in_progress: 'bg-green-500 text-white',
   completed: 'bg-gray-500 text-white',
   cancelled: 'bg-red-500 text-white',
@@ -230,17 +230,6 @@ export default function AdminProductionPage() {
       return;
     }
 
-    if (!approvalForm.quantity.trim()) {
-      setError('요청수량을 입력해주세요.');
-      return;
-    }
-
-    const quantityNum = parseInt(approvalForm.quantity, 10);
-    if (isNaN(quantityNum) || quantityNum <= 0) {
-      setError('요청수량은 1 이상의 숫자여야 합니다.');
-      return;
-    }
-
     setApproving(true);
     setError('');
 
@@ -250,7 +239,6 @@ export default function AdminProductionPage() {
       const updateData: Record<string, unknown> = {
         status: 'confirmed',
         plannedCompletionDate: plannedCompletionDate,
-        quantity: quantityNum,
         updatedAt: Timestamp.now(),
         updatedBy: 'admin',
       };
@@ -769,18 +757,19 @@ export default function AdminProductionPage() {
                   onSelect={(e) => e.stopPropagation()}
                 >
                     <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-2">
-                    요청수량: *
+                    신청 요청수량
                   </label>
                   <input
                     type="number"
                     id="quantity"
                     value={approvalForm.quantity}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                      setApprovalForm({ ...approvalForm, quantity: e.target.value });
-                      if (error) setError('');
-                    }}
+                    readOnly
+                      onChange={(e) => {
+                        // readOnly라 입력 변경이 일어나지 않지만, 혹시 모를 상태 변화 방지를 위해 처리만 중단
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.nativeEvent.stopImmediatePropagation();
+                      }}
                     onMouseDown={(e) => {
                       e.stopPropagation();
                       e.nativeEvent.stopImmediatePropagation();
@@ -826,11 +815,10 @@ export default function AdminProductionPage() {
                       e.nativeEvent.stopImmediatePropagation();
                     }}
                     placeholder="요청수량을 입력하세요"
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     disabled={approving}
                     min="1"
                     step="1"
-                    required
                     autoFocus={false}
                   />
                   <p className="mt-1 text-xs text-gray-500">기존 요청수량: {approvingRequest.quantity.toLocaleString()}</p>

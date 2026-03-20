@@ -12,16 +12,16 @@ import { ProductionRequest, ProductionRequestStatus } from '@/types';
 import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
-  pending_review: '검토 대기',
-  confirmed: '계획 확정',
-  in_progress: '생산 중',
+  pending_review: '대기중',
+  confirmed: '진행중',
+  in_progress: '진행중',
   completed: '생산 완료',
   cancelled: '취소',
 };
 
 const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
   pending_review: 'bg-yellow-400 text-white',
-  confirmed: 'bg-blue-500 text-white',
+  confirmed: 'bg-green-500 text-white',
   in_progress: 'bg-green-500 text-white',
   completed: 'bg-gray-500 text-white',
   cancelled: 'bg-red-500 text-white',

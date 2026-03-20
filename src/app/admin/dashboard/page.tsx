@@ -386,7 +386,7 @@ export default function AdminPage() {
               <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-3 border border-yellow-200 hover:shadow-md transition-all hover:scale-[1.02]">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-gray-600 mb-0.5">검토 대기</p>
+                    <p className="text-xs font-medium text-gray-600 mb-0.5">대기중</p>
                     <p className="text-2xl font-bold text-gray-900">{productionStats.pendingReview}</p>
                   </div>
                   <div className="bg-yellow-500 rounded-lg p-2">
@@ -402,7 +402,7 @@ export default function AdminPage() {
               <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-lg p-3 border border-cyan-200 hover:shadow-md transition-all hover:scale-[1.02]">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-gray-600 mb-0.5">생산중</p>
+                    <p className="text-xs font-medium text-gray-600 mb-0.5">진행중</p>
                     <p className="text-2xl font-bold text-gray-900">{productionStats.inProgress}</p>
                   </div>
                   <div className="bg-cyan-500 rounded-lg p-2">

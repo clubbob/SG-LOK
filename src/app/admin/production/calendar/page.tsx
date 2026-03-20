@@ -33,24 +33,24 @@ const checkAdminAuth = (): boolean => {
 
 const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
   pending_review: 'bg-yellow-400',
-  confirmed: 'bg-blue-500',
+  confirmed: 'bg-green-500',
   in_progress: 'bg-green-500',
   completed: 'bg-gray-500',
   cancelled: 'bg-red-500',
 };
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
-  pending_review: '검토 대기',
-  confirmed: '계획 확정',
-  in_progress: '생산 중',
+  pending_review: '대기중',
+  confirmed: '진행중',
+  in_progress: '진행중',
   completed: '생산 완료',
   cancelled: '취소',
 };
 
 const PRODUCTION_STATUS_LABELS: Record<string, string> = {
-  production_waiting: '계획 확정',
-  production_2nd: '생산 중 (2차 진행중)',
-  production_3rd: '생산 중 (3차 진행중)',
+  production_waiting: '진행중',
+  production_2nd: '진행중 (2차 진행중)',
+  production_3rd: '진행중 (3차 진행중)',
   production_completed: '생산 완료',
 };
 
@@ -204,7 +204,7 @@ export default function AdminProductionCalendarPage() {
             (requestStart ? new Date(requestStart.getTime() + 30 * 24 * 60 * 60 * 1000) : new Date());
           // 종료일을 한국 시간 기준으로 정규화
           endDate = normalizeToKST(requestedEnd);
-          productionLine = '검토 대기';
+          productionLine = '대기중';
         } else if (req.status === 'confirmed' || req.status === 'in_progress') {
           // 계획 확정/생산 중: 등록일 ~ 완료예정일
           const requestStart = req.requestDate || req.createdAt || new Date();
@@ -263,7 +263,7 @@ export default function AdminProductionCalendarPage() {
   const groupByLine = (tasks: GanttTask[]): Record<string, GanttTask[]> => {
     return tasks.reduce((acc, task) => {
       // "검토 대기"를 "생산요청 리스트"로 통합
-      const line = task.productionLine === '검토 대기' ? '생산요청 리스트' : task.productionLine;
+      const line = task.productionLine === '대기중' ? '생산요청 리스트' : task.productionLine;
       if (!acc[line]) {
         acc[line] = [];
       }
@@ -617,46 +617,6 @@ export default function AdminProductionCalendarPage() {
         </button>
       </div>
 
-      {/* 생산요청 리스트 페이징 */}
-      {requestListTotalPages > 1 && (
-        <div className="mb-4 flex items-center justify-between bg-white rounded-lg shadow-sm p-3">
-          <div className="text-sm font-semibold text-gray-900">{REQUEST_LIST_LINE} 페이징</div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setRequestListPage((p) => Math.max(1, p - 1))}
-              disabled={requestListSafePage === 1}
-              className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-            >
-              이전
-            </button>
-            {Array.from({ length: requestListTotalPages }, (_, idx) => idx + 1).map((page) => {
-              const isActive = page === requestListSafePage;
-              return (
-                <button
-                  key={page}
-                  onClick={() => setRequestListPage(page)}
-                  className={`px-3 py-1 text-sm font-medium rounded-md border ${
-                    isActive
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                  }`}
-                  aria-current={isActive ? 'page' : undefined}
-                >
-                  {page}
-                </button>
-              );
-            })}
-            <button
-              onClick={() => setRequestListPage((p) => Math.min(requestListTotalPages, p + 1))}
-              disabled={requestListSafePage === requestListTotalPages}
-              className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
-            >
-              다음
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 범례 */}
       <div className="mb-4 bg-white rounded-lg shadow-sm p-4">
         <div className="flex items-center justify-between">
@@ -878,6 +838,42 @@ export default function AdminProductionCalendarPage() {
             </div>
           </div>
         )}
+          {/* 생산요청 리스트 페이징(차트 좌우 스크롤바 아래) */}
+          {requestListTotalPages > 1 && (
+            <div className="mt-4 mb-4 flex items-center justify-end gap-1">
+              <button
+                onClick={() => setRequestListPage((p) => Math.max(1, p - 1))}
+                disabled={requestListSafePage === 1}
+                className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+              >
+                이전
+              </button>
+              {Array.from({ length: requestListTotalPages }, (_, idx) => idx + 1).map((page) => {
+                const isActive = page === requestListSafePage;
+                return (
+                  <button
+                    key={page}
+                    onClick={() => setRequestListPage(page)}
+                    className={`px-3 py-1 text-sm font-medium rounded-md border ${
+                      isActive
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                    }`}
+                    aria-current={isActive ? 'page' : undefined}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setRequestListPage((p) => Math.min(requestListTotalPages, p + 1))}
+                disabled={requestListSafePage === requestListTotalPages}
+                className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+              >
+                다음
+              </button>
+            </div>
+          )}
       </div>
     </div>
   );

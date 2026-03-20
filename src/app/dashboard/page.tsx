@@ -321,7 +321,7 @@ export default function DashboardPage() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-gray-600 mb-0.5">검토 대기</p>
+                    <p className="text-xs font-medium text-gray-600 mb-0.5">대기중</p>
                     <p className="text-2xl font-bold text-gray-900">{productionStats.pendingReview}</p>
                   </div>
                   <div className="bg-yellow-500 rounded-lg p-2">
@@ -338,7 +338,7 @@ export default function DashboardPage() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-gray-600 mb-0.5">계획 확정</p>
+                    <p className="text-xs font-medium text-gray-600 mb-0.5">진행중</p>
                     <p className="text-2xl font-bold text-gray-900">{productionStats.inProgress}</p>
                   </div>
                   <div className="bg-cyan-500 rounded-lg p-2">

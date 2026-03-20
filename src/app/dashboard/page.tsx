@@ -124,13 +124,9 @@ export default function DashboardPage() {
         replied: repliedInquiryCount,
       });
 
-      // 성적서 통계 (본인이 작성한 성적서만)
+      // 성적서 통계 (성적서 목록과 동일하게 전체 성적서 기준 집계)
       const certificatesRef = collection(db, 'certificates');
-      const certificatesQuery = query(
-        certificatesRef,
-        where('userId', '==', userProfile.id)
-      );
-      const certificatesSnapshot = await getDocs(certificatesQuery);
+      const certificatesSnapshot = await getDocs(certificatesRef);
       
       let pendingCertCount = 0;
       let inProgressCertCount = 0;
@@ -140,15 +136,8 @@ export default function DashboardPage() {
       certificatesSnapshot.forEach((doc) => {
         const data = doc.data();
         
-        // 생산요청 데이터 필터링
-        if (data.productionReason) {
-          return;
-        }
-        
-        // 성적서 데이터인지 확인
-        if (!data.certificateType && !data.requestDate) {
-          return;
-        }
+        // productionRequests 데이터가 certificates 컬렉션에 섞여 들어간 경우가 있어 방어
+        if (data.productionReason) return;
         
         totalCertCount++;
         const status = data.status || 'pending';
@@ -270,14 +259,14 @@ export default function DashboardPage() {
 
               <div 
                 onClick={() => router.push('/mypage/inquiries')}
-                className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200 cursor-pointer hover:shadow-md transition-all hover:scale-[1.02]"
+              className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-lg p-3 border border-cyan-200 cursor-pointer hover:shadow-md transition-all hover:scale-[1.02]"
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-medium text-gray-600 mb-0.5">읽음</p>
                     <p className="text-2xl font-bold text-gray-900">{inquiryStats.read}</p>
                   </div>
-                  <div className="bg-blue-400 rounded-lg p-2">
+                <div className="bg-cyan-500 rounded-lg p-2">
                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -292,7 +281,7 @@ export default function DashboardPage() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-gray-600 mb-0.5">답변완료</p>
+                    <p className="text-xs font-medium text-gray-600 mb-0.5">답변 완료</p>
                     <p className="text-2xl font-bold text-gray-900">{inquiryStats.replied}</p>
                   </div>
                   <div className="bg-green-500 rounded-lg p-2">
@@ -345,14 +334,14 @@ export default function DashboardPage() {
 
               <div 
                 onClick={() => router.push('/production/list')}
-                className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border border-green-200 cursor-pointer hover:shadow-md transition-all hover:scale-[1.02]"
+                className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-lg p-3 border border-cyan-200 cursor-pointer hover:shadow-md transition-all hover:scale-[1.02]"
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-medium text-gray-600 mb-0.5">계획 확정</p>
                     <p className="text-2xl font-bold text-gray-900">{productionStats.inProgress}</p>
                   </div>
-                  <div className="bg-green-500 rounded-lg p-2">
+                  <div className="bg-cyan-500 rounded-lg p-2">
                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
@@ -362,14 +351,14 @@ export default function DashboardPage() {
 
               <div 
                 onClick={() => router.push('/production/list')}
-                className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg p-3 border border-gray-200 cursor-pointer hover:shadow-md transition-all hover:scale-[1.02]"
+                className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border border-green-200 cursor-pointer hover:shadow-md transition-all hover:scale-[1.02]"
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-medium text-gray-600 mb-0.5">생산 완료</p>
                     <p className="text-2xl font-bold text-gray-900">{productionStats.completed}</p>
                   </div>
-                  <div className="bg-gray-500 rounded-lg p-2">
+                  <div className="bg-green-500 rounded-lg p-2">
                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
@@ -419,14 +408,14 @@ export default function DashboardPage() {
 
               <div 
                 onClick={() => router.push('/certificate/list')}
-                className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200 cursor-pointer hover:shadow-md transition-all hover:scale-[1.02]"
+                className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-lg p-3 border border-cyan-200 cursor-pointer hover:shadow-md transition-all hover:scale-[1.02]"
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-medium text-gray-600 mb-0.5">진행중</p>
                     <p className="text-2xl font-bold text-gray-900">{certificateStats.inProgress}</p>
                   </div>
-                  <div className="bg-blue-400 rounded-lg p-2">
+                  <div className="bg-cyan-500 rounded-lg p-2">
                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>

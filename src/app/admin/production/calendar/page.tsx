@@ -71,6 +71,8 @@ interface GanttTask {
   productName: string;
   quantity: number;
   userName: string;
+  // 페이징에서 "최근 등록" 기준 정렬에 사용
+  createdAt: Date;
   productionStatus?: 'production_waiting' | 'production_2nd' | 'production_3rd' | 'production_completed';
 }
 
@@ -80,12 +82,16 @@ export default function AdminProductionCalendarPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [hideCompleted, setHideCompleted] = useState(false);
+  const REQUEST_LIST_LINE = '생산요청 리스트';
+  const REQUEST_LIST_ITEMS_PER_PAGE = 10;
+  const [requestListPage, setRequestListPage] = useState(1);
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: Date; end: Date }>(() => {
     const today = new Date();
     // 한국 시간 기준으로 날짜 생성
-    // 선택한 달의 전 달 1일부터 다음 달 마지막 날까지 (3개월 범위)로 설정하여 차트가 잘리지 않도록 함
-    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1, 0, 0, 0, 0); // 전 달 1일
-    const end = new Date(today.getFullYear(), today.getMonth() + 2, 0, 23, 59, 59, 999); // 다음 달 마지막 날
+    // 화면이 오늘부터 보이도록 하기 위함
+    // (시작일은 오늘, 종료일은 +2개월 마지막 날까지)
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0); // 오늘 00:00
+    const end = new Date(today.getFullYear(), today.getMonth() + 3, 0, 23, 59, 59, 999); // +2개월의 마지막 날
     return { start, end };
   });
 
@@ -183,6 +189,9 @@ export default function AdminProductionCalendarPage() {
         let startDate: Date;
         let endDate: Date;
         let productionLine: string;
+        // 페이징/정렬은 createdAt의 "시간"까지 유지해야 한다.
+        // normalizeToKST로 잘라버리면 같은 날짜 등록이 동률이 되어 정렬이 깨질 수 있다.
+        const createdAt = req.createdAt || req.requestDate || new Date();
         
         if (req.status === 'pending_review') {
           // 검토 대기: 등록일부터 완료요청일까지 표시
@@ -244,6 +253,7 @@ export default function AdminProductionCalendarPage() {
           productName: req.productName,
           quantity: req.quantity,
           userName: req.userName,
+          createdAt,
           productionStatus: req.productionStatus,
         };
       });
@@ -437,6 +447,37 @@ export default function AdminProductionCalendarPage() {
   const tasksByLine = groupByLine(tasks);
   const lines = Object.keys(tasksByLine).sort();
 
+  // "생산요청 리스트" 라인은 많을 수 있어서 페이징 처리
+  const requestLineAllTasks = tasksByLine[REQUEST_LIST_LINE] || [];
+  // "생산요청 리스트" 라인은 페이지네이션을 "날짜 범위와의 겹침"이 아니라
+  // 전체 요청 기준으로 해야 최근 등록이 올바르게 보입니다.
+  const requestLineSortedTasks = [...requestLineAllTasks]
+    // "최근 등록" 정렬을 위해 createdAt 오름차순(오래된 -> 최신)으로 맞춘다.
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
+  const requestListTotalPages = Math.max(
+    1,
+    Math.ceil(requestLineSortedTasks.length / REQUEST_LIST_ITEMS_PER_PAGE)
+  );
+  const requestListSafePage = Math.min(
+    Math.max(requestListPage, 1),
+    requestListTotalPages
+  );
+  const requestLinePagedTasks = requestLineSortedTasks.slice(
+    (requestListSafePage - 1) * REQUEST_LIST_ITEMS_PER_PAGE,
+    requestListSafePage * REQUEST_LIST_ITEMS_PER_PAGE
+  );
+  // 생산요청 목록과 동일하게:
+  // - 전체는 createdAt 오름차순(오래된 -> 최신)
+  // - 페이지 내부는 reverse() 해서 "위쪽에 최신"이 오도록 한다.
+  const requestLineVisibleTasks = [...requestLinePagedTasks].reverse();
+
+  // 최근 요청이 보이도록 기본 페이지는 "마지막 페이지(총 페이지 수)"로 둔다.
+  useEffect(() => {
+    setRequestListPage(requestListTotalPages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery, hideCompleted, requestListTotalPages]);
+
   // 디버깅: 태스크 정보 로그
   useEffect(() => {
     const currentTasks = convertToGanttTasks(requests);
@@ -450,7 +491,7 @@ export default function AdminProductionCalendarPage() {
   // 이전/다음 달 이동
   const moveMonth = (direction: 'prev' | 'next') => {
     setSelectedDateRange((prev) => {
-      // 현재 표시 중인 월 계산 (prev.start는 전 달 1일이므로 +1)
+      // 현재 표시 중인 월 계산 (prev.start는 표시할 월의 1일)
       const currentDisplayMonth = prev.start.getMonth() + 1;
       const currentDisplayYear = prev.start.getFullYear();
       
@@ -472,11 +513,9 @@ export default function AdminProductionCalendarPage() {
         }
       }
       
-      // 표시할 월의 전 달 1일부터 다음 달 마지막 날까지 (3개월 범위)
-      // newDisplayMonth는 1-12 범위 (표시할 월)
-      // 예: 10월을 표시하려면 start는 9월 1일 (newDisplayMonth - 1 = 10 - 1 = 9 = 9월, 0-based)
-      const start = new Date(newDisplayYear, newDisplayMonth - 1, 1, 0, 0, 0, 0); // 전 달 1일
-      const end = new Date(newDisplayYear, newDisplayMonth + 1, 0, 23, 59, 59, 999); // 다음 달 마지막 날
+      // 표시할 월의 1일부터 +2개월 마지막 날까지 (3개월 범위)
+      const start = new Date(newDisplayYear, newDisplayMonth - 1, 1, 0, 0, 0, 0);
+      const end = new Date(newDisplayYear, newDisplayMonth + 2, 0, 23, 59, 59, 999); // +2개월의 마지막 날
       return { start, end };
     });
   };
@@ -578,6 +617,46 @@ export default function AdminProductionCalendarPage() {
         </button>
       </div>
 
+      {/* 생산요청 리스트 페이징 */}
+      {requestListTotalPages > 1 && (
+        <div className="mb-4 flex items-center justify-between bg-white rounded-lg shadow-sm p-3">
+          <div className="text-sm font-semibold text-gray-900">{REQUEST_LIST_LINE} 페이징</div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setRequestListPage((p) => Math.max(1, p - 1))}
+              disabled={requestListSafePage === 1}
+              className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+            >
+              이전
+            </button>
+            {Array.from({ length: requestListTotalPages }, (_, idx) => idx + 1).map((page) => {
+              const isActive = page === requestListSafePage;
+              return (
+                <button
+                  key={page}
+                  onClick={() => setRequestListPage(page)}
+                  className={`px-3 py-1 text-sm font-medium rounded-md border ${
+                    isActive
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                  }`}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  {page}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setRequestListPage((p) => Math.min(requestListTotalPages, p + 1))}
+              disabled={requestListSafePage === requestListTotalPages}
+              className="px-3 py-1 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+            >
+              다음
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 범례 */}
       <div className="mb-4 bg-white rounded-lg shadow-sm p-4">
         <div className="flex items-center justify-between">
@@ -627,7 +706,7 @@ export default function AdminProductionCalendarPage() {
               <div className="border-b border-gray-200 sticky top-0 bg-white z-10">
                 {/* 월 레이블 행 */}
                 <div className="flex border-b-2 border-gray-300 bg-white">
-                  <div className="flex relative" style={{ minHeight: '32px', width: `${containerWidth}px`, marginLeft: '96px' }}>
+                    <div className="flex relative" style={{ minHeight: '32px', width: `${containerWidth}px` }}>
                     {dateHeaders.map((date, idx) => {
                       const isFirstDayOfMonth = date.getDate() === 1;
                       const prevDate = idx > 0 ? dateHeaders[idx - 1] : null;
@@ -695,7 +774,7 @@ export default function AdminProductionCalendarPage() {
                 
                 {/* 날짜 행 */}
                 <div className="flex">
-                  <div className="flex" style={{ width: `${containerWidth}px`, marginLeft: '96px' }}>
+                  <div className="flex" style={{ width: `${containerWidth}px` }}>
                     {dateHeaders.map((date, idx) => {
                       const dayOfWeek = date.getDay(); // 0: 일요일, 6: 토요일
                       const isSaturday = dayOfWeek === 6;
@@ -733,23 +812,14 @@ export default function AdminProductionCalendarPage() {
 
               {/* 라인별 태스크 */}
               {lines.map((line) => {
-                const lineTasks = tasksByLine[line];
+                const lineTasksAll = tasksByLine[line];
+                const isRequestListLine = line === REQUEST_LIST_LINE;
+                const lineTasks = isRequestListLine ? requestLineVisibleTasks : lineTasksAll;
                 return (
                   <div key={line} className="border-b border-gray-200">
                     <div className="flex relative" style={{ minHeight: `${Math.max(60, lineTasks.length * 50 + 16)}px` }}>
-                      {/* 라인 이름 */}
-                      <div className="w-24 border-r border-gray-200 px-3 py-2 bg-gray-50 flex items-center sticky left-0 z-20">
-                        {line === '생산요청 리스트' ? (
-                          <span className="text-sm text-gray-900 leading-tight">
-                            생산요청<br />리스트
-                          </span>
-                        ) : (
-                          <span className="text-sm text-gray-900 whitespace-nowrap">{line}</span>
-                        )}
-                      </div>
-
                       {/* 태스크 바 영역 */}
-                      <div className="flex-1 relative" style={{ minHeight: `${Math.max(60, lineTasks.length * 50 + 16)}px` }}>
+                      <div className="relative" style={{ minHeight: `${Math.max(60, lineTasks.length * 50 + 16)}px` }}>
                         {lineTasks.map((task, taskIdx) => {
                           // 한국 시간 기준으로 날짜 정규화
                           const taskStartDate = normalizeToKST(task.start);
@@ -780,8 +850,8 @@ export default function AdminProductionCalendarPage() {
                                 left: `${x}px`,
                                 top: `${topOffset}px`,
                                 width: `${width}px`,
-                                // 태스크 수가 많아져도 음수 z-index가 되지 않도록 보정
-                                zIndex: lineTasks.length - taskIdx,
+                                // 스티키 라벨(z-20)보다 낮게 유지해서 겹침/침범 방지
+                                zIndex: 10,
                               }}
                             >
                               <div

@@ -195,7 +195,7 @@ export default function AdminLayout({
     <div className="min-h-screen flex flex-col bg-gray-50">
       <div className="flex-1 flex overflow-hidden">
         {/* 좌측 메뉴 */}
-        <aside className="w-48 bg-white border-r border-gray-200 shadow-sm flex flex-col h-screen">
+        <aside className="w-48 bg-white border-r border-gray-200 shadow-sm flex flex-col h-screen pb-12">
           <div className="p-3 border-b border-gray-200">
             <h2 className="text-base font-semibold text-gray-900">관리자 메뉴</h2>
           </div>

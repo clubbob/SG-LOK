@@ -210,7 +210,7 @@ export default function ProductionRequestListPage() {
       return `"${str}"`;
     };
 
-    const headers = [
+      const headers = [
       '번호',
       '요청자',
       '등록일',
@@ -218,7 +218,7 @@ export default function ProductionRequestListPage() {
       '생산목적',
       '고객사명',
       '수주수량',
-      '생산수량',
+        '요청수량',
       '완료요청일',
       '완료예정일',
       '생산완료일',
@@ -403,7 +403,7 @@ export default function ProductionRequestListPage() {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산목적</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">고객사명</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수주수량</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산수량</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청수량</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산완료일</th>
@@ -671,7 +671,7 @@ export default function ProductionRequestListPage() {
                     </>
                   )}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">생산수량</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">요청수량</label>
                     <p className="text-sm text-gray-900">{selectedRequest.quantity.toLocaleString()}</p>
                   </div>
                   <div>

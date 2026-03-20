@@ -221,13 +221,13 @@ function ProductionRequestContent() {
       }
     }
 
-    // 4) 생산수량
+    // 4) 요청수량
     if (!formData.quantity.trim()) {
-      errors.quantity = '생산수량을 입력해주세요.';
+      errors.quantity = '요청수량을 입력해주세요.';
     } else {
       const quantityNum = parseInt(formData.quantity, 10);
       if (isNaN(quantityNum) || quantityNum <= 0) {
-        errors.quantity = '생산수량은 1 이상의 숫자여야 합니다.';
+        errors.quantity = '요청수량은 1 이상의 숫자여야 합니다.';
       }
     }
 
@@ -511,10 +511,10 @@ function ProductionRequestContent() {
                   id="quantity"
                   name="quantity"
                   type="number"
-                label="생산수량 *"
+                label="요청수량 *"
                   value={formData.quantity}
                   onChange={handleChange}
-                placeholder="생산수량을 입력하세요"
+                placeholder="요청수량을 입력하세요"
                   error={fieldErrors.quantity}
                   min="1"
                   required

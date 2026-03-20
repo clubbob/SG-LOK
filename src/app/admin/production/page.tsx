@@ -231,13 +231,13 @@ export default function AdminProductionPage() {
     }
 
     if (!approvalForm.quantity.trim()) {
-      setError('생산수량을 입력해주세요.');
+      setError('요청수량을 입력해주세요.');
       return;
     }
 
     const quantityNum = parseInt(approvalForm.quantity, 10);
     if (isNaN(quantityNum) || quantityNum <= 0) {
-      setError('생산수량은 1 이상의 숫자여야 합니다.');
+      setError('요청수량은 1 이상의 숫자여야 합니다.');
       return;
     }
 
@@ -294,7 +294,7 @@ export default function AdminProductionPage() {
       '생산목적',
       '고객사명',
       '수주수량',
-      '생산수량',
+      '요청수량',
       '완료요청일',
       '완료예정일',
       '생산완료일',
@@ -480,7 +480,7 @@ export default function AdminProductionPage() {
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산목적</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">고객사명</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수주수량</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산수량</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청수량</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산완료일</th>
@@ -768,8 +768,8 @@ export default function AdminProductionPage() {
                   onMouseMove={(e) => e.stopPropagation()}
                   onSelect={(e) => e.stopPropagation()}
                 >
-                  <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-2">
-                    생산수량: *
+                    <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-2">
+                    요청수량: *
                   </label>
                   <input
                     type="number"
@@ -825,7 +825,7 @@ export default function AdminProductionPage() {
                       e.stopPropagation();
                       e.nativeEvent.stopImmediatePropagation();
                     }}
-                    placeholder="생산수량을 입력하세요"
+                    placeholder="요청수량을 입력하세요"
                     className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     disabled={approving}
                     min="1"
@@ -833,7 +833,7 @@ export default function AdminProductionPage() {
                     required
                     autoFocus={false}
                   />
-                  <p className="mt-1 text-xs text-gray-500">기존 생산수량: {approvingRequest.quantity.toLocaleString()}</p>
+                  <p className="mt-1 text-xs text-gray-500">기존 요청수량: {approvingRequest.quantity.toLocaleString()}</p>
                 </div>
                 <div onClick={(e) => e.stopPropagation()}>
                   <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">

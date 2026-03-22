@@ -137,8 +137,7 @@ function ProductionRequestContent() {
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name } = e.target;
-    let { value } = e.target;
+    const { name, value } = e.target;
 
     // 제품명: 입력 중 toUpperCase()를 매번 적용하면 제어 컴포넌트가 리렌더되며 커서가 끝으로 점프함.
     // 대문자 통일은 blur / 제출 시에만 수행함.

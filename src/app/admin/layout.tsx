@@ -111,6 +111,7 @@ export default function AdminLayout({
   const [loading, setLoading] = useState(true);
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
   const [pendingUserCount, setPendingUserCount] = useState<number>(0);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // 로그인 페이지는 레이아웃 적용 안 함
   const isLoginPage = pathname === '/admin/login' || pathname?.startsWith('/admin/login');
@@ -166,6 +167,10 @@ export default function AdminLayout({
     return () => unsubscribe();
   }, [isAdminAuthenticated]);
 
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [pathname]);
+
   const handleLogout = () => {
     localStorage.removeItem(ADMIN_SESSION_KEY);
     router.push('/admin/login');
@@ -193,11 +198,53 @@ export default function AdminLayout({
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      <div className="flex-1 flex overflow-hidden">
-        {/* 좌측 메뉴 */}
-        <aside className="w-48 bg-white border-r border-gray-200 shadow-sm flex flex-col h-screen pb-12">
-          <div className="p-3 border-b border-gray-200">
+      {/* 모바일: 메뉴 열기 */}
+      <div className="flex md:hidden items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-200 shadow-sm shrink-0">
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(true)}
+          className="p-2 rounded-lg text-gray-700 hover:bg-gray-100 -ml-1"
+          aria-label="관리자 메뉴 열기"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <span className="text-sm font-semibold text-gray-900 truncate">관리자</span>
+      </div>
+
+      <div className="flex flex-1 min-h-0 overflow-hidden relative">
+        {mobileNavOpen ? (
+          <button
+            type="button"
+            className="fixed inset-0 z-40 bg-black/40 md:hidden"
+            aria-label="메뉴 닫기"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        ) : null}
+
+        {/* 좌측 메뉴 (모바일: 오버레이 드로어, md+: 고정 사이드바) */}
+        <aside
+          className={[
+            'flex flex-col border-r border-gray-200 bg-white shadow-sm pb-12',
+            'w-48 shrink-0 overflow-y-auto overscroll-contain',
+            'fixed left-0 top-0 z-50 h-dvh transition-transform duration-200 ease-out',
+            'md:static md:z-auto md:h-screen md:translate-x-0 md:shadow-sm',
+            mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+          ].join(' ')}
+        >
+          <div className="p-3 border-b border-gray-200 flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-gray-900">관리자 메뉴</h2>
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(false)}
+              className="md:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+              aria-label="메뉴 닫기"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
           <nav className="p-2 flex-1 overflow-y-auto">
             {adminMenuItems.map((item) => {
@@ -417,7 +464,7 @@ export default function AdminLayout({
         </aside>
 
         {/* 우측 콘텐츠 영역 */}
-        <main className="flex-1 overflow-y-auto h-screen">
+        <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain">
           {children}
         </main>
       </div>

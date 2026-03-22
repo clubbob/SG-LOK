@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui';
@@ -13,6 +13,12 @@ export default function Header() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isProdMenuOpen, setIsProdMenuOpen] = useState(false);
   const [isCertMenuOpen, setIsCertMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+    setIsProdMenuOpen(false);
+    setIsCertMenuOpen(false);
+  }, [pathname]);
   
   // 로그인/회원가입 페이지에서는 메뉴를 완전히 숨김
   const isAuthPage = pathname === '/login' || pathname === '/signup';
@@ -44,14 +50,14 @@ export default function Header() {
   };
 
   return (
-    <header className="bg-blue-500 shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+    <header className="sticky top-0 z-50 bg-blue-500 shadow-lg">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-14 sm:h-16 min-w-0 gap-2">
           {/* 로고 및 브랜드 */}
-          <div className="flex items-center">
+          <div className="flex items-center min-w-0">
             <div className="flex-shrink-0">
               <Link href="/" className="hover:opacity-80 transition-opacity">
-                <h1 className="text-2xl font-bold text-white cursor-pointer">
+                <h1 className="text-lg sm:text-2xl font-bold text-white cursor-pointer truncate">
                   SG-LOK
                 </h1>
               </Link>
@@ -240,7 +246,7 @@ export default function Header() {
                       className="fixed inset-0 z-10"
                       onClick={() => setIsUserMenuOpen(false)}
                     />
-                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
+                    <div className="absolute right-0 mt-2 w-[min(16rem,calc(100vw-1.5rem))] sm:w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-[60]">
                       <div className="p-4 border-b border-gray-200">
                         <div className="flex items-center justify-between">
                           <h3 className="font-semibold text-gray-900">{userProfile?.name || '사용자'}</h3>
@@ -336,8 +342,8 @@ export default function Header() {
 
         {/* 모바일 메뉴 */}
         {isMobileMenuOpen && !isAuthPage && (
-          <div className="md:hidden pb-4">
-            <nav className="flex flex-col space-y-2">
+          <div className="md:hidden pb-4 border-t border-blue-400/40 max-h-[min(70vh,28rem)] overflow-y-auto overscroll-contain">
+            <nav className="flex flex-col space-y-1 py-2">
               <Link
                 href="/dashboard"
                 className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${

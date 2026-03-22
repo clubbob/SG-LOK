@@ -26,23 +26,31 @@ export default function Home() {
       <main className="flex-1 bg-gray-50">
         {/* Hero Section */}
         <div className="bg-gradient-to-br from-blue-700 to-blue-900 text-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-20">
             <div className="text-center">
-              <h1 className="text-4xl font-bold mb-6">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 sm:mb-6 leading-tight px-1">
                 SG-LOK Work Flow 에 오신 것을 환영합니다.
               </h1>
-              <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
+              <p className="text-base sm:text-lg md:text-xl text-blue-100 mb-6 sm:mb-8 max-w-2xl mx-auto px-1">
                 작지만 강한 회사를 만들기 위한 효율적인 웹 서비스 플랫폼
               </p>
               {!isAuthenticated && (
-                <div className="flex justify-center gap-4">
-                  <Link href="/login">
-                    <Button variant="primary" size="lg" className="bg-white text-blue-600 hover:bg-blue-50">
+                <div className="flex flex-row flex-nowrap justify-center items-stretch gap-2 sm:gap-4 w-full max-w-sm sm:max-w-none mx-auto px-2">
+                  <Link href="/login" className="min-w-0 flex-1 sm:flex-initial">
+                    <Button
+                      variant="primary"
+                      size="lg"
+                      className="w-full justify-center bg-white text-blue-600 hover:bg-blue-50 px-3 sm:px-6 text-sm sm:text-lg"
+                    >
                       로그인
                     </Button>
                   </Link>
-                  <Link href="/signup">
-                    <Button variant="outline" size="lg" className="border-white text-white hover:bg-white hover:text-blue-600">
+                  <Link href="/signup" className="min-w-0 flex-1 sm:flex-initial">
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="w-full justify-center border-white text-white hover:bg-white hover:text-blue-600 px-3 sm:px-6 text-sm sm:text-lg"
+                    >
                       회원가입
                     </Button>
                   </Link>
@@ -62,9 +70,9 @@ export default function Home() {
         {/* Features Section */}
         <div className="bg-gray-100">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">주요 기능</h2>
-            <p className="text-lg text-gray-600">효율적인 업무 관리를 위한 핵심 기능들</p>
+          <div className="text-center mb-8 sm:mb-12">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 sm:mb-4">주요 기능</h2>
+            <p className="text-base sm:text-lg text-gray-600 px-2">효율적인 업무 관리를 위한 핵심 기능들</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -179,12 +187,12 @@ export default function Home() {
         {/* Benefits Section */}
         <div className="bg-gray-50 py-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-12">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">왜 SG-LOK Work Flow 인가요?</h2>
-              <p className="text-lg text-gray-600">효율적인 업무 관리를 위한 핵심 가치</p>
+            <div className="text-center mb-8 sm:mb-12">
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3 sm:mb-4 px-2">왜 SG-LOK Work Flow 인가요?</h2>
+              <p className="text-base sm:text-lg text-gray-600 px-2">효율적인 업무 관리를 위한 핵심 가치 실현</p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="text-center">
                 <div className="bg-blue-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
                   <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -213,16 +221,6 @@ export default function Home() {
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">정보 공유</h3>
                 <p className="text-gray-600 text-sm">팀원들과 실시간으로 정보를 공유하고 협업할 수 있습니다.</p>
-              </div>
-
-              <div className="text-center">
-                <div className="bg-green-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">안전성</h3>
-                <p className="text-gray-600 text-sm">신뢰할 수 있는 데이터 관리와 보안 시스템을 제공합니다.</p>
               </div>
             </div>
           </div>

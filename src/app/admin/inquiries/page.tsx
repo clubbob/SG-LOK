@@ -11,9 +11,8 @@ import { formatDateTime } from '@/lib/utils';
 import { onAuthStateChanged } from 'firebase/auth';
 
 const INQUIRY_TYPES = [
-  { value: 'production', label: '생산 요청' },
-  { value: 'certificate', label: '성적서 요청' },
-  { value: 'account', label: '계정 관련' },
+  { value: 'production', label: '생산관리' },
+  { value: 'certificate', label: '성적서관리' },
   { value: 'other', label: '기타' },
 ];
 
@@ -303,6 +302,7 @@ export default function AdminInquiriesPage() {
   };
 
   const getTypeLabel = (type?: string) => {
+    if (type === 'account') return '계정 관련'; // 과거 저장분 표시용
     const typeOption = INQUIRY_TYPES.find(t => t.value === type);
     return typeOption?.label || '기타';
   };

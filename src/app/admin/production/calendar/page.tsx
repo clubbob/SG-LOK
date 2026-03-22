@@ -530,7 +530,7 @@ export default function AdminProductionCalendarPage() {
 
   if (loading) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-8">
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
@@ -542,19 +542,20 @@ export default function AdminProductionCalendarPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">생산일정 캘린더</h1>
-          <p className="text-gray-600 mt-2">생산 일정을 간트 차트 형식으로 확인할 수 있습니다</p>
+    <div className="p-4 sm:p-8">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">생산일정 캘린더</h1>
+          <p className="text-gray-600 mt-2 text-sm sm:text-base">생산 일정을 간트 차트 형식으로 확인할 수 있습니다</p>
         </div>
         <Button
           variant="outline"
           size="sm"
+          className="w-full sm:w-auto shrink-0 justify-center gap-2 whitespace-nowrap"
           onClick={handleRefresh}
           disabled={loading}
         >
-          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           새로고침
@@ -599,30 +600,30 @@ export default function AdminProductionCalendarPage() {
       </div>
 
       {/* 날짜 네비게이션 */}
-      <div className="mb-4 flex items-center justify-between bg-white rounded-lg shadow-sm p-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white rounded-lg shadow-sm p-3 sm:p-4">
         <button
           onClick={() => moveMonth('prev')}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 whitespace-nowrap"
         >
           이전 달
         </button>
-        <div className="text-lg font-semibold text-gray-900">
+        <div className="text-center text-base sm:text-lg font-semibold text-gray-900 order-first sm:order-none">
           {selectedDateRange.start.getFullYear()}년 {selectedDateRange.start.getMonth() + 1}월
         </div>
         <button
           onClick={() => moveMonth('next')}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 whitespace-nowrap"
         >
           다음 달
         </button>
       </div>
 
       {/* 범례 */}
-      <div className="mb-4 bg-white rounded-lg shadow-sm p-4">
-        <div className="flex items-center justify-between">
-          <div>
+      <div className="mb-4 bg-white rounded-lg shadow-sm p-3 sm:p-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">상태 범례</h3>
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap gap-3 sm:gap-4">
               <div className="flex items-center gap-2">
                 <div className={`w-4 h-4 rounded ${STATUS_COLORS['pending_review']}`}></div>
                 <span className="text-sm text-gray-700">{STATUS_LABELS['pending_review']}</span>
@@ -637,7 +638,7 @@ export default function AdminProductionCalendarPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0 pt-1 sm:pt-0">
             <input
               type="checkbox"
               id="hideCompleted"
@@ -645,7 +646,7 @@ export default function AdminProductionCalendarPage() {
               onChange={(e) => setHideCompleted(e.target.checked)}
               className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
             />
-            <label htmlFor="hideCompleted" className="text-sm text-gray-700 cursor-pointer">
+            <label htmlFor="hideCompleted" className="text-sm text-gray-700 cursor-pointer whitespace-nowrap">
               생산 완료 감추기
             </label>
           </div>

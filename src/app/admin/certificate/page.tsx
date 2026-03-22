@@ -236,8 +236,6 @@ export default function AdminCertificatePage() {
     const sliced = filteredCertificates.slice(startIndex, endIndex);
     // 각 페이지에서 위쪽이 최신 번호가 되도록 역순으로 뒤집기
     const reversed = [...sliced].reverse();
-    console.log(`[페이지네이션] ITEMS_PER_PAGE: ${ITEMS_PER_PAGE}, currentPage: ${currentPage}, startIndex: ${startIndex}, endIndex: ${endIndex}, 표시할 항목 수: ${sliced.length}, 전체 항목 수: ${filteredCertificates.length}`);
-    console.log(`[페이지네이션 상세] sliced 배열:`, sliced.map((c, i) => `${i}: ${c.id || 'no-id'}`));
     setDisplayedCertificates(reversed);
   }, [filteredCertificates, currentPage]);
 
@@ -567,25 +565,28 @@ export default function AdminCertificatePage() {
 
   return (
     <div className="p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 whitespace-nowrap">성적서 목록</h1>
-          <p className="text-gray-600 mt-2">전체 성적서 요청을 확인하고 관리할 수 있습니다</p>
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-gray-900">성적서 목록</h1>
+          <p className="text-gray-600 mt-2 text-sm sm:text-base">
+            전체 성적서 요청을 확인하고 관리할 수 있습니다
+          </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex shrink-0 flex-row flex-wrap items-center gap-2 sm:gap-3 sm:justify-end">
           <Button
             variant="outline"
             size="sm"
             onClick={handleRefresh}
             disabled={loadingCertificates}
+            className="whitespace-nowrap shrink-0"
           >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             새로고침
           </Button>
-          <Link href="/admin/certificate/request">
-            <Button variant="primary" size="sm">
+          <Link href="/admin/certificate/request" className="shrink-0">
+            <Button variant="primary" size="sm" className="whitespace-nowrap shrink-0">
               성적서요청 등록
             </Button>
           </Link>
@@ -887,8 +888,8 @@ export default function AdminCertificatePage() {
 
           {/* 페이지네이션 */}
           {totalPages > 1 && (
-            <div className="mt-6 flex items-center justify-between">
-              <div className="text-sm text-gray-700">
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-xs sm:text-sm text-gray-700 min-w-0">
                 {searchQuery ? (
                   <>
                     검색 결과 <span className="font-medium">{filteredCertificates.length}</span>건 중{' '}
@@ -915,24 +916,26 @@ export default function AdminCertificatePage() {
                   </>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end sm:flex-nowrap w-full sm:w-auto">
                 <Button
                   variant="outline"
                   size="sm"
+                  className="shrink-0 min-w-[4.5rem] justify-center whitespace-nowrap"
                   onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
                 >
                   이전
                 </Button>
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center justify-center gap-1 max-w-full">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                     <button
                       key={page}
+                      type="button"
                       onClick={() => setCurrentPage(page)}
-                      className={`px-3 py-1 text-sm rounded ${
+                      className={`min-w-[2.25rem] shrink-0 px-2.5 py-1 text-sm rounded whitespace-nowrap ${
                         currentPage === page
                           ? 'bg-blue-600 text-white'
-                          : 'bg-white text-gray-700 hover:bg-gray-100'
+                          : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
                       }`}
                     >
                       {page}
@@ -942,6 +945,7 @@ export default function AdminCertificatePage() {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="shrink-0 min-w-[4.5rem] justify-center whitespace-nowrap"
                   onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                   disabled={currentPage === totalPages}
                 >

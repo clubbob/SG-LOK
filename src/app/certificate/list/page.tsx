@@ -252,16 +252,17 @@ export default function CertificateListPage() {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">성적서 목록</h1>
-              <p className="text-gray-600">요청한 성적서를 확인하고 관리할 수 있습니다</p>
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-12">
+          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">성적서 목록</h1>
+              <p className="text-gray-600 text-sm sm:text-base">요청한 성적서를 확인하고 관리할 수 있습니다</p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto sm:flex-shrink-0">
               <Button
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto justify-center whitespace-nowrap"
                 onClick={() => {
                   // 실시간 업데이트가 작동 중이지만, 사용자 요청에 따라 페이지 새로고침
                   window.location.reload();
@@ -270,8 +271,8 @@ export default function CertificateListPage() {
               >
                 새로고침
               </Button>
-              <Link href="/certificate/request">
-                <Button variant="primary" size="sm">
+              <Link href="/certificate/request" className="w-full sm:w-auto">
+                <Button variant="primary" size="sm" className="w-full sm:w-auto justify-center whitespace-nowrap">
                   성적서요청 등록
                 </Button>
               </Link>
@@ -475,8 +476,8 @@ export default function CertificateListPage() {
 
               {/* 페이지네이션 */}
               {totalPages > 1 && (
-                <div className="mt-6 flex items-center justify-between">
-                  <div className="text-sm text-gray-700">
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-xs sm:text-sm text-gray-700 min-w-0">
                     {searchQuery ? (
                       <>
                         검색 결과 <span className="font-medium">{filteredCertificates.length}</span>건 중{' '}
@@ -503,24 +504,26 @@ export default function CertificateListPage() {
                       </>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end sm:flex-nowrap w-full sm:w-auto">
                     <Button
                       variant="outline"
                       size="sm"
+                      className="shrink-0 min-w-[4.5rem] justify-center whitespace-nowrap"
                       onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                       disabled={currentPage === 1}
                     >
                       이전
                     </Button>
-                    <div className="flex items-center gap-1">
+                    <div className="flex flex-wrap items-center justify-center gap-1 max-w-full">
                       {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                         <button
                           key={page}
+                          type="button"
                           onClick={() => setCurrentPage(page)}
-                          className={`px-3 py-1 text-sm rounded ${
+                          className={`min-w-[2.25rem] shrink-0 px-2.5 py-1 text-sm rounded whitespace-nowrap ${
                             currentPage === page
                               ? 'bg-blue-600 text-white'
-                              : 'bg-white text-gray-700 hover:bg-gray-100'
+                              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
                           }`}
                         >
                           {page}
@@ -530,6 +533,7 @@ export default function CertificateListPage() {
                     <Button
                       variant="outline"
                       size="sm"
+                      className="shrink-0 min-w-[4.5rem] justify-center whitespace-nowrap"
                       onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                       disabled={currentPage === totalPages}
                     >

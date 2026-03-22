@@ -290,23 +290,24 @@ export default function ProductionRequestListPage() {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 bg-gray-50">
-        <div className="w-full max-w-[95%] mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">생산요청 목록</h1>
-              <p className="text-gray-600 mt-2">모든 생산요청을 확인할 수 있습니다</p>
+        <div className="w-full max-w-[95%] mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-12">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">생산요청 목록</h1>
+              <p className="text-gray-600 mt-2 text-sm sm:text-base">모든 생산요청을 확인할 수 있습니다</p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto sm:flex-shrink-0">
               <Button
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap"
                 onClick={() => {
                   // 실시간 업데이트가 작동 중이지만, 사용자 요청에 따라 버튼 제공
                   window.location.reload();
                 }}
                 disabled={loadingRequests}
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
                 새로고침
@@ -314,17 +315,18 @@ export default function ProductionRequestListPage() {
               <Button
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap"
                 onClick={handleExportToExcel}
                 disabled={loadingRequests || filteredRequests.length === 0}
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16v4H4m4 4h8m-8 4h5m-1 4l-3-3h6l-3 3z" />
                 </svg>
                 엑셀 다운로드
               </Button>
-              <Link href="/production/request">
-                <Button size="sm">
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <Link href="/production/request" className="w-full sm:w-auto">
+                <Button size="sm" className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
                   새 생산요청 등록

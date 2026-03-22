@@ -291,8 +291,10 @@ export default function AdminProductionPage() {
       '상태',
     ];
 
-    const rows = filteredRequests.map((request, idx) => {
-      const rowNumber = filteredRequests.length - idx;
+    // 엑셀은 최근 등록이 위쪽에 오도록 역순 출력, 번호는 목록과 동일(최신=가장 큰 번호)
+    const exportRequests = [...filteredRequests].reverse();
+    const rows = exportRequests.map((request, idx) => {
+      const rowNumber = exportRequests.length - idx;
       const productionReasonLabel = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const statusLabel = STATUS_LABELS[request.status];
 
@@ -519,57 +521,24 @@ export default function AdminProductionPage() {
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900 whitespace-nowrap">{request.quantity.toLocaleString()}</div>
                       </td>
-                      <td className="px-3 py-4">
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {(() => {
-                            const requestDate = new Date(request.requestDate);
-                            const completionDate = new Date(request.requestedCompletionDate);
-                            const diffTime = completionDate.getTime() - requestDate.getTime();
-                            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                            return (
-                              <>
-                                <div>{formatDateShort(request.requestedCompletionDate)}</div>
-                                <div className="text-xs text-gray-500">(+{diffDays})</div>
-                              </>
-                            );
-                          })()}
+                          {formatDateShort(request.requestedCompletionDate)}
                         </div>
                       </td>
-                      <td className="px-3 py-4">
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           {request.plannedCompletionDate ? (
-                            (() => {
-                              const requestDate = new Date(request.requestDate);
-                              const plannedDate = new Date(request.plannedCompletionDate);
-                              const diffTime = plannedDate.getTime() - requestDate.getTime();
-                              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                              return (
-                                <>
-                                  <div>{formatDateShort(request.plannedCompletionDate)}</div>
-                                  <div className="text-xs text-gray-500">(+{diffDays})</div>
-                                </>
-                              );
-                            })()
+                            formatDateShort(request.plannedCompletionDate)
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-4">
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           {request.actualCompletionDate ? (
-                            (() => {
-                              const requestDate = new Date(request.requestDate);
-                              const actualDate = new Date(request.actualCompletionDate);
-                              const diffTime = actualDate.getTime() - requestDate.getTime();
-                              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                              return (
-                                <>
-                                  <div>{formatDateShort(request.actualCompletionDate)}</div>
-                                  <div className="text-xs text-gray-500">(+{diffDays})</div>
-                                </>
-                              );
-                            })()
+                            formatDateShort(request.actualCompletionDate)
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}

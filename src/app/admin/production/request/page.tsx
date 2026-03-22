@@ -157,10 +157,8 @@ function AdminProductionRequestContent() {
     const { name } = e.target;
     let { value } = e.target;
 
-    // 제품명은 영문 입력 시 대문자로 변환
-    if (name === 'productName') {
-      value = value.toUpperCase();
-    }
+    // 제품명: 입력 중 toUpperCase()를 매번 적용하면 제어 컴포넌트가 리렌더되며 커서가 끝으로 점프함.
+    // 대문자 통일은 blur / 제출 시에만 수행함.
     setFormData({
       ...formData,
       [name]: value
@@ -187,10 +185,16 @@ function AdminProductionRequestContent() {
     if (success) setSuccess('');
   };
 
+  const handleProductNameBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const upper = e.target.value.toUpperCase();
+    setFormData((prev) => (prev.productName === upper ? prev : { ...prev, productName: upper }));
+    setTimeout(() => setShowProductSuggestions(false), 200);
+  };
+
   const handleProductNameSelect = (productName: string) => {
     setFormData({
       ...formData,
-      productName: productName
+      productName: productName.toUpperCase()
     });
     setShowProductSuggestions(false);
   };
@@ -279,7 +283,7 @@ function AdminProductionRequestContent() {
       if (isEditMode && requestId) {
         // 수정 모드
         const productionRequestData: Record<string, unknown> = {
-          productName: formData.productName.trim(),
+          productName: formData.productName.trim().toUpperCase(),
           quantity: parseInt(formData.quantity, 10),
           orderQuantity: formData.productionReason === 'order' && formData.orderQuantity.trim()
             ? parseInt(formData.orderQuantity, 10)
@@ -342,7 +346,7 @@ function AdminProductionRequestContent() {
           userId: 'admin', // 관리자 ID
           userName: '관리자',
           userEmail: 'admin@sglok.com',
-          productName: formData.productName.trim(),
+          productName: formData.productName.trim().toUpperCase(),
           quantity: parseInt(formData.quantity, 10),
           orderQuantity:
             formData.productionReason === 'order' && formData.orderQuantity.trim()
@@ -442,12 +446,13 @@ function AdminProductionRequestContent() {
               value={formData.productName}
               onChange={handleChange}
               onFocus={() => setShowProductSuggestions(formData.productName.length > 0)}
-              onBlur={() => setTimeout(() => setShowProductSuggestions(false), 200)}
+              onBlur={isEditMode ? () => setTimeout(() => setShowProductSuggestions(false), 200) : handleProductNameBlur}
               placeholder="제품명을 입력하거나 선택하세요"
               error={fieldErrors.productName}
               required
               list="productNameList"
               disabled={isEditMode}
+              className="uppercase"
             />
             <datalist id="productNameList">
               {productNameSuggestions.map((name, index) => (

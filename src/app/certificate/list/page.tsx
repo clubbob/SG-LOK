@@ -61,20 +61,6 @@ export default function CertificateListPage() {
     }
   }, [loading, isAuthenticated, router]);
 
-  // 페이지 진입 시 자동 새로고침 (한 번만 실행)
-  useEffect(() => {
-    if (isAuthenticated && !loading) {
-      // sessionStorage를 사용하여 이 세션에서 이미 새로고침했는지 확인
-      const refreshKey = 'certificate_list_auto_refresh';
-      const hasRefreshed = sessionStorage.getItem(refreshKey);
-      
-      if (!hasRefreshed) {
-        sessionStorage.setItem(refreshKey, 'true');
-        window.location.reload();
-      }
-    }
-  }, [isAuthenticated, loading]);
-
   // 성적서 목록 불러오기 (실시간 업데이트)
   useEffect(() => {
     if (!isAuthenticated || !userProfile) return;
@@ -214,8 +200,6 @@ export default function CertificateListPage() {
     const sliced = filteredCertificates.slice(startIndex, endIndex);
     // 각 페이지에서 위쪽이 최신 번호가 되도록 역순으로 뒤집기
     const reversed = [...sliced].reverse();
-    console.log(`[페이지네이션] ITEMS_PER_PAGE: ${ITEMS_PER_PAGE}, currentPage: ${currentPage}, startIndex: ${startIndex}, endIndex: ${endIndex}, 표시할 항목 수: ${sliced.length}, 전체 항목 수: ${filteredCertificates.length}`);
-    console.log(`[페이지네이션 상세] sliced 배열:`, sliced.map((c, i) => `${i}: ${c.id || 'no-id'}`));
     setDisplayedCertificates(reversed);
   }, [filteredCertificates, currentPage]);
 

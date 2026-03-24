@@ -58,7 +58,7 @@ export default function Header() {
             <div className="flex-shrink-0">
               <Link href="/" className="hover:opacity-80 transition-opacity">
                 <h1 className="text-lg sm:text-2xl font-bold text-white cursor-pointer truncate">
-                  SG-LOK
+                  SG-LOK Work Flow
                 </h1>
               </Link>
             </div>

@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SG-LOK",
-  description: "SG-LOK 웹 서비스",
+  title: "SG-LOK Work Flow",
+  description: "SG-LOK Work Flow 웹 서비스",
 };
 
 export const viewport = {

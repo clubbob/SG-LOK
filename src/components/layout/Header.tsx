@@ -342,25 +342,27 @@ export default function Header() {
 
         {/* 모바일 메뉴 */}
         {isMobileMenuOpen && !isAuthPage && (
-          <div className="md:hidden pb-4 border-t border-blue-400/40 max-h-[min(70vh,28rem)] overflow-y-auto overscroll-contain">
-            <nav className="flex flex-col space-y-1 py-2">
+          <div className="md:hidden pb-3 border-t border-blue-400/40 max-h-[min(70vh,28rem)] overflow-y-auto overscroll-contain">
+            <nav className="flex flex-col py-2">
               <Link
                 href="/dashboard"
-                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-semibold transition-colors ${
                   isActivePath('/dashboard')
                     ? 'bg-blue-700 text-white'
-                    : 'text-white hover:bg-blue-600'
+                    : 'text-white/95 hover:bg-blue-600'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 대시보드
               </Link>
+
+              <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-blue-100/90">생산관리</p>
               <Link
                 href="/production"
-                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
                   isActivePath('/production')
                     ? 'bg-blue-700 text-white'
-                    : 'text-white hover:bg-blue-600'
+                    : 'text-white/95 hover:bg-blue-600'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -368,10 +370,10 @@ export default function Header() {
               </Link>
               <Link
                 href="/production/request"
-                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
                   isActivePath('/production/request')
                     ? 'bg-blue-700 text-white'
-                    : 'text-white hover:bg-blue-600'
+                    : 'text-white/95 hover:bg-blue-600'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -379,10 +381,10 @@ export default function Header() {
               </Link>
               <Link
                 href="/production/list"
-                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
                   isActivePath('/production/list')
                     ? 'bg-blue-700 text-white'
-                    : 'text-white hover:bg-blue-600'
+                    : 'text-white/95 hover:bg-blue-600'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -390,21 +392,23 @@ export default function Header() {
               </Link>
               <Link
                 href="/production/calendar"
-                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
                   isActivePath('/production/calendar')
                     ? 'bg-blue-700 text-white'
-                    : 'text-white hover:bg-blue-600'
+                    : 'text-white/95 hover:bg-blue-600'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 생산일정 캘린더
               </Link>
+
+              <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-blue-100/90">성적서관리</p>
               <Link
                 href="/certificate"
-                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
                   isActivePath('/certificate') && !isActivePath('/certificate/request') && !isActivePath('/certificate/list')
                     ? 'bg-blue-700 text-white'
-                    : 'text-white hover:bg-blue-600'
+                    : 'text-white/95 hover:bg-blue-600'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -412,10 +416,10 @@ export default function Header() {
               </Link>
               <Link
                 href="/certificate/request"
-                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
                   isActivePath('/certificate/request')
                     ? 'bg-blue-700 text-white'
-                    : 'text-white hover:bg-blue-600'
+                    : 'text-white/95 hover:bg-blue-600'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
@@ -423,10 +427,10 @@ export default function Header() {
               </Link>
               <Link
                 href="/certificate/list"
-                className={`px-5 py-3 rounded-md text-base font-semibold transition-colors ${
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
                   isActivePath('/certificate/list')
                     ? 'bg-blue-700 text-white'
-                    : 'text-white hover:bg-blue-600'
+                    : 'text-white/95 hover:bg-blue-600'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >

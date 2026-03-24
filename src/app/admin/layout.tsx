@@ -213,7 +213,7 @@ export default function AdminLayout({
         <span className="text-sm font-semibold text-gray-900 truncate">관리자</span>
       </div>
 
-      <div className="flex flex-1 min-h-0 overflow-hidden relative">
+      <div className="flex flex-1 min-h-0 relative">
         {mobileNavOpen ? (
           <button
             type="button"
@@ -230,7 +230,9 @@ export default function AdminLayout({
             'w-48 shrink-0 overflow-y-auto overscroll-contain',
             'fixed left-0 top-0 z-50 h-dvh transition-transform duration-200 ease-out',
             'md:static md:z-auto md:h-screen md:translate-x-0 md:shadow-sm',
-            mobileNavOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+            mobileNavOpen
+              ? 'translate-x-0 pointer-events-auto'
+              : '-translate-x-full md:translate-x-0 pointer-events-none md:pointer-events-auto',
           ].join(' ')}
         >
           <div className="p-3 border-b border-gray-200 flex items-center justify-between gap-2">
@@ -464,7 +466,7 @@ export default function AdminLayout({
         </aside>
 
         {/* 우측 콘텐츠 영역 */}
-        <main className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain">
+        <main className="flex-1 min-h-0 min-w-0 overflow-x-hidden">
           {children}
         </main>
       </div>

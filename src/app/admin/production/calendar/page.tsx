@@ -600,22 +600,24 @@ export default function AdminProductionCalendarPage() {
       </div>
 
       {/* 날짜 네비게이션 */}
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white rounded-lg shadow-sm p-3 sm:p-4">
-        <button
-          onClick={() => moveMonth('prev')}
-          className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 whitespace-nowrap"
-        >
-          이전 달
-        </button>
-        <div className="text-center text-base sm:text-lg font-semibold text-gray-900 order-first sm:order-none">
+      <div className="mb-4 flex flex-col gap-3 bg-white rounded-lg shadow-sm p-3 sm:p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-center text-base sm:text-lg font-semibold text-gray-900">
           {selectedDateRange.start.getFullYear()}년 {selectedDateRange.start.getMonth() + 1}월
         </div>
-        <button
-          onClick={() => moveMonth('next')}
-          className="w-full sm:w-auto shrink-0 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 whitespace-nowrap"
-        >
-          다음 달
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => moveMonth('prev')}
+            className="w-1/2 sm:w-auto shrink-0 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 whitespace-nowrap"
+          >
+            이전 달
+          </button>
+          <button
+            onClick={() => moveMonth('next')}
+            className="w-1/2 sm:w-auto shrink-0 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 whitespace-nowrap"
+          >
+            다음 달
+          </button>
+        </div>
       </div>
 
       {/* 범례 */}

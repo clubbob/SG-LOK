@@ -535,7 +535,7 @@ export default function ProductionRequestListPage() {
 
               {/* 페이지네이션 */}
               {totalPages > 1 && (
-                <div className="mt-6 flex items-center justify-between">
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-sm text-gray-700">
                     {searchQuery ? (
                       <>
@@ -563,10 +563,11 @@ export default function ProductionRequestListPage() {
                       </>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-1 sm:gap-2 flex-wrap sm:flex-nowrap">
                     <Button
                       variant="outline"
                       size="sm"
+                      className="whitespace-nowrap shrink-0 min-w-[3.75rem] px-2 sm:px-3"
                       onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                       disabled={currentPage === 1}
                     >
@@ -577,7 +578,7 @@ export default function ProductionRequestListPage() {
                         <button
                           key={page}
                           onClick={() => setCurrentPage(page)}
-                          className={`px-3 py-1 text-sm rounded ${
+                          className={`px-2.5 sm:px-3 py-1 text-sm rounded whitespace-nowrap shrink-0 ${
                             currentPage === page
                               ? 'bg-blue-600 text-white'
                               : 'bg-white text-gray-700 hover:bg-gray-100'
@@ -590,6 +591,7 @@ export default function ProductionRequestListPage() {
                     <Button
                       variant="outline"
                       size="sm"
+                      className="whitespace-nowrap shrink-0 min-w-[3.75rem] px-2 sm:px-3"
                       onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                       disabled={currentPage === totalPages}
                     >

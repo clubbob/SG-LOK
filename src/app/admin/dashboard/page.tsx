@@ -240,16 +240,16 @@ export default function AdminPage() {
         {/* 회원관리 섹션 */}
         <div className="mb-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <h2 className="text-base font-semibold text-gray-900 mb-3">회원관리</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <Link href="/admin/users" className="block h-full">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
+              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-2 sm:p-3 border border-blue-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-gray-600 mb-0.5">전체 회원</p>
-                    <p className="text-2xl font-bold text-gray-900">{userStats.total}</p>
+                    <p className="text-[11px] sm:text-xs font-medium text-gray-600 mb-0.5 whitespace-nowrap">전체 회원</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{userStats.total}</p>
                   </div>
-                  <div className="bg-blue-500 rounded-lg p-2">
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="bg-blue-500 rounded-lg p-1.5 sm:p-2 shrink-0">
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
                   </div>
@@ -258,14 +258,14 @@ export default function AdminPage() {
             </Link>
 
             <Link href="/admin/users" className="block h-full">
-              <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-3 border border-yellow-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
+              <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-2 sm:p-3 border border-yellow-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-gray-600 mb-0.5">승인 대기</p>
-                    <p className="text-2xl font-bold text-gray-900">{userStats.pending}</p>
+                    <p className="text-[11px] sm:text-xs font-medium text-gray-600 mb-0.5 whitespace-nowrap">승인 대기</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{userStats.pending}</p>
                   </div>
-                  <div className="bg-yellow-500 rounded-lg p-2">
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="bg-yellow-500 rounded-lg p-1.5 sm:p-2 shrink-0">
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
@@ -274,14 +274,14 @@ export default function AdminPage() {
             </Link>
 
             <Link href="/admin/users" className="block h-full">
-              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border border-green-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
+              <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-2 sm:p-3 border border-green-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-gray-600 mb-0.5">승인 완료</p>
-                    <p className="text-2xl font-bold text-gray-900">{userStats.approved}</p>
+                    <p className="text-[11px] sm:text-xs font-medium text-gray-600 mb-0.5 whitespace-nowrap">승인 완료</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">{userStats.approved}</p>
                   </div>
-                  <div className="bg-green-500 rounded-lg p-2">
-                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <div className="bg-green-500 rounded-lg p-1.5 sm:p-2 shrink-0">
+                    <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>

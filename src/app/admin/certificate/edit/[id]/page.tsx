@@ -189,8 +189,15 @@ const generatePDFBlobWithProducts = async (
   }));
   // 동적 import로 jsPDF 로드
   // ESM 번들(jsPDF.es.min.js)에서 chunk 로딩 실패가 날 수 있어 UMD로 로드
-  const jspdfModule: any = await import('jspdf/dist/jspdf.umd.min.js');
-  const jsPDF = jspdfModule?.jsPDF ?? jspdfModule?.default ?? jspdfModule;
+  type JsPDFClass = (typeof import('jspdf'))['jsPDF'];
+  const jspdfModule = (await import('jspdf/dist/jspdf.umd.min.js')) as unknown as Partial<{
+    jsPDF: JsPDFClass;
+    default: JsPDFClass;
+  }>;
+  const jsPDF = jspdfModule.jsPDF ?? jspdfModule.default;
+  if (!jsPDF) {
+    throw new Error('jsPDF 로드 실패');
+  }
   // A4 가로 방향으로 설정
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
@@ -1456,8 +1463,14 @@ const generatePDFBlobWithProducts = async (
   } catch (error) {
     console.error('PDF 생성 오류:', error);
     // PDF 생성 실패 시 빈 PDF 반환 (에러 방지)
-    const jspdfFallbackModule: any = await import('jspdf/dist/jspdf.umd.min.js');
-    const jsPDFFallback = jspdfFallbackModule?.jsPDF ?? jspdfFallbackModule?.default ?? jspdfFallbackModule;
+    const jspdfFallbackModule = (await import('jspdf/dist/jspdf.umd.min.js')) as unknown as Partial<{
+      jsPDF: (typeof import('jspdf'))['jsPDF'];
+      default: (typeof import('jspdf'))['jsPDF'];
+    }>;
+    const jsPDFFallback = jspdfFallbackModule.jsPDF ?? jspdfFallbackModule.default;
+    if (!jsPDFFallback) {
+      throw new Error('jsPDF fallback 로드 실패');
+    }
     const fallbackDoc = new jsPDFFallback({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     fallbackDoc.text('PDF 생성 중 오류가 발생했습니다.', 20, 20);
     return { 

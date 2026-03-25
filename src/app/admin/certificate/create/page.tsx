@@ -6,7 +6,7 @@ import { Button, Input } from '@/components/ui';
 import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs, query, where, QuerySnapshot, DocumentData } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, getBytes } from 'firebase/storage';
 import { db, storage, auth } from '@/lib/firebase';
-import { getProductMappingByCode, getAllProductMappings, addProductMapping, updateProductMapping, deleteProductMapping } from '@/lib/productMappings';
+import { getProductMappingByCode, getAllProductMappings, addProductMapping, updateProductMapping, deleteProductMapping, DuplicateProductMappingError } from '@/lib/productMappings';
 import { CertificateAttachment, MaterialTestCertificate, CertificateProduct, ProductMapping } from '@/types';
 import { signInAnonymously } from 'firebase/auth';
 
@@ -153,8 +153,9 @@ const generatePDFBlobWithProducts = async (
     }>;
   }>;
 }> => {
-  // 동적 import로 jsPDF 로드
-  const { jsPDF } = await import('jspdf');
+  // ESM 번들(jsPDF.es.min.js)에서 chunk 로딩 실패가 날 수 있어 UMD로 로드
+  const jspdfModule: any = await import('jspdf/dist/jspdf.umd.min.js');
+  const jsPDF = jspdfModule?.jsPDF ?? jspdfModule?.default ?? jspdfModule;
   // A4 가로 방향으로 설정
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
@@ -660,19 +661,27 @@ const generatePDFBlobWithProducts = async (
   // INSPECTION POINT 제목
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
-  doc.text('INSPECTION POINT', margin, yPosition);
+  doc.text('INSPECTION POINTS', margin, yPosition);
   yPosition += 8;
       
   // INSPECTION POINT 항목들 (2열로 배치)
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
-  const inspectionPoints = [
+  // INSPECTION POINT 출력 포맷
+  // - 왼쪽 열: 5개 항목을 bullet로 순서대로 출력
+  // - 오른쪽 열: Valve Leak Test (헤더) 아래에 3개 상세 항목을 하위 bullet로 출력
+  const leftInspectionPoints = [
     'Raw Material : Dimension, Chemical Composition',
     'Manufactured Products : Dimension, Go/No Gauge',
     'Cleaning : Cleaning Condition',
     'Marking : Code, Others',
-    'Leak Test (Valves) : Air Test (10kg/cm²)',
-    'Packaging : Labeling, Q\'ty'
+    'Packaging : Labeling, Q\'ty',
+  ];
+  const rightInspectionHeader = 'Valve Leak Test';
+  const rightInspectionSubPoints = [
+    'Air Test (10kg/cm²) : 100% full test',
+    'Hydraulic Test  (320Kg/cm²) : Upon request',
+    'N2 Test (70Kg/cm²) : Upon request',
   ];
   
   // 2열로 배치하기 위한 설정
@@ -681,20 +690,40 @@ const generatePDFBlobWithProducts = async (
   const rightColumnX = leftColumnX + columnWidth + (8 * 0.7); // 열 사이 간격 30% 줄임 (8mm -> 5.6mm)
   const inspectionLineHeight = 6; // 각 항목 간격
   const startY = yPosition; // 시작 Y 위치 저장
+
+  // INSPECTION POINT는 폰트 글리프 지원을 위해(특히 아래첨자) NotoSansKR을 우선 사용
+  doc.setFont(koreanFontLoaded ? 'NotoSansKR' : 'helvetica', 'normal');
   
   // 사인 컨텐츠를 우측 끝에 배치하기 위한 설정
   const approvalSectionX = pageWidth - margin; // 우측 끝 (margin만큼 여백)
   const signatureHeight = 12; // 사인 이미지 높이 공간
   const approvalStartY = startY; // INSPECTION POINT 시작 Y와 동일
   
-  // 왼쪽 열 (0, 1, 2)
-  inspectionPoints.slice(0, 3).forEach((point, index) => {
-    doc.text(`- ${point}`, leftColumnX, startY + (index * inspectionLineHeight));
+  // bullet text를 wrap해서 그리기 + 다음 라인의 시작 y를 계산
+  const renderWrappedText = (text: string, x: number, y: number, width: number): number => {
+    const wrappedLines = doc.splitTextToSize(text, width);
+    wrappedLines.forEach((line: string, i: number) => {
+      doc.text(line, x, y + (i * inspectionLineHeight));
+    });
+    return wrappedLines.length;
+  };
+
+  let inspectionLeftY = startY;
+  let inspectionRightY = startY;
+
+  // 왼쪽 열: 5개 bullet
+  leftInspectionPoints.forEach((point) => {
+    const usedLines = renderWrappedText(`- ${point}`, leftColumnX, inspectionLeftY, columnWidth);
+    inspectionLeftY += usedLines * inspectionLineHeight;
   });
-  
-  // 오른쪽 열 (3, 4, 5)
-  inspectionPoints.slice(3, 6).forEach((point, index) => {
-    doc.text(`- ${point}`, rightColumnX, startY + (index * inspectionLineHeight));
+
+  // 오른쪽 열: 헤더 + 하위 3개
+  const headerUsedLines = renderWrappedText(`- ${rightInspectionHeader}`, rightColumnX, inspectionRightY, columnWidth);
+  inspectionRightY += headerUsedLines * inspectionLineHeight;
+  rightInspectionSubPoints.forEach((point) => {
+    // 원래처럼 모든 항목을 동일한 방식으로 렌더링
+    const usedLines = renderWrappedText(`  . ${point}`, rightColumnX, inspectionRightY, columnWidth);
+    inspectionRightY += usedLines * inspectionLineHeight;
   });
   
   // 사인 컨텐츠를 INSPECTION POINT 2열 우측 끝에 배치
@@ -771,7 +800,8 @@ const generatePDFBlobWithProducts = async (
   doc.text(`Date: ${formatDateLong(formData.dateOfIssue)}`, approvalSectionX, dateY, { align: 'right' });
   
   // yPosition을 두 열 중 더 아래쪽으로 설정 (3개 항목이므로)
-  yPosition = Math.max(startY + (3 * inspectionLineHeight), dateY + 8);
+  const inspectionBottomY = Math.max(inspectionLeftY, inspectionRightY);
+  yPosition = Math.max(inspectionBottomY + 3, dateY + 8);
 
   // 표지 다음 페이지부터 각 제품의 INSPECTION CERTIFICATE 이미지를 순서대로 삽입
   console.log('[PDF 생성] Inspection Certificate 이미지 추가 시작, 제품 개수:', products.length);
@@ -1331,7 +1361,8 @@ const generatePDFBlobWithProducts = async (
   } catch (error) {
     console.error('PDF 생성 오류:', error);
     // PDF 생성 실패 시 빈 PDF 반환 (에러 방지)
-    const { jsPDF: jsPDFFallback } = await import('jspdf');
+    const jspdfFallbackModule: any = await import('jspdf/dist/jspdf.umd.min.js');
+    const jsPDFFallback = jspdfFallbackModule?.jsPDF ?? jspdfFallbackModule?.default ?? jspdfFallbackModule;
     const fallbackDoc = new jsPDFFallback({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     fallbackDoc.text('PDF 생성 중 오류가 발생했습니다.', 20, 20);
     return { 
@@ -1399,8 +1430,12 @@ const extractMaterialAndHeatNo = (fileName: string): { material: string; heatNo:
     material = materialCode; // 다른 소재 코드도 그대로 사용
   }
   
-  // S로 시작하는 부분 찾기 (Heat No.)
-  const heatNoPart = parts.find(part => part.trim().toUpperCase().startsWith('S'));
+  // Heat No. 파트 찾기
+  // 예: S58897, N27612 처럼 앞이 S 또는 N인 케이스를 모두 지원
+  const heatNoPart = parts.find((part) => {
+    const p = part.trim().toUpperCase();
+    return /^[SN]\d+/.test(p);
+  });
   
   // 마지막 부분에서 6자리 숫자 추출 (YYMMDD 형식)
   // 예: "250922[GME04]" -> "250922" 추출
@@ -2821,6 +2856,11 @@ function MaterialTestCertificateContent() {
       setCurrentProductIndex(null);
       setCurrentProductCode('');
     } catch (error: unknown) {
+      if (error instanceof DuplicateProductMappingError) {
+        // 사용자 입력 중복은 "에러"로 찍지 않고 경고/알림만 처리
+        alert(error.message);
+        return;
+      }
       console.error('매핑 추가 오류:', error);
       const message = error instanceof Error ? error.message : '매핑 추가에 실패했습니다.';
       alert(message);

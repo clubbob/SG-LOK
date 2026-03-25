@@ -16,6 +16,17 @@ import { ProductMapping } from '@/types';
 
 const COLLECTION_NAME = 'productMappings';
 
+export class DuplicateProductMappingError extends Error {
+  public code = 'DUPLICATE_PRODUCT_CODE' as const;
+  public productCode: string;
+
+  constructor(productCode: string) {
+    const normalized = productCode?.toUpperCase?.() ?? productCode;
+    super(`제품명코드 "${normalized}"는 이미 등록되어 있습니다.`);
+    this.productCode = normalized;
+  }
+}
+
 /**
  * 제품명코드로 매핑 조회
  */
@@ -89,7 +100,7 @@ export const addProductMapping = async (
     // 중복 확인
     const existing = await getProductMappingByCode(productCode);
     if (existing) {
-      throw new Error(`제품명코드 "${productCode}"는 이미 등록되어 있습니다.`);
+      throw new DuplicateProductMappingError(productCode);
     }
     
     const newMapping = {
@@ -104,6 +115,11 @@ export const addProductMapping = async (
     const docRef = await addDoc(collection(db, COLLECTION_NAME), newMapping);
     return docRef.id;
   } catch (error) {
+    // 중복 입력은 사용자 검증 케이스라서 에러로 찍지 않도록 분리
+    if (error instanceof DuplicateProductMappingError) {
+      console.warn(error.message);
+      throw error;
+    }
     console.error('제품명코드 매핑 추가 오류:', error);
     throw error;
   }

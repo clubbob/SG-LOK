@@ -316,7 +316,8 @@ export default function AdminLayout({
                   : false;
 
               return (
-                <div key={item.id} className="mb-1">
+                <React.Fragment key={item.id}>
+                  <div className={`mb-1 ${item.id === 'production' ? 'border-t border-gray-200 pt-3 mt-3' : ''}`}>
                   {hasSubItems ? (
                     <>
                       {item.path ? (
@@ -462,7 +463,8 @@ export default function AdminLayout({
                       <span className="text-sm">{item.label}</span>
                     </Link>
                   )}
-                </div>
+                  </div>
+                </React.Fragment>
               );
             })}
           </nav>

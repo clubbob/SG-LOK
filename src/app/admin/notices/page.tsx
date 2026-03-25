@@ -465,8 +465,8 @@ export default function AdminNoticesPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">번호</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록자</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제목</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">첨부</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">관리</th>
                 </tr>
               </thead>
@@ -506,8 +506,8 @@ export default function AdminNoticesPage() {
                           </Link>
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{toDate(n.createdAt).toISOString().slice(0, 10)}</td>
                       <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{attachmentCountText(n.attachments)}</td>
+                      <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{toDate(n.createdAt).toISOString().slice(0, 10)}</td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <Button variant="outline" size="sm" onClick={() => openEditModal(n)}>

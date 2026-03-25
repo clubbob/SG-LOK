@@ -149,7 +149,7 @@ export default function NoticeDetailPage() {
                       고정
                     </span>
                   )}
-                  <h1 className="text-3xl font-bold text-gray-900 truncate">{notice.title}</h1>
+                  <h1 className="text-2xl font-bold text-gray-900 truncate">{notice.title}</h1>
                 </div>
 
                 <div className="mt-3 flex items-center gap-3 text-sm text-gray-600 flex-wrap">

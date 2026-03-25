@@ -15,7 +15,27 @@
 
 **중요**: 관리자 페이지는 localStorage 기반 인증을 사용합니다. 관리자 계정을 따로 설정할 필요 없이, 아이디와 비밀번호만으로 로그인할 수 있습니다. 
 
-다음 보안 규칙을 복사하여 붙여넣고 **"게시"** 버튼을 클릭하세요:
+공지사항/관리자 페이지에서 `Missing or insufficient permissions` 또는 Firestore 권한 오류가 계속 발생하면,
+먼저 개발 기본(전체 허용) 규칙으로 동작을 확인하세요.
+
+아래 코드를 그대로 복사해서 붙여넣고 **"게시"** 버튼을 클릭합니다.
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+## (참고) 기존(컬렉션별) 권장 규칙
+
+동작이 확인되면 보안을 위해 아래처럼 컬렉션별 규칙으로 좁히는 게 좋습니다.
+
+다음 보안 규칙은 기존에 사용하던 예시입니다:
 
 ```javascript
 rules_version = '2';

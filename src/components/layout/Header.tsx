@@ -77,6 +77,16 @@ export default function Header() {
               >
                 대시보드
               </Link>
+              <Link
+                href="/notices"
+                className={`px-4 py-2.5 rounded-md text-base font-semibold transition-colors shadow-sm ${
+                  isActivePath('/notices')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white hover:bg-blue-600 hover:text-white'
+                }`}
+              >
+                공지사항
+              </Link>
               <div className="relative">
                 <button
                   type="button"
@@ -354,6 +364,17 @@ export default function Header() {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 대시보드
+              </Link>
+              <Link
+                href="/notices"
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-semibold transition-colors ${
+                  isActivePath('/notices')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white/95 hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                공지사항
               </Link>
 
               <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-blue-100/90">생산관리</p>

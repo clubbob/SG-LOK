@@ -229,3 +229,27 @@ export interface MaterialTestCertificate {
   updatedAt: Date;
   createdBy: string; // 생성자 ID (관리자)
 }
+
+// 공지사항 관련 타입
+export interface NoticeAttachment {
+  name: string; // 파일명
+  url: string; // 다운로드 URL
+  storagePath?: string | null; // Firebase Storage 경로 (삭제 시 필요)
+  size: number; // 파일 크기 (bytes)
+  type: string; // MIME 타입
+  uploadedAt: Date; // 업로드 일시
+  uploadedBy: string; // 업로드자 ID
+}
+
+export interface Notice {
+  id: string;
+  title: string;
+  content: string;
+  attachments: NoticeAttachment[];
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string;
+  updatedBy?: string;
+  pinned?: boolean; // 공지 고정 여부
+  published?: boolean; // 게시/미게시 여부
+}

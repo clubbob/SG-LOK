@@ -5,7 +5,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { signInAnonymously } from 'firebase/auth';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -67,6 +68,16 @@ const adminMenuItems: MenuItem[] = [
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'notices',
+    label: '공지사항',
+    path: '/admin/notices',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118.5 14.158V11a6.002 6.002 0 00-4-5.659V4a1 1 0 10-2 0v1.341C9.67 5.165 8 7.388 8 10v4.159c0 .538-.214 1.055-.595 1.436L6 17h5m4 0v1a2 2 0 11-4 0v-1m4 0H6" />
       </svg>
     ),
   },
@@ -145,6 +156,20 @@ export default function AdminLayout({
       setExpandedMenus(prev => new Set(prev).add('certificate'));
     }
   }, [router, pathname]);
+
+  // admin_session은 localStorage 기반이므로, Firebase 인증이 만료/실패된 경우
+  // request.auth가 null이 되어 보안 규칙에서 권한이 막힐 수 있습니다.
+  // 따라서 admin 세션이 유효한 동안에는 익명 인증을 한 번 더 보장합니다.
+  useEffect(() => {
+    if (!isAdminAuthenticated) return;
+
+    // 이미 인증된 경우 중복 로그인 방지
+    if (auth.currentUser) return;
+
+    signInAnonymously(auth).catch((e) => {
+      console.warn('Firebase 익명 인증(관리자) 실패:', e);
+    });
+  }, [isAdminAuthenticated]);
 
   // 승인 대기 회원 수 실시간 구독
   useEffect(() => {

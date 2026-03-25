@@ -490,8 +490,8 @@ export default function AdminLayout({
           </div>
         </aside>
 
-        {/* 우측 콘텐츠 영역 */}
-        <main className="flex-1 min-h-0 min-w-0 overflow-x-hidden">
+        {/* 우측 콘텐츠 영역 (모바일 스크롤 컨테이너로 높이 고정) */}
+        <main className="flex-1 min-h-0 min-w-0 h-full overflow-x-hidden overflow-y-auto overscroll-contain">
           {children}
         </main>
       </div>

@@ -109,6 +109,16 @@ export default function NoticesPage() {
       });
   }, [notices, searchQuery]);
 
+  // 최근 등록일일수록 번호가 커야 하므로 createdAt 오름차순 기준으로 번호를 매깁니다.
+  const noticeNumberMap = useMemo(() => {
+    const asc = [...filteredNotices].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    const map: Record<string, number> = {};
+    asc.forEach((n, i) => {
+      map[n.id] = i + 1;
+    });
+    return map;
+  }, [filteredNotices]);
+
   if (loadingNotices) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -156,9 +166,9 @@ export default function NoticesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {filteredNotices.map((n, idx) => (
+                    {filteredNotices.map((n) => (
                       <tr key={n.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{idx + 1}</td>
+                        <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{noticeNumberMap[n.id] ?? '-'}</td>
                         <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{n.createdBy}</td>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-2 flex-wrap">

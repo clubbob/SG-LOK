@@ -9,6 +9,8 @@ import { db } from '@/lib/firebase';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { Notice, NoticeAttachment } from '@/types';
 
+const MAX_ATTACHMENTS = 3;
+
 const toDate = (value: unknown): Date => {
   if (value instanceof Date) return value;
   if (value && typeof value === 'object' && 'toDate' in value && typeof (value as { toDate: () => Date }).toDate === 'function') {
@@ -142,35 +144,43 @@ export default function NoticesPage() {
             </div>
           ) : (
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <div className="divide-y divide-gray-200">
-                {filteredNotices.map((n) => (
-                  <Link key={n.id} href={`/notices/${n.id}`} className="block px-5 py-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {n.pinned && (
-                            <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-xs font-semibold">
-                              고정
-                            </span>
-                          )}
-                          <h2 className="text-base sm:text-lg font-semibold text-gray-900 truncate">{n.title}</h2>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' as const }}>
-                          {n.content}
-                        </p>
-                        {n.attachments.length > 0 && (
-                          <p className="text-xs text-gray-500 mt-2">{n.attachments.length}개 첨부</p>
-                        )}
-                      </div>
-                      <div className="flex-shrink-0 text-right">
-                        <p className="text-xs text-gray-500">{n.createdAt.toISOString().slice(0, 10)}</p>
-                        {n.updatedAt && n.updatedAt.getTime() !== n.createdAt.getTime() && (
-                          <p className="text-[11px] text-gray-400 mt-1">수정 {n.updatedAt.toISOString().slice(0, 10)}</p>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">번호</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록자</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제목</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">첨부</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {filteredNotices.map((n, idx) => (
+                      <tr key={n.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{idx + 1}</td>
+                        <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{n.createdBy}</td>
+                        <td className="px-4 py-4">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {n.pinned && (
+                              <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[11px] font-semibold">
+                                고정
+                              </span>
+                            )}
+                            <Link
+                              href={`/notices/${n.id}`}
+                              className="font-medium text-blue-700 hover:text-blue-800 truncate max-w-[260px] inline-block"
+                            >
+                              {n.title}
+                            </Link>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{n.createdAt.toISOString().slice(0, 10)}</td>
+                        <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{n.attachments.length}/{MAX_ATTACHMENTS}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

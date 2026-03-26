@@ -139,69 +139,87 @@ export default function NoticeDetailPage() {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 bg-gray-50">
-        <div className="w-full max-w-4xl mx-auto px-3 sm:px-6 lg:px-8 py-10 sm:py-14">
-          <div className="mb-6">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {notice.pinned && (
-                    <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-xs font-semibold">
-                      고정
-                    </span>
-                  )}
-                  <h1 className="text-2xl font-bold text-gray-900 truncate">{notice.title}</h1>
-                </div>
-
-                <div className="mt-3 flex items-center gap-3 text-sm text-gray-600 flex-wrap">
-                  <span className="whitespace-nowrap">{dateText}</span>
-                  {updatedText && (
-                    <>
-                      <span className="text-gray-300">|</span>
-                      <span className="whitespace-nowrap">수정 {updatedText}</span>
-                    </>
-                  )}
-                  <span className="text-gray-300">|</span>
-                  <span className="whitespace-nowrap">등록자: {notice.createdBy}</span>
-                </div>
+        <div className="w-full max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-10 sm:py-14">
+          <div className="flex gap-6">
+            <aside className="hidden md:block w-52 shrink-0">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sticky top-4">
+                <p className="text-sm font-semibold text-gray-900 px-2 py-1">메뉴</p>
+                <nav className="mt-2 space-y-1">
+                  <Link href="/dashboard" className="block rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    대시보드
+                  </Link>
+                  <Link href="/notices" className="block rounded-lg px-3 py-2 text-sm font-semibold bg-blue-50 text-blue-700">
+                    공지사항
+                  </Link>
+                </nav>
               </div>
+            </aside>
 
-              <Link
-                href="/notices"
-                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                목록으로
-              </Link>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8">
-            <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">
-              {notice.content}
-            </div>
-
-            {notice.attachments.length > 0 && (
-              <div className="mt-8">
-                <h2 className="text-sm font-semibold text-gray-900 mb-3">첨부파일</h2>
-                <div className="space-y-2">
-                  {notice.attachments.map((att, idx) => (
-                    <a
-                      key={`${att.url}-${idx}`}
-                      href={att.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-blue-700 hover:bg-blue-50 hover:border-blue-200 transition-colors"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="min-w-0 truncate">{att.name}</span>
-                        <span className="flex-shrink-0 text-xs text-gray-500 whitespace-nowrap">
-                          {(att.size / 1024 / 1024).toFixed(2)} MB
+            <div className="flex-1 min-w-0">
+              <div className="mb-6">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {notice.pinned && (
+                        <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-xs font-semibold">
+                          고정
                         </span>
-                      </div>
-                    </a>
-                  ))}
+                      )}
+                      <h1 className="text-2xl font-bold text-gray-900 truncate">{notice.title}</h1>
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-3 text-sm text-gray-600 flex-wrap">
+                      <span className="whitespace-nowrap">{dateText}</span>
+                      {updatedText && (
+                        <>
+                          <span className="text-gray-300">|</span>
+                          <span className="whitespace-nowrap">수정 {updatedText}</span>
+                        </>
+                      )}
+                      <span className="text-gray-300">|</span>
+                      <span className="whitespace-nowrap">등록자: {notice.createdBy}</span>
+                    </div>
+                  </div>
+
+                  <Link
+                    href="/notices"
+                    className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    목록으로
+                  </Link>
                 </div>
               </div>
-            )}
+
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sm:p-8">
+                <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">
+                  {notice.content}
+                </div>
+
+                {notice.attachments.length > 0 && (
+                  <div className="mt-8">
+                    <h2 className="text-sm font-semibold text-gray-900 mb-3">첨부파일</h2>
+                    <div className="space-y-2">
+                      {notice.attachments.map((att, idx) => (
+                        <a
+                          key={`${att.url}-${idx}`}
+                          href={att.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-blue-700 hover:bg-blue-50 hover:border-blue-200 transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="min-w-0 truncate">{att.name}</span>
+                            <span className="flex-shrink-0 text-xs text-gray-500 whitespace-nowrap">
+                              {(att.size / 1024 / 1024).toFixed(2)} MB
+                            </span>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </main>

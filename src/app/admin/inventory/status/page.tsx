@@ -28,6 +28,16 @@ type AdjustmentHistory = {
   reason: string;
 };
 
+type ProductionPlanHistory = {
+  id: string;
+  createdAt: string;
+  updatedAt?: string;
+  variantCode?: string;
+  plannedQuantity: number;
+  dueDate: string;
+  note?: string;
+};
+
 type InventoryVariant = {
   code: string;
   currentStock: number;
@@ -43,6 +53,7 @@ type InventoryItem = {
   inboundHistory: InboundHistory[];
   outboundHistory: OutboundHistory[];
   adjustmentHistory: AdjustmentHistory[];
+  productionPlanHistory: ProductionPlanHistory[];
 };
 
 type InventoryProduct = {
@@ -87,6 +98,18 @@ type AdjustmentModalState = {
   reasonInput: string;
 };
 
+type ProductionPlanModalState = {
+  isOpen: boolean;
+  productName: string;
+  itemCode: string;
+  variantCode: string;
+  mode: 'create' | 'edit';
+  historyId: string | null;
+  plannedQuantityInput: string;
+  dueDateInput: string;
+  noteInput: string;
+};
+
 const INITIAL_MICRO_WELD_PRODUCTS: InventoryProduct[] = [
   {
     name: 'Micro Elbow (HME)',
@@ -108,6 +131,7 @@ const INITIAL_MICRO_WELD_PRODUCTS: InventoryProduct[] = [
         inboundHistory: [],
         outboundHistory: [],
         adjustmentHistory: [],
+        productionPlanHistory: [],
       },
       {
         code: 'HME-04',
@@ -125,6 +149,7 @@ const INITIAL_MICRO_WELD_PRODUCTS: InventoryProduct[] = [
         inboundHistory: [],
         outboundHistory: [],
         adjustmentHistory: [],
+        productionPlanHistory: [],
       },
       {
         code: 'HME-06',
@@ -142,6 +167,7 @@ const INITIAL_MICRO_WELD_PRODUCTS: InventoryProduct[] = [
         inboundHistory: [],
         outboundHistory: [],
         adjustmentHistory: [],
+        productionPlanHistory: [],
       },
       {
         code: 'HME-08',
@@ -159,6 +185,7 @@ const INITIAL_MICRO_WELD_PRODUCTS: InventoryProduct[] = [
         inboundHistory: [],
         outboundHistory: [],
         adjustmentHistory: [],
+        productionPlanHistory: [],
       },
       {
         code: 'HME-12',
@@ -176,6 +203,7 @@ const INITIAL_MICRO_WELD_PRODUCTS: InventoryProduct[] = [
         inboundHistory: [],
         outboundHistory: [],
         adjustmentHistory: [],
+        productionPlanHistory: [],
       },
     ],
   },
@@ -227,6 +255,18 @@ export default function AdminInventoryStatusPage() {
     reasonInput: '',
   });
   const [adjustmentFormError, setAdjustmentFormError] = useState('');
+  const [productionPlanModal, setProductionPlanModal] = useState<ProductionPlanModalState>({
+    isOpen: false,
+    productName: '',
+    itemCode: '',
+    variantCode: '',
+    mode: 'create',
+    historyId: null,
+    plannedQuantityInput: '',
+    dueDateInput: '',
+    noteInput: '',
+  });
+  const [productionPlanFormError, setProductionPlanFormError] = useState('');
   const [syncError, setSyncError] = useState('');
 
   useEffect(() => {
@@ -262,11 +302,25 @@ export default function AdminInventoryStatusPage() {
   }, []);
 
   const persistInventoryProducts = async (nextProducts: InventoryProduct[]) => {
+    const sanitizeForFirestore = <T,>(value: T): T => {
+      if (Array.isArray(value)) {
+        return value.map((item) => sanitizeForFirestore(item)) as T;
+      }
+      if (value && typeof value === 'object') {
+        const entries = Object.entries(value as Record<string, unknown>)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => [k, sanitizeForFirestore(v)]);
+        return Object.fromEntries(entries) as T;
+      }
+      return value;
+    };
+
     try {
+      const cleanedProducts = sanitizeForFirestore(nextProducts);
       await setDoc(
         doc(db, 'inventory', 'microWeldProducts'),
         {
-          products: nextProducts,
+          products: cleanedProducts,
           updatedAt: Timestamp.now(),
         },
         { merge: true }
@@ -349,6 +403,68 @@ export default function AdminInventoryStatusPage() {
       reasonInput: '',
     });
     setAdjustmentFormError('');
+  };
+
+  const openProductionPlanCreateModal = (productName: string, itemCode: string) => {
+    const targetItem = microWeldProducts
+      .find((product) => product.name === productName)
+      ?.items.find((item) => item.code === itemCode);
+    const defaultVariant = targetItem?.variants?.[0];
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+
+    setProductionPlanModal({
+      isOpen: true,
+      productName,
+      itemCode,
+      variantCode: defaultVariant?.code ?? '',
+      mode: 'create',
+      historyId: null,
+      plannedQuantityInput: '',
+      dueDateInput: `${yyyy}-${mm}-${dd}`,
+      noteInput: '',
+    });
+    setProductionPlanFormError('');
+  };
+
+  const openProductionPlanEditModal = (
+    productName: string,
+    itemCode: string,
+    history: ProductionPlanHistory
+  ) => {
+    const targetItem = microWeldProducts
+      .find((product) => product.name === productName)
+      ?.items.find((item) => item.code === itemCode);
+
+    setProductionPlanModal({
+      isOpen: true,
+      productName,
+      itemCode,
+      variantCode: history.variantCode ?? targetItem?.variants?.[0]?.code ?? '',
+      mode: 'edit',
+      historyId: history.id,
+      plannedQuantityInput: String(history.plannedQuantity),
+      dueDateInput: history.dueDate,
+      noteInput: history.note ?? '',
+    });
+    setProductionPlanFormError('');
+  };
+
+  const closeProductionPlanModal = () => {
+    setProductionPlanModal({
+      isOpen: false,
+      productName: '',
+      itemCode: '',
+      variantCode: '',
+      mode: 'create',
+      historyId: null,
+      plannedQuantityInput: '',
+      dueDateInput: '',
+      noteInput: '',
+    });
+    setProductionPlanFormError('');
   };
 
   const openInboundCreateModal = (productName: string, itemCode: string) => {
@@ -728,6 +844,81 @@ export default function AdminInventoryStatusPage() {
     closeAdjustmentModal();
   };
 
+  const handleSaveProductionPlan = () => {
+    const parsedPlannedQuantity = Number(productionPlanModal.plannedQuantityInput);
+    const minPlannedQuantity = productionPlanModal.mode === 'edit' ? 0 : 1;
+    if (!Number.isInteger(parsedPlannedQuantity) || parsedPlannedQuantity < minPlannedQuantity) {
+      setProductionPlanFormError(
+        productionPlanModal.mode === 'edit'
+          ? '생산계획 수량은 0 이상의 정수로 입력해 주세요.'
+          : '생산계획 수량은 1 이상의 정수로 입력해 주세요.'
+      );
+      return;
+    }
+    if (!productionPlanModal.dueDateInput) {
+      setProductionPlanFormError('납기일을 입력해 주세요.');
+      return;
+    }
+
+    const nextProducts = microWeldProducts.map((product) => {
+      if (product.name !== productionPlanModal.productName) {
+        return product;
+      }
+
+      return {
+        ...product,
+        items: product.items.map((item) => {
+          if (item.code !== productionPlanModal.itemCode) {
+            return item;
+          }
+
+          if (productionPlanModal.mode === 'create') {
+            const nextHistory: ProductionPlanHistory = {
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              variantCode: productionPlanModal.variantCode || undefined,
+              plannedQuantity: parsedPlannedQuantity,
+              dueDate: productionPlanModal.dueDateInput,
+              note: productionPlanModal.noteInput.trim() || undefined,
+            };
+            return {
+              ...item,
+              productionPlanHistory: [
+                nextHistory,
+                ...(item.productionPlanHistory ?? []),
+              ].slice(0, HISTORY_KEEP_LIMIT),
+            };
+          }
+
+          if (!productionPlanModal.historyId) {
+            return item;
+          }
+
+          return {
+            ...item,
+            productionPlanHistory: (item.productionPlanHistory ?? []).map((history) =>
+              history.id === productionPlanModal.historyId
+                ? {
+                    ...history,
+                    variantCode: productionPlanModal.variantCode || undefined,
+                    plannedQuantity: parsedPlannedQuantity,
+                    dueDate: productionPlanModal.dueDateInput,
+                    note: productionPlanModal.noteInput.trim() || undefined,
+                    updatedAt: new Date().toISOString(),
+                  }
+                : history
+            ),
+          };
+        }),
+      };
+    });
+
+    setMicroWeldProducts(nextProducts);
+    void persistInventoryProducts(nextProducts);
+    closeProductionPlanModal();
+  };
+
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const modalTargetItem = microWeldProducts
     .find((product) => product.name === inboundModal.productName)
@@ -738,6 +929,9 @@ export default function AdminInventoryStatusPage() {
   const adjustmentModalTargetItem = microWeldProducts
     .find((product) => product.name === adjustmentModal.productName)
     ?.items.find((item) => item.code === adjustmentModal.itemCode);
+  const productionPlanModalTargetItem = microWeldProducts
+    .find((product) => product.name === productionPlanModal.productName)
+    ?.items.find((item) => item.code === productionPlanModal.itemCode);
   const historyTargetItem = microWeldProducts
     .find((product) => product.name === historyModal.productName)
     ?.items.find((item) => item.code === historyModal.itemCode);
@@ -765,6 +959,15 @@ export default function AdminInventoryStatusPage() {
           createdAt: history.createdAt,
           quantity: history.delta,
           variantCode: history.variantCode,
+          raw: history,
+        })),
+        ...(historyTargetItem.productionPlanHistory ?? []).map((history) => ({
+          kind: 'production' as const,
+          id: history.id,
+          createdAt: history.updatedAt ?? history.createdAt,
+          quantity: history.plannedQuantity,
+          variantCode: history.variantCode,
+          dueDate: history.dueDate,
           raw: history,
         })),
       ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -795,6 +998,28 @@ export default function AdminInventoryStatusPage() {
       };
     })
     .filter((product) => product.filteredItems.length > 0);
+
+  const getCurrentStock = (item: InventoryItem): number =>
+    item.variants && item.variants.length > 0
+      ? item.variants.reduce((sum, variant) => sum + variant.currentStock, 0)
+      : item.currentStock;
+
+  const getVariantProductionPlanInfo = (item: InventoryItem, variantCode: string) => {
+    const plans = (item.productionPlanHistory ?? []).filter(
+      (plan) => plan.variantCode === variantCode
+    );
+    if (plans.length === 0) return null;
+
+    const totalPlanned = plans.reduce((sum, plan) => sum + plan.plannedQuantity, 0);
+    const nearestDueDate = [...plans]
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
+      ?.dueDate;
+
+    return {
+      totalPlanned,
+      nearestDueDate,
+    };
+  };
 
   return (
     <div className="p-6 sm:p-8">
@@ -831,7 +1056,7 @@ export default function AdminInventoryStatusPage() {
               key={category}
               type="button"
               onClick={() => setActiveCategory(category)}
-              className={`rounded-md border px-4 py-2.5 text-base font-semibold transition-colors ${
+              className={`rounded-md border px-4 py-2.5 text-sm font-medium transition-colors ${
                 activeCategory === category
                   ? 'border-blue-600 bg-blue-600 text-white'
                   : 'border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100'
@@ -864,33 +1089,51 @@ export default function AdminInventoryStatusPage() {
                           key={item.code}
                           className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3"
                         >
+                          {(() => {
+                            const currentStock = getCurrentStock(item);
+                            return (
+                              <>
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm font-semibold text-gray-800">{item.code}</p>
                             <span
                               className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700"
                             >
-                              총 현재고{' '}
-                              {item.variants && item.variants.length > 0
-                                ? item.variants.reduce(
-                                    (sum, variant) => sum + variant.currentStock,
-                                    0
-                                  )
-                                : item.currentStock}{' '}
-                              {item.unit}
+                              총 현재고 {currentStock} {item.unit}
                             </span>
                           </div>
                           {item.variants && item.variants.length > 0 && (
                             <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                               {item.variants.map((variant) => (
-                                <div
-                                  key={variant.code}
-                                  className="flex items-center justify-between gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
-                                >
-                                  <span className="font-medium text-gray-700">{variant.code}</span>
-                                  <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
-                                    {variant.currentStock} {variant.unit}
-                                  </span>
-                                </div>
+                                (() => {
+                                  const variantPlanInfo = getVariantProductionPlanInfo(
+                                    item,
+                                    variant.code
+                                  );
+                                  const variantExpectedStock = variant.currentStock + (variantPlanInfo?.totalPlanned ?? 0);
+                                  return (
+                                    <div
+                                      key={variant.code}
+                                      className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
+                                    >
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="font-medium text-gray-700">{variant.code}</span>
+                                        <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
+                                          {variant.currentStock} {variant.unit}
+                                        </span>
+                                      </div>
+                                      {variantPlanInfo && (
+                                        <div className="mt-1 flex items-center justify-between gap-1">
+                                          <span className="text-[10px] text-gray-500">
+                                            {variantPlanInfo.nearestDueDate ?? '-'}
+                                          </span>
+                                          <span className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700">
+                                            예상 {variantExpectedStock} {variant.unit}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()
                               ))}
                             </div>
                           )}
@@ -911,6 +1154,7 @@ export default function AdminInventoryStatusPage() {
                             </button>
                             <button
                               type="button"
+                              onClick={() => openProductionPlanCreateModal(product.name, item.code)}
                               className="rounded border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100"
                             >
                               생산계획
@@ -930,6 +1174,9 @@ export default function AdminInventoryStatusPage() {
                               이력수정
                             </button>
                           </div>
+                              </>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>
@@ -1204,6 +1451,121 @@ export default function AdminInventoryStatusPage() {
         </div>
       )}
 
+      {productionPlanModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b border-gray-200 px-5 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {productionPlanModal.mode === 'create' ? '생산계획 등록' : '생산계획 수정'}
+              </h3>
+              <p className="mt-1 text-sm text-gray-600">
+                {productionPlanModal.productName} / {productionPlanModal.itemCode}
+              </p>
+            </div>
+            <div className="space-y-4 px-5 py-4">
+              {productionPlanModalTargetItem?.variants && productionPlanModalTargetItem.variants.length > 0 && (
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="productionVariantCode">
+                    세부 제품 코드
+                  </label>
+                  <select
+                    id="productionVariantCode"
+                    value={productionPlanModal.variantCode}
+                    onChange={(e) =>
+                      setProductionPlanModal((prev) => ({
+                        ...prev,
+                        variantCode: e.target.value,
+                      }))
+                    }
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                  >
+                    {productionPlanModalTargetItem.variants.map((variant) => (
+                      <option key={variant.code} value={variant.code}>
+                        {variant.code}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="productionPlannedQuantity">
+                  계획 수량
+                </label>
+                <input
+                  id="productionPlannedQuantity"
+                  type="number"
+                  min={productionPlanModal.mode === 'edit' ? 0 : 1}
+                  step={1}
+                  value={productionPlanModal.plannedQuantityInput}
+                  onChange={(e) =>
+                    setProductionPlanModal((prev) => ({
+                      ...prev,
+                      plannedQuantityInput: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                  placeholder="계획 수량을 입력하세요"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="productionDueDate">
+                  납기일
+                </label>
+                <input
+                  id="productionDueDate"
+                  type="date"
+                  value={productionPlanModal.dueDateInput}
+                  onChange={(e) =>
+                    setProductionPlanModal((prev) => ({
+                      ...prev,
+                      dueDateInput: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="productionNote">
+                  비고
+                </label>
+                <input
+                  id="productionNote"
+                  type="text"
+                  value={productionPlanModal.noteInput}
+                  onChange={(e) =>
+                    setProductionPlanModal((prev) => ({
+                      ...prev,
+                      noteInput: e.target.value,
+                    }))
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                  placeholder="필요 시 비고를 입력하세요"
+                />
+              </div>
+              {productionPlanFormError && (
+                <p className="text-sm text-red-600">{productionPlanFormError}</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={closeProductionPlanModal}
+                className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveProductionPlan}
+                className="rounded-md border border-purple-600 bg-purple-600 px-3 py-2 text-sm font-medium text-white hover:bg-purple-700"
+              >
+                저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {historyModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="w-full max-w-4xl rounded-lg bg-white shadow-xl">
@@ -1229,6 +1591,7 @@ export default function AdminInventoryStatusPage() {
                         <th className="px-3 py-2 text-left font-semibold">일시</th>
                         <th className="px-3 py-2 text-left font-semibold">구분</th>
                         <th className="px-3 py-2 text-left font-semibold">세부코드</th>
+                        <th className="px-3 py-2 text-left font-semibold">납기일</th>
                         <th className="px-3 py-2 text-right font-semibold">수량</th>
                         <th className="px-3 py-2 text-center font-semibold">관리</th>
                       </tr>
@@ -1246,13 +1609,24 @@ export default function AdminInventoryStatusPage() {
                                   ? 'border-blue-200 bg-blue-50 text-blue-700'
                                   : row.kind === 'outbound'
                                     ? 'border-red-200 bg-red-50 text-red-700'
-                                    : 'border-amber-200 bg-amber-50 text-amber-700'
+                                    : row.kind === 'adjustment'
+                                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                      : 'border-purple-200 bg-purple-50 text-purple-700'
                               }`}
                             >
-                              {row.kind === 'inbound' ? '입고' : row.kind === 'outbound' ? '출고' : '조정'}
+                              {row.kind === 'inbound'
+                                ? '입고'
+                                : row.kind === 'outbound'
+                                  ? '출고'
+                                  : row.kind === 'adjustment'
+                                    ? '조정'
+                                    : '생산계획'}
                             </span>
                           </td>
                           <td className="px-3 py-2 text-gray-700">{row.variantCode || '-'}</td>
+                          <td className="px-3 py-2 text-gray-700">
+                            {row.kind === 'production' ? row.dueDate : '-'}
+                          </td>
                           <td className="px-3 py-2 text-right font-medium text-gray-800">
                             {row.kind === 'adjustment' && row.quantity > 0 ? `+${row.quantity}` : row.quantity}
                           </td>
@@ -1269,8 +1643,14 @@ export default function AdminInventoryStatusPage() {
                                       historyModal.itemCode,
                                       row.raw
                                     );
-                                  } else {
+                                  } else if (row.kind === 'outbound') {
                                     openOutboundEditModal(
+                                      historyModal.productName,
+                                      historyModal.itemCode,
+                                      row.raw
+                                    );
+                                  } else {
+                                    openProductionPlanEditModal(
                                       historyModal.productName,
                                       historyModal.itemCode,
                                       row.raw

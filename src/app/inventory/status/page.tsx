@@ -17,6 +17,11 @@ type InventoryItem = {
   currentStock: number;
   safetyStock: number;
   unit: string;
+  productionPlanHistory?: {
+    variantCode?: string;
+    plannedQuantity: number;
+    dueDate: string;
+  }[];
 };
 
 type InventoryProduct = {
@@ -88,6 +93,23 @@ export default function InventoryStatusPage() {
     })
     .filter((product) => product.filteredItems.length > 0);
 
+  const getVariantProductionPlanInfo = (item: InventoryItem, variantCode: string) => {
+    const plans = (item.productionPlanHistory ?? []).filter(
+      (plan) => plan.variantCode === variantCode
+    );
+    if (plans.length === 0) return null;
+
+    const totalPlanned = plans.reduce((sum, plan) => sum + plan.plannedQuantity, 0);
+    const nearestDueDate = [...plans]
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
+      ?.dueDate;
+
+    return {
+      totalPlanned,
+      nearestDueDate,
+    };
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -123,7 +145,7 @@ export default function InventoryStatusPage() {
                   key={category}
                   type="button"
                   onClick={() => setActiveCategory(category)}
-                  className={`rounded-md border px-4 py-2.5 text-base font-semibold transition-colors ${
+                  className={`rounded-md border px-4 py-2.5 text-sm font-medium transition-colors ${
                     activeCategory === category
                       ? 'border-blue-600 bg-blue-600 text-white'
                       : 'border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100'
@@ -174,15 +196,37 @@ export default function InventoryStatusPage() {
                               {item.variants && item.variants.length > 0 && (
                                 <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                                   {item.variants.map((variant) => (
-                                    <div
-                                      key={variant.code}
-                                      className="flex items-center justify-between gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
-                                    >
-                                      <span className="font-medium text-gray-700">{variant.code}</span>
-                                      <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
-                                        {variant.currentStock} {variant.unit}
-                                      </span>
-                                    </div>
+                                    (() => {
+                                      const variantPlanInfo = getVariantProductionPlanInfo(
+                                        item,
+                                        variant.code
+                                      );
+                                      const variantExpectedStock =
+                                        variant.currentStock + (variantPlanInfo?.totalPlanned ?? 0);
+                                      return (
+                                        <div
+                                          key={variant.code}
+                                          className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
+                                        >
+                                          <div className="flex items-center justify-between gap-1">
+                                            <span className="font-medium text-gray-700">{variant.code}</span>
+                                            <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
+                                              {variant.currentStock} {variant.unit}
+                                            </span>
+                                          </div>
+                                          {variantPlanInfo && (
+                                            <div className="mt-1 flex items-center justify-between gap-1">
+                                              <span className="text-[10px] text-gray-500">
+                                                {variantPlanInfo.nearestDueDate ?? '-'}
+                                              </span>
+                                              <span className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700">
+                                                예상 {variantExpectedStock} {variant.unit}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()
                                   ))}
                                 </div>
                               )}

@@ -238,7 +238,7 @@ export default function AdminLayout({
         <span className="text-sm font-semibold text-gray-900 truncate">관리자</span>
       </div>
 
-      <div className="flex flex-1 min-h-0 relative">
+      <div className="flex flex-1 relative">
         {mobileNavOpen ? (
           <button
             type="button"
@@ -254,7 +254,7 @@ export default function AdminLayout({
             'flex flex-col border-r border-gray-200 bg-white shadow-sm pb-12',
             'w-48 shrink-0 overflow-y-auto overscroll-contain',
             'fixed left-0 top-0 z-50 h-dvh transition-transform duration-200 ease-out',
-            'md:static md:z-auto md:h-screen md:translate-x-0 md:shadow-sm',
+            'md:sticky md:top-0 md:z-auto md:h-screen md:translate-x-0 md:shadow-sm',
             mobileNavOpen
               ? 'translate-x-0 pointer-events-auto'
               : '-translate-x-full md:translate-x-0 pointer-events-none md:pointer-events-auto',
@@ -492,8 +492,8 @@ export default function AdminLayout({
           </div>
         </aside>
 
-        {/* 우측 콘텐츠 영역 (모바일 스크롤 컨테이너로 높이 고정) */}
-        <main className="flex-1 min-h-0 min-w-0 h-full overflow-x-hidden overflow-y-auto overscroll-contain">
+        {/* 우측 콘텐츠 영역: 문서(body) 스크롤 사용 */}
+        <main className="flex-1 min-w-0 overflow-x-hidden">
           {children}
         </main>
       </div>

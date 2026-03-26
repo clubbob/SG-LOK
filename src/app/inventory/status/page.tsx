@@ -1,7 +1,37 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Header, Footer } from '@/components/layout';
+import { db } from '@/lib/firebase';
+import { doc, onSnapshot } from 'firebase/firestore';
+
+type InventoryVariant = {
+  code: string;
+  currentStock: number;
+  unit: string;
+};
+
+type InventoryItem = {
+  code: string;
+  variants?: InventoryVariant[];
+  currentStock: number;
+  safetyStock: number;
+  unit: string;
+};
+
+type InventoryProduct = {
+  name: string;
+  imageSrc: string;
+  items: InventoryItem[];
+};
+
+const FALLBACK_PRODUCTS: InventoryProduct[] = [
+  {
+    name: 'Micro Elbow (HME)',
+    imageSrc: '/inventory/micro-elbow-hme.png',
+    items: [],
+  },
+];
 
 export default function InventoryStatusPage() {
   const categories = [
@@ -11,28 +41,52 @@ export default function InventoryStatusPage() {
   ];
   const [activeCategory, setActiveCategory] = useState(categories[0]);
   const [searchQuery, setSearchQuery] = useState('');
-  const microWeldProducts = [
-    {
-      name: 'Micro Elbow (HME)',
-      imageSrc: '/inventory/micro-elbow-hme.png',
-      itemCodes: ['HME-02', 'HME-04', 'HME-06', 'HME-08', 'HME-12'],
-    },
-  ];
+  const [microWeldProducts, setMicroWeldProducts] = useState<InventoryProduct[]>(FALLBACK_PRODUCTS);
+
+  useEffect(() => {
+    const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
+    const unsubscribe = onSnapshot(
+      inventoryRef,
+      (snapshot) => {
+        if (!snapshot.exists()) {
+          setMicroWeldProducts(FALLBACK_PRODUCTS);
+          return;
+        }
+        const data = snapshot.data() as { products?: InventoryProduct[] } | undefined;
+        if (data?.products && Array.isArray(data.products)) {
+          setMicroWeldProducts(data.products);
+        } else {
+          setMicroWeldProducts(FALLBACK_PRODUCTS);
+        }
+      },
+      () => {
+        setMicroWeldProducts(FALLBACK_PRODUCTS);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredMicroWeldProducts = microWeldProducts
     .map((product) => {
       const isProductNameMatched = product.name.toLowerCase().includes(normalizedQuery);
-      const filteredCodes =
+      const filteredItems =
         normalizedQuery === '' || isProductNameMatched
-          ? product.itemCodes
-          : product.itemCodes.filter((itemCode) => itemCode.toLowerCase().includes(normalizedQuery));
+          ? product.items
+          : product.items.filter(
+              (item) =>
+                item.code.toLowerCase().includes(normalizedQuery) ||
+                item.variants?.some((variant: { code: string }) =>
+                  variant.code.toLowerCase().includes(normalizedQuery)
+                )
+            );
 
       return {
         ...product,
-        filteredCodes,
+        filteredItems,
       };
     })
-    .filter((product) => product.filteredCodes.length > 0);
+    .filter((product) => product.filteredItems.length > 0);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -84,9 +138,9 @@ export default function InventoryStatusPage() {
                 {filteredMicroWeldProducts.map((product) => (
                   <div key={product.name} className="rounded-lg border border-gray-200 bg-white p-5">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">{product.name}</h3>
-                    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+                    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
                       <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                        <div className="h-[220px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
+                        <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
                           <img
                             src={product.imageSrc}
                             alt={product.name}
@@ -97,20 +151,41 @@ export default function InventoryStatusPage() {
 
                       <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          {product.filteredCodes.map((itemCode) => (
+                          {product.filteredItems.map((item) => (
                             <div
-                              key={itemCode}
+                              key={item.code}
                               className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3"
                             >
-                              <p className="text-sm font-semibold text-gray-800">{itemCode}</p>
-                              <div className="mt-3 flex flex-wrap gap-1.5">
-                                <button
-                                  type="button"
-                                  className="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-gray-800">{item.code}</p>
+                                <span
+                                  className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700"
                                 >
-                                  현재고
-                                </button>
+                                  총 현재고{' '}
+                                  {item.variants && item.variants.length > 0
+                                    ? item.variants.reduce(
+                                        (sum, variant) => sum + variant.currentStock,
+                                        0
+                                      )
+                                    : item.currentStock}{' '}
+                                  {item.unit}
+                                </span>
                               </div>
+                              {item.variants && item.variants.length > 0 && (
+                                <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                  {item.variants.map((variant) => (
+                                    <div
+                                      key={variant.code}
+                                      className="flex items-center justify-between gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
+                                    >
+                                      <span className="font-medium text-gray-700">{variant.code}</span>
+                                      <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
+                                        {variant.currentStock} {variant.unit}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>

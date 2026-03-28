@@ -1,66 +1,41 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
-import { doc, onSnapshot, setDoc, Timestamp } from 'firebase/firestore';
-
-type InboundHistory = {
-  id: string;
-  quantity: number;
-  createdAt: string;
-  variantCode?: string;
-};
-
-type OutboundHistory = {
-  id: string;
-  quantity: number;
-  createdAt: string;
-  variantCode?: string;
-};
-
-type AdjustmentHistory = {
-  id: string;
-  createdAt: string;
-  variantCode: string;
-  beforeStock: number;
-  afterStock: number;
-  delta: number;
-  reason: string;
-};
-
-type ProductionPlanHistory = {
-  id: string;
-  createdAt: string;
-  updatedAt?: string;
-  variantCode?: string;
-  plannedQuantity: number;
-  dueDate: string;
-  note?: string;
-};
-
-type InventoryVariant = {
-  code: string;
-  currentStock: number;
-  unit: string;
-};
-
-type InventoryItem = {
-  code: string;
-  variants?: InventoryVariant[];
-  currentStock: number;
-  safetyStock: number;
-  unit: string;
-  inboundHistory: InboundHistory[];
-  outboundHistory: OutboundHistory[];
-  adjustmentHistory: AdjustmentHistory[];
-  productionPlanHistory: ProductionPlanHistory[];
-};
-
-type InventoryProduct = {
-  name: string;
-  imageSrc: string;
-  items: InventoryItem[];
-};
+import {
+  INITIAL_METAL_FACE_SEAL_PRODUCTS,
+  INITIAL_MICRO_WELD_PRODUCTS,
+  INITIAL_TUBE_BUTT_WELD_PRODUCTS,
+  INVENTORY_SEED_VERSION,
+} from '@/lib/inventory/microWeldSeed';
+import Link from 'next/link';
+import { buildCombinedHistoryRows, combinedHistoryRowMemo } from '@/lib/inventory/historyRows';
+import {
+  findProductInUhpSlices,
+  findUhpCategoryByProductName,
+  UHP_CATEGORY_TABS,
+  UHP_STATE_KEYS,
+  type UhpCategoryId,
+} from '@/lib/inventory/uhpInventoryHelpers';
+import { createEmptyInventoryItem } from '@/lib/inventory/itemFactory';
+import { persistUhpInventoryState } from '@/lib/inventory/persistUhp';
+import type {
+  AdjustmentHistory,
+  InboundHistory,
+  InventoryItem,
+  InventoryProduct,
+  OutboundHistory,
+  ProductionPlanHistory,
+  UhpInventoryState,
+} from '@/lib/inventory/types';
+import {
+  doc,
+  getDocFromServer,
+  onSnapshot,
+  setDoc,
+  Timestamp,
+  type DocumentSnapshot,
+} from 'firebase/firestore';
 
 type InboundModalState = {
   isOpen: boolean;
@@ -89,6 +64,8 @@ type HistoryModalState = {
   page: number;
 };
 
+type HistoryViewModalState = HistoryModalState;
+
 type AdjustmentModalState = {
   isOpen: boolean;
   productName: string;
@@ -110,116 +87,25 @@ type ProductionPlanModalState = {
   noteInput: string;
 };
 
-const INITIAL_MICRO_WELD_PRODUCTS: InventoryProduct[] = [
-  {
-    name: 'Micro Elbow (HME)',
-    imageSrc: '/inventory/micro-elbow-hme.png',
-    items: [
-      {
-        code: 'HME-02',
-        variants: [
-          { code: 'HME-02-SL-BA', currentStock: 22, unit: 'EA' },
-          { code: 'HME-02-SL-EP', currentStock: 18, unit: 'EA' },
-          { code: 'HME-02-SM-BA', currentStock: 24, unit: 'EA' },
-          { code: 'HME-02-SM-EP', currentStock: 20, unit: 'EA' },
-          { code: 'HME-02-DM-BA', currentStock: 26, unit: 'EA' },
-          { code: 'HME-02-DM-EP', currentStock: 18, unit: 'EA' },
-        ],
-        currentStock: 128,
-        safetyStock: 80,
-        unit: 'EA',
-        inboundHistory: [],
-        outboundHistory: [],
-        adjustmentHistory: [],
-        productionPlanHistory: [],
-      },
-      {
-        code: 'HME-04',
-        variants: [
-          { code: 'HME-04-SL-BA', currentStock: 9, unit: 'EA' },
-          { code: 'HME-04-SL-EP', currentStock: 8, unit: 'EA' },
-          { code: 'HME-04-SM-BA', currentStock: 10, unit: 'EA' },
-          { code: 'HME-04-SM-EP', currentStock: 8, unit: 'EA' },
-          { code: 'HME-04-DM-BA', currentStock: 11, unit: 'EA' },
-          { code: 'HME-04-DM-EP', currentStock: 8, unit: 'EA' },
-        ],
-        currentStock: 54,
-        safetyStock: 60,
-        unit: 'EA',
-        inboundHistory: [],
-        outboundHistory: [],
-        adjustmentHistory: [],
-        productionPlanHistory: [],
-      },
-      {
-        code: 'HME-06',
-        variants: [
-          { code: 'HME-06-SL-BA', currentStock: 5, unit: 'EA' },
-          { code: 'HME-06-SL-EP', currentStock: 5, unit: 'EA' },
-          { code: 'HME-06-SM-BA', currentStock: 6, unit: 'EA' },
-          { code: 'HME-06-SM-EP', currentStock: 5, unit: 'EA' },
-          { code: 'HME-06-DM-BA', currentStock: 5, unit: 'EA' },
-          { code: 'HME-06-DM-EP', currentStock: 5, unit: 'EA' },
-        ],
-        currentStock: 31,
-        safetyStock: 60,
-        unit: 'EA',
-        inboundHistory: [],
-        outboundHistory: [],
-        adjustmentHistory: [],
-        productionPlanHistory: [],
-      },
-      {
-        code: 'HME-08',
-        variants: [
-          { code: 'HME-08-SL-BA', currentStock: 16, unit: 'EA' },
-          { code: 'HME-08-SL-EP', currentStock: 14, unit: 'EA' },
-          { code: 'HME-08-SM-BA', currentStock: 17, unit: 'EA' },
-          { code: 'HME-08-SM-EP', currentStock: 14, unit: 'EA' },
-          { code: 'HME-08-DM-BA', currentStock: 17, unit: 'EA' },
-          { code: 'HME-08-DM-EP', currentStock: 14, unit: 'EA' },
-        ],
-        currentStock: 92,
-        safetyStock: 70,
-        unit: 'EA',
-        inboundHistory: [],
-        outboundHistory: [],
-        adjustmentHistory: [],
-        productionPlanHistory: [],
-      },
-      {
-        code: 'HME-12',
-        variants: [
-          { code: 'HME-12-SL-BA', currentStock: 8, unit: 'EA' },
-          { code: 'HME-12-SL-EP', currentStock: 7, unit: 'EA' },
-          { code: 'HME-12-SM-BA', currentStock: 8, unit: 'EA' },
-          { code: 'HME-12-SM-EP', currentStock: 8, unit: 'EA' },
-          { code: 'HME-12-DM-BA', currentStock: 8, unit: 'EA' },
-          { code: 'HME-12-DM-EP', currentStock: 8, unit: 'EA' },
-        ],
-        currentStock: 47,
-        safetyStock: 45,
-        unit: 'EA',
-        inboundHistory: [],
-        outboundHistory: [],
-        adjustmentHistory: [],
-        productionPlanHistory: [],
-      },
-    ],
-  },
-];
+type StructureItemModalState = {
+  productName: string;
+  codeInput: string;
+  safetyInput: string;
+  unitInput: string;
+};
 
 export default function AdminInventoryStatusPage() {
   const HISTORY_PAGE_SIZE = 20;
   const HISTORY_KEEP_LIMIT = 100;
-  const categories = [
-    'Micro Weld Fittings',
-    'Tube Butt Weld Fittings',
-    'Metal Face Seal Fittings',
-  ];
-  const [activeCategory, setActiveCategory] = useState(categories[0]);
+  const PRODUCT_LIST_PAGE_SIZE = 10;
+  const [activeCategoryId, setActiveCategoryId] = useState<UhpCategoryId>('microWeld');
   const [searchQuery, setSearchQuery] = useState('');
-  const [microWeldProducts, setMicroWeldProducts] = useState<InventoryProduct[]>(INITIAL_MICRO_WELD_PRODUCTS);
+  const [productListPage, setProductListPage] = useState(1);
+  const [uhpInventory, setUhpInventory] = useState<UhpInventoryState>(() => ({
+    products: [...INITIAL_MICRO_WELD_PRODUCTS],
+    tubeButtWeldProducts: [...INITIAL_TUBE_BUTT_WELD_PRODUCTS],
+    metalFaceSealProducts: [...INITIAL_METAL_FACE_SEAL_PRODUCTS],
+  }));
   const [inboundModal, setInboundModal] = useState<InboundModalState>({
     isOpen: false,
     productName: '',
@@ -241,6 +127,12 @@ export default function AdminInventoryStatusPage() {
   });
   const [outboundFormError, setOutboundFormError] = useState('');
   const [historyModal, setHistoryModal] = useState<HistoryModalState>({
+    isOpen: false,
+    productName: '',
+    itemCode: '',
+    page: 1,
+  });
+  const [historyViewModal, setHistoryViewModal] = useState<HistoryViewModalState>({
     isOpen: false,
     productName: '',
     itemCode: '',
@@ -268,29 +160,71 @@ export default function AdminInventoryStatusPage() {
   });
   const [productionPlanFormError, setProductionPlanFormError] = useState('');
   const [syncError, setSyncError] = useState('');
+  const [isRefreshingInventory, setIsRefreshingInventory] = useState(false);
+
+  const [structureItemModal, setStructureItemModal] = useState<StructureItemModalState | null>(null);
+  const [structureItemFormError, setStructureItemFormError] = useState('');
+
+  useEffect(() => {
+    setProductListPage(1);
+  }, [activeCategoryId, searchQuery]);
+
+  const applyInventoryDocument = useCallback(async (snapshot: DocumentSnapshot) => {
+    const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
+    const reseedPayload = {
+      products: INITIAL_MICRO_WELD_PRODUCTS,
+      tubeButtWeldProducts: INITIAL_TUBE_BUTT_WELD_PRODUCTS,
+      metalFaceSealProducts: INITIAL_METAL_FACE_SEAL_PRODUCTS,
+      inventorySeedVersion: INVENTORY_SEED_VERSION,
+      updatedAt: Timestamp.now(),
+    };
+
+    if (!snapshot.exists()) {
+      try {
+        await setDoc(inventoryRef, reseedPayload);
+      } catch (error) {
+        console.error('재고 초기 데이터 저장 오류:', error);
+        setSyncError('재고 초기 데이터 저장에 실패했습니다.');
+      }
+      return;
+    }
+
+    const data = snapshot.data() as
+      | {
+          products?: InventoryProduct[];
+          tubeButtWeldProducts?: InventoryProduct[];
+          metalFaceSealProducts?: InventoryProduct[];
+          inventorySeedVersion?: number;
+        }
+      | undefined;
+    const needReseed = data?.inventorySeedVersion !== INVENTORY_SEED_VERSION;
+    if (needReseed) {
+      try {
+        await setDoc(inventoryRef, reseedPayload, { merge: true });
+      } catch (error) {
+        console.error('재고 시드 재적용 오류:', error);
+        setSyncError('재고 시드 재적용에 실패했습니다.');
+      }
+      return;
+    }
+
+    setUhpInventory({
+      products: Array.isArray(data?.products) ? data.products : [...INITIAL_MICRO_WELD_PRODUCTS],
+      tubeButtWeldProducts: Array.isArray(data?.tubeButtWeldProducts)
+        ? data.tubeButtWeldProducts
+        : [...INITIAL_TUBE_BUTT_WELD_PRODUCTS],
+      metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
+        ? data.metalFaceSealProducts
+        : [...INITIAL_METAL_FACE_SEAL_PRODUCTS],
+    });
+  }, []);
 
   useEffect(() => {
     const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
     const unsubscribe = onSnapshot(
       inventoryRef,
-      async (snapshot) => {
-        if (!snapshot.exists()) {
-          try {
-            await setDoc(inventoryRef, {
-              products: INITIAL_MICRO_WELD_PRODUCTS,
-              updatedAt: Timestamp.now(),
-            });
-          } catch (error) {
-            console.error('재고 초기 데이터 저장 오류:', error);
-            setSyncError('재고 초기 데이터 저장에 실패했습니다.');
-          }
-          return;
-        }
-
-        const data = snapshot.data() as { products?: InventoryProduct[] } | undefined;
-        if (data?.products && Array.isArray(data.products)) {
-          setMicroWeldProducts(data.products);
-        }
+      (snapshot) => {
+        void applyInventoryDocument(snapshot);
       },
       (error) => {
         console.error('재고 데이터 동기화 오류:', error);
@@ -299,37 +233,87 @@ export default function AdminInventoryStatusPage() {
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [applyInventoryDocument]);
 
-  const persistInventoryProducts = async (nextProducts: InventoryProduct[]) => {
-    const sanitizeForFirestore = <T,>(value: T): T => {
-      if (Array.isArray(value)) {
-        return value.map((item) => sanitizeForFirestore(item)) as T;
-      }
-      if (value && typeof value === 'object') {
-        const entries = Object.entries(value as Record<string, unknown>)
-          .filter(([, v]) => v !== undefined)
-          .map(([k, v]) => [k, sanitizeForFirestore(v)]);
-        return Object.fromEntries(entries) as T;
-      }
-      return value;
-    };
-
+  const refreshInventoryFromServer = async () => {
+    setIsRefreshingInventory(true);
+    setSyncError('');
     try {
-      const cleanedProducts = sanitizeForFirestore(nextProducts);
-      await setDoc(
-        doc(db, 'inventory', 'microWeldProducts'),
-        {
-          products: cleanedProducts,
-          updatedAt: Timestamp.now(),
-        },
-        { merge: true }
-      );
+      const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
+      const snapshot = await getDocFromServer(inventoryRef);
+      await applyInventoryDocument(snapshot);
+    } catch (error) {
+      console.error('재고 새로고침 오류:', error);
+      setSyncError('재고 데이터를 불러오지 못했습니다.');
+    } finally {
+      setIsRefreshingInventory(false);
+    }
+  };
+
+  const persistUhpInventory = async (nextState: UhpInventoryState) => {
+    try {
+      await persistUhpInventoryState(nextState);
       setSyncError('');
     } catch (error) {
       console.error('재고 데이터 저장 오류:', error);
       setSyncError('재고 데이터 저장에 실패했습니다.');
     }
+  };
+
+  const closeStructureItemModal = () => {
+    setStructureItemModal(null);
+    setStructureItemFormError('');
+  };
+
+  const openAddStructureItem = (productName: string) => {
+    setStructureItemModal({
+      productName,
+      codeInput: '',
+      safetyInput: '60',
+      unitInput: 'EA',
+    });
+    setStructureItemFormError('');
+  };
+
+  const saveStructureItem = () => {
+    if (!structureItemModal) return;
+    const m = structureItemModal;
+    const safety = Number(m.safetyInput);
+    const unit = m.unitInput.trim() || 'EA';
+    if (!Number.isInteger(safety) || safety < 0) {
+      setStructureItemFormError('안전재고는 0 이상의 정수로 입력해 주세요.');
+      return;
+    }
+    const cat = findUhpCategoryByProductName(uhpInventory, m.productName);
+    if (!cat) {
+      setStructureItemFormError('제품을 찾을 수 없습니다.');
+      return;
+    }
+    const key = UHP_STATE_KEYS[cat];
+    const next = JSON.parse(JSON.stringify(uhpInventory)) as UhpInventoryState;
+    const slice = [...next[key]];
+    const pi = slice.findIndex((p) => p.name === m.productName);
+    if (pi < 0) {
+      setStructureItemFormError('제품을 찾을 수 없습니다.');
+      return;
+    }
+    const product = slice[pi]!;
+    const code = m.codeInput.trim();
+    if (!code) {
+      setStructureItemFormError('품목 코드를 입력해 주세요.');
+      return;
+    }
+    if (product.items.some((it) => it.code === code)) {
+      setStructureItemFormError('이미 같은 품목 코드가 있습니다.');
+      return;
+    }
+    const newItem = createEmptyInventoryItem(code, safety, unit);
+    slice[pi] = { ...product, items: [...product.items, newItem] };
+
+    next[key] = slice;
+    setUhpInventory(next);
+    void persistUhpInventory(next);
+    closeStructureItemModal();
   };
 
   const closeInboundModal = () => {
@@ -376,10 +360,28 @@ export default function AdminInventoryStatusPage() {
     });
   };
 
+  const openHistoryViewModal = (productName: string, itemCode: string) => {
+    setHistoryViewModal({
+      isOpen: true,
+      productName,
+      itemCode,
+      page: 1,
+    });
+  };
+
+  const closeHistoryViewModal = () => {
+    setHistoryViewModal({
+      isOpen: false,
+      productName: '',
+      itemCode: '',
+      page: 1,
+    });
+  };
+
   const openAdjustmentModal = (productName: string, itemCode: string) => {
-    const targetItem = microWeldProducts
-      .find((product) => product.name === productName)
-      ?.items.find((item) => item.code === itemCode);
+    const targetItem = findProductInUhpSlices(uhpInventory, productName)?.items.find(
+      (item) => item.code === itemCode
+    );
     const defaultVariant = targetItem?.variants?.[0];
 
     setAdjustmentModal({
@@ -406,9 +408,9 @@ export default function AdminInventoryStatusPage() {
   };
 
   const openProductionPlanCreateModal = (productName: string, itemCode: string) => {
-    const targetItem = microWeldProducts
-      .find((product) => product.name === productName)
-      ?.items.find((item) => item.code === itemCode);
+    const targetItem = findProductInUhpSlices(uhpInventory, productName)?.items.find(
+      (item) => item.code === itemCode
+    );
     const defaultVariant = targetItem?.variants?.[0];
     const today = new Date();
     const yyyy = today.getFullYear();
@@ -434,9 +436,9 @@ export default function AdminInventoryStatusPage() {
     itemCode: string,
     history: ProductionPlanHistory
   ) => {
-    const targetItem = microWeldProducts
-      .find((product) => product.name === productName)
-      ?.items.find((item) => item.code === itemCode);
+    const targetItem = findProductInUhpSlices(uhpInventory, productName)?.items.find(
+      (item) => item.code === itemCode
+    );
 
     setProductionPlanModal({
       isOpen: true,
@@ -468,9 +470,9 @@ export default function AdminInventoryStatusPage() {
   };
 
   const openInboundCreateModal = (productName: string, itemCode: string) => {
-    const targetItem = microWeldProducts
-      .find((product) => product.name === productName)
-      ?.items.find((item) => item.code === itemCode);
+    const targetItem = findProductInUhpSlices(uhpInventory, productName)?.items.find(
+      (item) => item.code === itemCode
+    );
 
     setInboundModal({
       isOpen: true,
@@ -485,9 +487,9 @@ export default function AdminInventoryStatusPage() {
   };
 
   const openInboundEditModal = (productName: string, itemCode: string, history: InboundHistory) => {
-    const targetItem = microWeldProducts
-      .find((product) => product.name === productName)
-      ?.items.find((item) => item.code === itemCode);
+    const targetItem = findProductInUhpSlices(uhpInventory, productName)?.items.find(
+      (item) => item.code === itemCode
+    );
 
     setInboundModal({
       isOpen: true,
@@ -502,9 +504,9 @@ export default function AdminInventoryStatusPage() {
   };
 
   const openOutboundCreateModal = (productName: string, itemCode: string) => {
-    const targetItem = microWeldProducts
-      .find((product) => product.name === productName)
-      ?.items.find((item) => item.code === itemCode);
+    const targetItem = findProductInUhpSlices(uhpInventory, productName)?.items.find(
+      (item) => item.code === itemCode
+    );
 
     setOutboundModal({
       isOpen: true,
@@ -523,9 +525,9 @@ export default function AdminInventoryStatusPage() {
     itemCode: string,
     history: OutboundHistory
   ) => {
-    const targetItem = microWeldProducts
-      .find((product) => product.name === productName)
-      ?.items.find((item) => item.code === itemCode);
+    const targetItem = findProductInUhpSlices(uhpInventory, productName)?.items.find(
+      (item) => item.code === itemCode
+    );
 
     setOutboundModal({
       isOpen: true,
@@ -550,15 +552,21 @@ export default function AdminInventoryStatusPage() {
       );
       return;
     }
-    const targetItem = microWeldProducts
-      .find((product) => product.name === inboundModal.productName)
-      ?.items.find((item) => item.code === inboundModal.itemCode);
+    const targetItem = findProductInUhpSlices(uhpInventory, inboundModal.productName)?.items.find(
+      (item) => item.code === inboundModal.itemCode
+    );
     if (targetItem?.variants && targetItem.variants.length > 0 && !inboundModal.variantCode) {
       setFormError('세부 제품 코드를 선택해 주세요.');
       return;
     }
 
-    const nextProducts = microWeldProducts.map((product) => {
+    const inboundCategory = findUhpCategoryByProductName(uhpInventory, inboundModal.productName);
+    if (!inboundCategory) {
+      setFormError('제품을 찾을 수 없습니다.');
+      return;
+    }
+    const inboundField = UHP_STATE_KEYS[inboundCategory];
+    const nextInboundSlice = uhpInventory[inboundField].map((product) => {
         if (product.name !== inboundModal.productName) {
           return product;
         }
@@ -637,8 +645,9 @@ export default function AdminInventoryStatusPage() {
         };
       });
 
-    setMicroWeldProducts(nextProducts);
-    void persistInventoryProducts(nextProducts);
+    const nextUhpAfterInbound = { ...uhpInventory, [inboundField]: nextInboundSlice };
+    setUhpInventory(nextUhpAfterInbound);
+    void persistUhpInventory(nextUhpAfterInbound);
 
     closeInboundModal();
   };
@@ -655,9 +664,9 @@ export default function AdminInventoryStatusPage() {
       return;
     }
 
-    const targetItem = microWeldProducts
-      .find((product) => product.name === outboundModal.productName)
-      ?.items.find((item) => item.code === outboundModal.itemCode);
+    const targetItem = findProductInUhpSlices(uhpInventory, outboundModal.productName)?.items.find(
+      (item) => item.code === outboundModal.itemCode
+    );
     if (targetItem?.variants && targetItem.variants.length > 0 && !outboundModal.variantCode) {
       setOutboundFormError('세부 제품 코드를 선택해 주세요.');
       return;
@@ -671,7 +680,13 @@ export default function AdminInventoryStatusPage() {
       return;
     }
 
-    const nextProducts = microWeldProducts.map((product) => {
+    const outboundCategory = findUhpCategoryByProductName(uhpInventory, outboundModal.productName);
+    if (!outboundCategory) {
+      setOutboundFormError('제품을 찾을 수 없습니다.');
+      return;
+    }
+    const outboundField = UHP_STATE_KEYS[outboundCategory];
+    const nextOutboundSlice = uhpInventory[outboundField].map((product) => {
         if (product.name !== outboundModal.productName) {
           return product;
         }
@@ -764,8 +779,9 @@ export default function AdminInventoryStatusPage() {
         };
       });
 
-    setMicroWeldProducts(nextProducts);
-    void persistInventoryProducts(nextProducts);
+    const nextUhpAfterOutbound = { ...uhpInventory, [outboundField]: nextOutboundSlice };
+    setUhpInventory(nextUhpAfterOutbound);
+    void persistUhpInventory(nextUhpAfterOutbound);
 
     closeOutboundModal();
   };
@@ -781,8 +797,7 @@ export default function AdminInventoryStatusPage() {
       return;
     }
 
-    const targetVariant = microWeldProducts
-      .find((product) => product.name === adjustmentModal.productName)
+    const targetVariant = findProductInUhpSlices(uhpInventory, adjustmentModal.productName)
       ?.items.find((item) => item.code === adjustmentModal.itemCode)
       ?.variants?.find((variant) => variant.code === adjustmentModal.variantCode);
     if (!targetVariant) {
@@ -796,7 +811,16 @@ export default function AdminInventoryStatusPage() {
       return;
     }
 
-    const nextProducts = microWeldProducts.map((product) => {
+    const adjustmentCategory = findUhpCategoryByProductName(
+      uhpInventory,
+      adjustmentModal.productName
+    );
+    if (!adjustmentCategory) {
+      setAdjustmentFormError('제품을 찾을 수 없습니다.');
+      return;
+    }
+    const adjustmentField = UHP_STATE_KEYS[adjustmentCategory];
+    const nextAdjustmentSlice = uhpInventory[adjustmentField].map((product) => {
         if (product.name !== adjustmentModal.productName) {
           return product;
         }
@@ -838,8 +862,9 @@ export default function AdminInventoryStatusPage() {
         };
       });
 
-    setMicroWeldProducts(nextProducts);
-    void persistInventoryProducts(nextProducts);
+    const nextUhpAfterAdjustment = { ...uhpInventory, [adjustmentField]: nextAdjustmentSlice };
+    setUhpInventory(nextUhpAfterAdjustment);
+    void persistUhpInventory(nextUhpAfterAdjustment);
 
     closeAdjustmentModal();
   };
@@ -856,11 +881,20 @@ export default function AdminInventoryStatusPage() {
       return;
     }
     if (!productionPlanModal.dueDateInput) {
-      setProductionPlanFormError('납기일을 입력해 주세요.');
+      setProductionPlanFormError('생산완료일을 입력해 주세요.');
       return;
     }
 
-    const nextProducts = microWeldProducts.map((product) => {
+    const planCategory = findUhpCategoryByProductName(
+      uhpInventory,
+      productionPlanModal.productName
+    );
+    if (!planCategory) {
+      setProductionPlanFormError('제품을 찾을 수 없습니다.');
+      return;
+    }
+    const planField = UHP_STATE_KEYS[planCategory];
+    const nextPlanSlice = uhpInventory[planField].map((product) => {
       if (product.name !== productionPlanModal.productName) {
         return product;
       }
@@ -914,71 +948,52 @@ export default function AdminInventoryStatusPage() {
       };
     });
 
-    setMicroWeldProducts(nextProducts);
-    void persistInventoryProducts(nextProducts);
+    const nextUhpAfterPlan = { ...uhpInventory, [planField]: nextPlanSlice };
+    setUhpInventory(nextUhpAfterPlan);
+    void persistUhpInventory(nextUhpAfterPlan);
     closeProductionPlanModal();
   };
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const modalTargetItem = microWeldProducts
-    .find((product) => product.name === inboundModal.productName)
-    ?.items.find((item) => item.code === inboundModal.itemCode);
-  const outboundModalTargetItem = microWeldProducts
-    .find((product) => product.name === outboundModal.productName)
-    ?.items.find((item) => item.code === outboundModal.itemCode);
-  const adjustmentModalTargetItem = microWeldProducts
-    .find((product) => product.name === adjustmentModal.productName)
-    ?.items.find((item) => item.code === adjustmentModal.itemCode);
-  const productionPlanModalTargetItem = microWeldProducts
-    .find((product) => product.name === productionPlanModal.productName)
-    ?.items.find((item) => item.code === productionPlanModal.itemCode);
-  const historyTargetItem = microWeldProducts
-    .find((product) => product.name === historyModal.productName)
-    ?.items.find((item) => item.code === historyModal.itemCode);
-  const combinedHistoryRows = historyTargetItem
-    ? [
-        ...historyTargetItem.inboundHistory.map((history) => ({
-          kind: 'inbound' as const,
-          id: history.id,
-          createdAt: history.createdAt,
-          quantity: history.quantity,
-          variantCode: history.variantCode,
-          raw: history,
-        })),
-        ...historyTargetItem.outboundHistory.map((history) => ({
-          kind: 'outbound' as const,
-          id: history.id,
-          createdAt: history.createdAt,
-          quantity: history.quantity,
-          variantCode: history.variantCode,
-          raw: history,
-        })),
-        ...historyTargetItem.adjustmentHistory.map((history) => ({
-          kind: 'adjustment' as const,
-          id: history.id,
-          createdAt: history.createdAt,
-          quantity: history.delta,
-          variantCode: history.variantCode,
-          raw: history,
-        })),
-        ...(historyTargetItem.productionPlanHistory ?? []).map((history) => ({
-          kind: 'production' as const,
-          id: history.id,
-          createdAt: history.updatedAt ?? history.createdAt,
-          quantity: history.plannedQuantity,
-          variantCode: history.variantCode,
-          dueDate: history.dueDate,
-          raw: history,
-        })),
-      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    : [];
+  const modalTargetItem = findProductInUhpSlices(uhpInventory, inboundModal.productName)?.items.find(
+    (item) => item.code === inboundModal.itemCode
+  );
+  const outboundModalTargetItem = findProductInUhpSlices(
+    uhpInventory,
+    outboundModal.productName
+  )?.items.find((item) => item.code === outboundModal.itemCode);
+  const adjustmentModalTargetItem = findProductInUhpSlices(
+    uhpInventory,
+    adjustmentModal.productName
+  )?.items.find((item) => item.code === adjustmentModal.itemCode);
+  const productionPlanModalTargetItem = findProductInUhpSlices(
+    uhpInventory,
+    productionPlanModal.productName
+  )?.items.find((item) => item.code === productionPlanModal.itemCode);
+  const historyTargetItem = findProductInUhpSlices(uhpInventory, historyModal.productName)?.items.find(
+    (item) => item.code === historyModal.itemCode
+  );
+  const combinedHistoryRows = buildCombinedHistoryRows(historyTargetItem);
   const historyTotalPages = Math.max(1, Math.ceil(combinedHistoryRows.length / HISTORY_PAGE_SIZE));
   const historyCurrentPage = Math.min(historyModal.page, historyTotalPages);
   const pagedHistoryRows = combinedHistoryRows.slice(
     (historyCurrentPage - 1) * HISTORY_PAGE_SIZE,
     historyCurrentPage * HISTORY_PAGE_SIZE
   );
-  const filteredMicroWeldProducts = microWeldProducts
+
+  const historyViewTargetItem = findProductInUhpSlices(
+    uhpInventory,
+    historyViewModal.productName
+  )?.items.find((item) => item.code === historyViewModal.itemCode);
+  const combinedHistoryViewRows = buildCombinedHistoryRows(historyViewTargetItem);
+  const historyViewTotalPages = Math.max(1, Math.ceil(combinedHistoryViewRows.length / HISTORY_PAGE_SIZE));
+  const historyViewCurrentPage = Math.min(historyViewModal.page, historyViewTotalPages);
+  const pagedHistoryViewRows = combinedHistoryViewRows.slice(
+    (historyViewCurrentPage - 1) * HISTORY_PAGE_SIZE,
+    historyViewCurrentPage * HISTORY_PAGE_SIZE
+  );
+  const displayCategoryProducts = uhpInventory[UHP_STATE_KEYS[activeCategoryId]];
+  const filteredCategoryProducts = displayCategoryProducts
     .map((product) => {
       const isProductNameMatched = product.name.toLowerCase().includes(normalizedQuery);
       const filteredItems =
@@ -995,9 +1010,33 @@ export default function AdminInventoryStatusPage() {
       return {
         ...product,
         filteredItems,
+        isProductNameMatched,
       };
     })
-    .filter((product) => product.filteredItems.length > 0);
+    .filter(
+      (product) =>
+        product.filteredItems.length > 0 ||
+        normalizedQuery === '' ||
+        product.isProductNameMatched
+    );
+
+  const productListTotalPages = Math.max(
+    1,
+    Math.ceil(filteredCategoryProducts.length / PRODUCT_LIST_PAGE_SIZE)
+  );
+  const productListEffectivePage = Math.min(productListPage, productListTotalPages);
+  const pagedCategoryProducts = filteredCategoryProducts.slice(
+    (productListEffectivePage - 1) * PRODUCT_LIST_PAGE_SIZE,
+    productListEffectivePage * PRODUCT_LIST_PAGE_SIZE
+  );
+  const productListRangeStart =
+    filteredCategoryProducts.length === 0
+      ? 0
+      : (productListEffectivePage - 1) * PRODUCT_LIST_PAGE_SIZE + 1;
+  const productListRangeEnd = Math.min(
+    filteredCategoryProducts.length,
+    productListEffectivePage * PRODUCT_LIST_PAGE_SIZE
+  );
 
   const getCurrentStock = (item: InventoryItem): number =>
     item.variants && item.variants.length > 0
@@ -1023,12 +1062,56 @@ export default function AdminInventoryStatusPage() {
 
   return (
     <div className="p-6 sm:p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">UHP 재고현황</h1>
-        <p className="text-gray-600 mt-2">현재 UHP 재고 현황을 관리하는 페이지입니다.</p>
-        {syncError && (
-          <p className="mt-2 text-sm font-medium text-red-600">{syncError}</p>
-        )}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold text-gray-900">UHP 재고현황</h1>
+          <p className="text-gray-600 mt-2">
+            입고·출고·재고조정·생산계획·이력과 함께, 각 제품 카드에서{' '}
+            <span className="font-medium text-gray-800">품목 코드·안전재고</span>는 「품목 추가」로 등록할 수 있습니다.
+          </p>
+          <p className="mt-2 text-sm text-gray-600">
+            <span className="font-medium text-gray-800">제품 라인(시리즈명·이미지)</span>만 →{' '}
+            <Link
+              href="/admin/inventory/products"
+              className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900"
+            >
+              UHP 제품등록
+            </Link>
+          </p>
+          {syncError && (
+            <p className="mt-2 text-sm font-medium text-red-600">{syncError}</p>
+          )}
+        </div>
+        <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+          <Link
+            href="/admin/inventory/products"
+            className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm transition-colors hover:bg-gray-50"
+          >
+            UHP 제품등록
+          </Link>
+          <button
+            type="button"
+            onClick={() => void refreshInventoryFromServer()}
+            disabled={isRefreshingInventory}
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <svg
+              className={`h-4 w-4 text-gray-600 ${isRefreshingInventory ? 'animate-spin' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9M20 20v-5h-.581m-15.357-2a8.003 8.003 0 0 0 15.357 2"
+              />
+            </svg>
+            {isRefreshingInventory ? '불러오는 중…' : '새로고침'}
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -1051,24 +1134,23 @@ export default function AdminInventoryStatusPage() {
 
         <h2 className="text-lg font-semibold text-gray-900 mb-4">제품 카테고리</h2>
         <div className="flex flex-wrap gap-2">
-          {categories.map((category) => (
+          {UHP_CATEGORY_TABS.map(({ id, label }) => (
             <button
-              key={category}
+              key={id}
               type="button"
-              onClick={() => setActiveCategory(category)}
+              onClick={() => setActiveCategoryId(id)}
               className={`rounded-md border px-4 py-2.5 text-sm font-medium transition-colors ${
-                activeCategory === category
+                activeCategoryId === id
                   ? 'border-blue-600 bg-blue-600 text-white'
                   : 'border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100'
               }`}
             >
-              {category}
+              {label}
             </button>
           ))}
         </div>
-        {activeCategory === 'Micro Weld Fittings' && (
-          <div className="mt-6 space-y-4">
-            {filteredMicroWeldProducts.map((product) => (
+        <div className="mt-6 space-y-4">
+            {pagedCategoryProducts.map((product) => (
               <div key={product.name} className="rounded-lg border border-gray-200 bg-white p-5">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">{product.name}</h3>
                 <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
@@ -1083,6 +1165,24 @@ export default function AdminInventoryStatusPage() {
                   </div>
 
                   <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-xs text-gray-600">
+                        새 품목 코드는 「품목 추가」로 등록합니다. (안전재고는 경고 기준이며 현재고와 다릅니다.)
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => openAddStructureItem(product.name)}
+                        className="inline-flex shrink-0 items-center justify-center rounded-md border border-dashed border-blue-300 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+                      >
+                        + 품목 추가
+                      </button>
+                    </div>
+                    {product.filteredItems.length === 0 ? (
+                      <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-6 text-center text-sm text-gray-500">
+                        등록된 품목이 없습니다. 「품목 추가」로 품목 코드를 등록하면 SL-BA 등 6종 세부코드가
+                        자동 생성됩니다.
+                      </p>
+                    ) : (
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       {product.filteredItems.map((item) => (
                         <div
@@ -1126,9 +1226,32 @@ export default function AdminInventoryStatusPage() {
                                           <span className="text-[10px] text-gray-500">
                                             {variantPlanInfo.nearestDueDate ?? '-'}
                                           </span>
-                                          <span className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700">
-                                            예상 {variantExpectedStock} {variant.unit}
-                                          </span>
+                                          <div className="flex shrink-0 items-center gap-1">
+                                            <span className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700">
+                                              예상 {variantExpectedStock} {variant.unit}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              title="생산계획 수정"
+                                              onClick={() => {
+                                                const plansForVariant = (
+                                                  item.productionPlanHistory ?? []
+                                                ).filter((p) => p.variantCode === variant.code);
+                                                if (plansForVariant.length === 1) {
+                                                  openProductionPlanEditModal(
+                                                    product.name,
+                                                    item.code,
+                                                    plansForVariant[0]!
+                                                  );
+                                                } else if (plansForVariant.length > 1) {
+                                                  openHistoryModal(product.name, item.code);
+                                                }
+                                              }}
+                                              className="rounded px-1 py-0.5 text-[10px] font-semibold text-purple-700 underline decoration-purple-300 underline-offset-2 hover:text-purple-900"
+                                            >
+                                              수정
+                                            </button>
+                                          </div>
                                         </div>
                                       )}
                                     </div>
@@ -1173,6 +1296,13 @@ export default function AdminInventoryStatusPage() {
                             >
                               이력수정
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => openHistoryViewModal(product.name, item.code)}
+                              className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                            >
+                              전체 이력
+                            </button>
                           </div>
                               </>
                             );
@@ -1180,17 +1310,53 @@ export default function AdminInventoryStatusPage() {
                         </div>
                       ))}
                     </div>
+                    )}
                   </div>
                 </div>
               </div>
             ))}
-            {filteredMicroWeldProducts.length === 0 && (
+            {filteredCategoryProducts.length === 0 && (
               <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-4 text-sm text-gray-500">
                 검색 결과가 없습니다.
               </p>
             )}
-          </div>
-        )}
+            {filteredCategoryProducts.length > 0 && (
+              <div className="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-gray-600">
+                  제품 라인 {productListRangeStart}–{productListRangeEnd} / 전체{' '}
+                  {filteredCategoryProducts.length}건 (페이지당 {PRODUCT_LIST_PAGE_SIZE}건)
+                  {productListTotalPages > 1 && (
+                    <span className="text-gray-500">
+                      {' '}
+                      · {productListEffectivePage}/{productListTotalPages} 페이지
+                    </span>
+                  )}
+                </p>
+                {productListTotalPages > 1 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setProductListPage((p) => Math.max(1, p - 1))}
+                      disabled={productListEffectivePage <= 1}
+                      className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      이전
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setProductListPage((p) => Math.min(productListTotalPages, p + 1))
+                      }
+                      disabled={productListEffectivePage >= productListTotalPages}
+                      className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      다음
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+        </div>
       </div>
 
       {inboundModal.isOpen && (
@@ -1509,7 +1675,7 @@ export default function AdminInventoryStatusPage() {
               </div>
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="productionDueDate">
-                  납기일
+                  생산완료일
                 </label>
                 <input
                   id="productionDueDate"
@@ -1566,32 +1732,152 @@ export default function AdminInventoryStatusPage() {
         </div>
       )}
 
+      {historyViewModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+            <div className="shrink-0 border-b border-gray-200 px-5 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">전체 이력</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                {historyViewModal.productName} / {historyViewModal.itemCode}
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                입고·출고·재고조정·생산계획을 시간순으로 조회합니다. (조회 전용) 한 페이지에 최대{' '}
+                {HISTORY_PAGE_SIZE}건이며, 하단에서 페이지를 넘겨 전체를 볼 수 있습니다.
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 px-5 py-4">
+              {pagedHistoryViewRows.length === 0 ? (
+                <p className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-4 text-sm text-gray-500">
+                  등록된 이력이 없습니다.
+                </p>
+              ) : (
+                <div className="max-h-[min(50vh,26rem)] overflow-auto rounded-md border border-gray-200">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="sticky top-0 z-[1] bg-gray-50 text-gray-700 shadow-[0_1px_0_0_rgb(229_231_235)]">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold">일시</th>
+                        <th className="px-3 py-2 text-left font-semibold">구분</th>
+                        <th className="px-3 py-2 text-left font-semibold">세부코드</th>
+                        <th className="px-3 py-2 text-left font-semibold">생산완료일</th>
+                        <th className="px-3 py-2 text-right font-semibold">수량</th>
+                        <th className="px-3 py-2 text-left font-semibold min-w-[140px]">비고</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white">
+                      {pagedHistoryViewRows.map((row) => (
+                        <tr key={`view-${row.kind}-${row.id}`}>
+                          <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                            {new Date(row.createdAt).toLocaleString('ko-KR')}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className={`rounded border px-2 py-0.5 text-xs font-semibold ${
+                                row.kind === 'inbound'
+                                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                  : row.kind === 'outbound'
+                                    ? 'border-red-200 bg-red-50 text-red-700'
+                                    : row.kind === 'adjustment'
+                                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                      : 'border-purple-200 bg-purple-50 text-purple-700'
+                              }`}
+                            >
+                              {row.kind === 'inbound'
+                                ? '입고'
+                                : row.kind === 'outbound'
+                                  ? '출고'
+                                  : row.kind === 'adjustment'
+                                    ? '조정'
+                                    : '생산계획'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-gray-700">{row.variantCode || '-'}</td>
+                          <td className="px-3 py-2 text-gray-700">
+                            {row.kind === 'production' ? row.dueDate : '-'}
+                          </td>
+                          <td className="px-3 py-2 text-right font-medium text-gray-800 whitespace-nowrap">
+                            {row.kind === 'adjustment' && row.quantity > 0 ? `+${row.quantity}` : row.quantity}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600 text-xs max-w-xs break-words">
+                            {combinedHistoryRowMemo(row)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center justify-between border-t border-gray-200 px-5 py-4">
+              <div className="text-sm text-gray-600">
+                총 {combinedHistoryViewRows.length}건 / {historyViewCurrentPage} / {historyViewTotalPages} 페이지
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setHistoryViewModal((prev) => ({
+                      ...prev,
+                      page: Math.max(1, prev.page - 1),
+                    }))
+                  }
+                  disabled={historyViewCurrentPage <= 1}
+                  className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  이전
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setHistoryViewModal((prev) => ({
+                      ...prev,
+                      page: Math.min(historyViewTotalPages, prev.page + 1),
+                    }))
+                  }
+                  disabled={historyViewCurrentPage >= historyViewTotalPages}
+                  className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  다음
+                </button>
+                <button
+                  type="button"
+                  onClick={closeHistoryViewModal}
+                  className="ml-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {historyModal.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="w-full max-w-4xl rounded-lg bg-white shadow-xl">
-            <div className="border-b border-gray-200 px-5 py-4">
-              <h3 className="text-lg font-semibold text-gray-900">입출고 이력수정</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+            <div className="shrink-0 border-b border-gray-200 px-5 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">이력 수정</h3>
               <p className="mt-1 text-sm text-gray-600">
                 {historyModal.productName} / {historyModal.itemCode}
               </p>
               <p className="mt-1 text-xs text-gray-500">
-                과거 입고/출고 등록 내역을 선택해 수량을 수정할 수 있습니다.
+                입고·출고·생산계획 행만 「수정」할 수 있습니다. 전체 목록은 「전체 이력」에서 보세요. (페이지당 최대{' '}
+                {HISTORY_PAGE_SIZE}건)
               </p>
             </div>
-            <div className="px-5 py-4">
+            <div className="min-h-0 flex-1 px-5 py-4">
               {pagedHistoryRows.length === 0 ? (
                 <p className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-4 text-sm text-gray-500">
                   등록된 이력이 없습니다.
                 </p>
               ) : (
-                <div className="overflow-x-auto rounded-md border border-gray-200">
+                <div className="max-h-[min(50vh,26rem)] overflow-auto rounded-md border border-gray-200">
                   <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50 text-gray-700">
+                    <thead className="sticky top-0 z-[1] bg-gray-50 text-gray-700 shadow-[0_1px_0_0_rgb(229_231_235)]">
                       <tr>
                         <th className="px-3 py-2 text-left font-semibold">일시</th>
                         <th className="px-3 py-2 text-left font-semibold">구분</th>
                         <th className="px-3 py-2 text-left font-semibold">세부코드</th>
-                        <th className="px-3 py-2 text-left font-semibold">납기일</th>
+                        <th className="px-3 py-2 text-left font-semibold">생산완료일</th>
                         <th className="px-3 py-2 text-right font-semibold">수량</th>
                         <th className="px-3 py-2 text-center font-semibold">관리</th>
                       </tr>
@@ -1641,19 +1927,19 @@ export default function AdminInventoryStatusPage() {
                                     openInboundEditModal(
                                       historyModal.productName,
                                       historyModal.itemCode,
-                                      row.raw
+                                      row.raw as InboundHistory
                                     );
                                   } else if (row.kind === 'outbound') {
                                     openOutboundEditModal(
                                       historyModal.productName,
                                       historyModal.itemCode,
-                                      row.raw
+                                      row.raw as OutboundHistory
                                     );
-                                  } else {
+                                  } else if (row.kind === 'production') {
                                     openProductionPlanEditModal(
                                       historyModal.productName,
                                       historyModal.itemCode,
-                                      row.raw
+                                      row.raw as ProductionPlanHistory
                                     );
                                   }
                                   closeHistoryModal();
@@ -1671,7 +1957,7 @@ export default function AdminInventoryStatusPage() {
                 </div>
               )}
             </div>
-            <div className="flex items-center justify-between border-t border-gray-200 px-5 py-4">
+            <div className="flex shrink-0 items-center justify-between border-t border-gray-200 px-5 py-4">
               <div className="text-sm text-gray-600">
                 총 {combinedHistoryRows.length}건 / {historyCurrentPage} / {historyTotalPages} 페이지
               </div>
@@ -1710,6 +1996,91 @@ export default function AdminInventoryStatusPage() {
                   닫기
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {structureItemModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b border-gray-200 px-5 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">품목 추가</h3>
+              <p className="mt-1 text-sm text-gray-600">{structureItemModal.productName}</p>
+              <p className="mt-1 text-xs text-gray-500">
+                품목 코드 기준으로 SL-BA, SL-EP 등 6종 세부 variant가 자동 생성됩니다.
+              </p>
+            </div>
+            <div className="space-y-4 px-5 py-4">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="structItemCode">
+                  품목 코드
+                </label>
+                <input
+                  id="structItemCode"
+                  value={structureItemModal.codeInput}
+                  onChange={(e) =>
+                    setStructureItemModal((prev) =>
+                      prev ? { ...prev, codeInput: e.target.value } : null
+                    )
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="예: HME-14"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="structItemSafety">
+                  안전재고 <span className="font-normal text-gray-500">(기준·현재고 아님)</span>
+                </label>
+                <input
+                  id="structItemSafety"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={structureItemModal.safetyInput}
+                  onChange={(e) =>
+                    setStructureItemModal((prev) =>
+                      prev ? { ...prev, safetyInput: e.target.value } : null
+                    )
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="structItemUnit">
+                  단위
+                </label>
+                <input
+                  id="structItemUnit"
+                  value={structureItemModal.unitInput}
+                  onChange={(e) =>
+                    setStructureItemModal((prev) =>
+                      prev ? { ...prev, unitInput: e.target.value } : null
+                    )
+                  }
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="EA"
+                />
+              </div>
+              {structureItemFormError && (
+                <p className="text-sm font-medium text-red-600">{structureItemFormError}</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-4">
+              <button
+                type="button"
+                onClick={closeStructureItemModal}
+                className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={saveStructureItem}
+                className="rounded-md border border-blue-600 bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                저장
+              </button>
             </div>
           </div>
         </div>

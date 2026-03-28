@@ -3,6 +3,16 @@
 import { useEffect, useState } from 'react';
 import { Header, Footer } from '@/components/layout';
 import { db } from '@/lib/firebase';
+import {
+  INITIAL_METAL_FACE_SEAL_PRODUCTS,
+  INITIAL_MICRO_WELD_PRODUCTS,
+  INITIAL_TUBE_BUTT_WELD_PRODUCTS,
+} from '@/lib/inventory/microWeldSeed';
+import {
+  UHP_CATEGORY_TABS,
+  UHP_STATE_KEYS,
+  type UhpCategoryId,
+} from '@/lib/inventory/uhpInventoryHelpers';
 import { doc, onSnapshot } from 'firebase/firestore';
 
 type InventoryVariant = {
@@ -30,23 +40,25 @@ type InventoryProduct = {
   items: InventoryItem[];
 };
 
-const FALLBACK_PRODUCTS: InventoryProduct[] = [
-  {
-    name: 'Micro Elbow (HME)',
-    imageSrc: '/inventory/micro-elbow-hme.png',
-    items: [],
-  },
-];
+type UhpUserInventoryState = {
+  products: InventoryProduct[];
+  tubeButtWeldProducts: InventoryProduct[];
+  metalFaceSealProducts: InventoryProduct[];
+};
+
+const FALLBACK_UHP: UhpUserInventoryState = {
+  products: INITIAL_MICRO_WELD_PRODUCTS as InventoryProduct[],
+  tubeButtWeldProducts: INITIAL_TUBE_BUTT_WELD_PRODUCTS as InventoryProduct[],
+  metalFaceSealProducts: INITIAL_METAL_FACE_SEAL_PRODUCTS as InventoryProduct[],
+};
+
+const PRODUCT_LIST_PAGE_SIZE = 10;
 
 export default function InventoryStatusPage() {
-  const categories = [
-    'Micro Weld Fittings',
-    'Tube Butt Weld Fittings',
-    'Metal Face Seal Fittings',
-  ];
-  const [activeCategory, setActiveCategory] = useState(categories[0]);
+  const [activeCategoryId, setActiveCategoryId] = useState<UhpCategoryId>('microWeld');
   const [searchQuery, setSearchQuery] = useState('');
-  const [microWeldProducts, setMicroWeldProducts] = useState<InventoryProduct[]>(FALLBACK_PRODUCTS);
+  const [productListPage, setProductListPage] = useState(1);
+  const [uhpInventory, setUhpInventory] = useState<UhpUserInventoryState>(FALLBACK_UHP);
 
   useEffect(() => {
     const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
@@ -54,25 +66,43 @@ export default function InventoryStatusPage() {
       inventoryRef,
       (snapshot) => {
         if (!snapshot.exists()) {
-          setMicroWeldProducts(FALLBACK_PRODUCTS);
+          setUhpInventory(FALLBACK_UHP);
           return;
         }
-        const data = snapshot.data() as { products?: InventoryProduct[] } | undefined;
-        if (data?.products && Array.isArray(data.products)) {
-          setMicroWeldProducts(data.products);
-        } else {
-          setMicroWeldProducts(FALLBACK_PRODUCTS);
-        }
+        const data = snapshot.data() as
+          | {
+              products?: InventoryProduct[];
+              tubeButtWeldProducts?: InventoryProduct[];
+              metalFaceSealProducts?: InventoryProduct[];
+            }
+          | undefined;
+        setUhpInventory({
+          products: Array.isArray(data?.products)
+            ? data!.products!
+            : FALLBACK_UHP.products,
+          tubeButtWeldProducts: Array.isArray(data?.tubeButtWeldProducts)
+            ? data!.tubeButtWeldProducts!
+            : FALLBACK_UHP.tubeButtWeldProducts,
+          metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
+            ? data!.metalFaceSealProducts!
+            : FALLBACK_UHP.metalFaceSealProducts,
+        });
       },
       () => {
-        setMicroWeldProducts(FALLBACK_PRODUCTS);
+        setUhpInventory(FALLBACK_UHP);
       }
     );
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    setProductListPage(1);
+  }, [activeCategoryId, searchQuery]);
+
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const filteredMicroWeldProducts = microWeldProducts
+  const displayCategoryProducts = uhpInventory[UHP_STATE_KEYS[activeCategoryId]];
+  const filteredCategoryProducts = displayCategoryProducts
     .map((product) => {
       const isProductNameMatched = product.name.toLowerCase().includes(normalizedQuery);
       const filteredItems =
@@ -92,6 +122,24 @@ export default function InventoryStatusPage() {
       };
     })
     .filter((product) => product.filteredItems.length > 0);
+
+  const productListTotalPages = Math.max(
+    1,
+    Math.ceil(filteredCategoryProducts.length / PRODUCT_LIST_PAGE_SIZE)
+  );
+  const productListEffectivePage = Math.min(productListPage, productListTotalPages);
+  const pagedCategoryProducts = filteredCategoryProducts.slice(
+    (productListEffectivePage - 1) * PRODUCT_LIST_PAGE_SIZE,
+    productListEffectivePage * PRODUCT_LIST_PAGE_SIZE
+  );
+  const productListRangeStart =
+    filteredCategoryProducts.length === 0
+      ? 0
+      : (productListEffectivePage - 1) * PRODUCT_LIST_PAGE_SIZE + 1;
+  const productListRangeEnd = Math.min(
+    filteredCategoryProducts.length,
+    productListEffectivePage * PRODUCT_LIST_PAGE_SIZE
+  );
 
   const getVariantProductionPlanInfo = (item: InventoryItem, variantCode: string) => {
     const plans = (item.productionPlanHistory ?? []).filter(
@@ -140,110 +188,144 @@ export default function InventoryStatusPage() {
 
             <h2 className="text-lg font-semibold text-gray-900 mb-4">제품 카테고리</h2>
             <div className="flex flex-wrap gap-2">
-              {categories.map((category) => (
+              {UHP_CATEGORY_TABS.map(({ id, label }) => (
                 <button
-                  key={category}
+                  key={id}
                   type="button"
-                  onClick={() => setActiveCategory(category)}
+                  onClick={() => setActiveCategoryId(id)}
                   className={`rounded-md border px-4 py-2.5 text-sm font-medium transition-colors ${
-                    activeCategory === category
+                    activeCategoryId === id
                       ? 'border-blue-600 bg-blue-600 text-white'
                       : 'border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100'
                   }`}
                 >
-                  {category}
+                  {label}
                 </button>
               ))}
             </div>
-            {activeCategory === 'Micro Weld Fittings' && (
-              <div className="mt-6 space-y-4">
-                {filteredMicroWeldProducts.map((product) => (
-                  <div key={product.name} className="rounded-lg border border-gray-200 bg-white p-5">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">{product.name}</h3>
-                    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-                      <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                        <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
-                          <img
-                            src={product.imageSrc}
-                            alt={product.name}
-                            className="h-full w-full object-contain"
-                          />
-                        </div>
+            <div className="mt-6 space-y-4">
+              {pagedCategoryProducts.map((product) => (
+                <div key={product.name} className="rounded-lg border border-gray-200 bg-white p-5">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{product.name}</h3>
+                  <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+                    <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                      <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
+                        <img
+                          src={product.imageSrc}
+                          alt={product.name}
+                          className="h-full w-full object-contain"
+                        />
                       </div>
+                    </div>
 
-                      <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          {product.filteredItems.map((item) => (
-                            <div
-                              key={item.code}
-                              className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <p className="text-sm font-semibold text-gray-800">{item.code}</p>
-                                <span
-                                  className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700"
-                                >
-                                  총 현재고{' '}
-                                  {item.variants && item.variants.length > 0
-                                    ? item.variants.reduce(
-                                        (sum, variant) => sum + variant.currentStock,
-                                        0
-                                      )
-                                    : item.currentStock}{' '}
-                                  {item.unit}
-                                </span>
-                              </div>
-                              {item.variants && item.variants.length > 0 && (
-                                <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                                  {item.variants.map((variant) => (
-                                    (() => {
-                                      const variantPlanInfo = getVariantProductionPlanInfo(
-                                        item,
-                                        variant.code
-                                      );
-                                      const variantExpectedStock =
-                                        variant.currentStock + (variantPlanInfo?.totalPlanned ?? 0);
-                                      return (
-                                        <div
-                                          key={variant.code}
-                                          className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
-                                        >
-                                          <div className="flex items-center justify-between gap-1">
-                                            <span className="font-medium text-gray-700">{variant.code}</span>
-                                            <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
-                                              {variant.currentStock} {variant.unit}
+                    <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {product.filteredItems.map((item) => (
+                          <div
+                            key={item.code}
+                            className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-gray-800">{item.code}</p>
+                              <span
+                                className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700"
+                              >
+                                총 현재고{' '}
+                                {item.variants && item.variants.length > 0
+                                  ? item.variants.reduce(
+                                      (sum, variant) => sum + variant.currentStock,
+                                      0
+                                    )
+                                  : item.currentStock}{' '}
+                                {item.unit}
+                              </span>
+                            </div>
+                            {item.variants && item.variants.length > 0 && (
+                              <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                {item.variants.map((variant) => (
+                                  (() => {
+                                    const variantPlanInfo = getVariantProductionPlanInfo(
+                                      item,
+                                      variant.code
+                                    );
+                                    const variantExpectedStock =
+                                      variant.currentStock + (variantPlanInfo?.totalPlanned ?? 0);
+                                    return (
+                                      <div
+                                        key={variant.code}
+                                        className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
+                                      >
+                                        <div className="flex items-center justify-between gap-1">
+                                          <span className="font-medium text-gray-700">{variant.code}</span>
+                                          <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
+                                            {variant.currentStock} {variant.unit}
+                                          </span>
+                                        </div>
+                                        {variantPlanInfo && (
+                                          <div className="mt-1 flex items-center justify-between gap-1">
+                                            <span className="text-[10px] text-gray-500">
+                                              {variantPlanInfo.nearestDueDate ?? '-'}
+                                            </span>
+                                            <span className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700">
+                                              예상 {variantExpectedStock} {variant.unit}
                                             </span>
                                           </div>
-                                          {variantPlanInfo && (
-                                            <div className="mt-1 flex items-center justify-between gap-1">
-                                              <span className="text-[10px] text-gray-500">
-                                                {variantPlanInfo.nearestDueDate ?? '-'}
-                                              </span>
-                                              <span className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700">
-                                                예상 {variantExpectedStock} {variant.unit}
-                                              </span>
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })()
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
-                ))}
-                {filteredMicroWeldProducts.length === 0 && (
-                  <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-4 text-sm text-gray-500">
-                    검색 결과가 없습니다.
+                </div>
+              ))}
+              {filteredCategoryProducts.length === 0 && (
+                <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-4 text-sm text-gray-500">
+                  검색 결과가 없습니다.
+                </p>
+              )}
+              {filteredCategoryProducts.length > 0 && (
+                <div className="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-gray-600">
+                    제품 라인 {productListRangeStart}–{productListRangeEnd} / 전체{' '}
+                    {filteredCategoryProducts.length}건 (페이지당 {PRODUCT_LIST_PAGE_SIZE}건)
+                    {productListTotalPages > 1 && (
+                      <span className="text-gray-500">
+                        {' '}
+                        · {productListEffectivePage}/{productListTotalPages} 페이지
+                      </span>
+                    )}
                   </p>
-                )}
-              </div>
-            )}
+                  {productListTotalPages > 1 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setProductListPage((p) => Math.max(1, p - 1))}
+                        disabled={productListEffectivePage <= 1}
+                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        이전
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setProductListPage((p) => Math.min(productListTotalPages, p + 1))
+                        }
+                        disabled={productListEffectivePage >= productListTotalPages}
+                        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        다음
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </main>

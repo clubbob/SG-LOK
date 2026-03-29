@@ -7,6 +7,9 @@ import {
   INITIAL_MICRO_WELD_PRODUCTS,
   INITIAL_TUBE_BUTT_WELD_PRODUCTS,
   INVENTORY_SEED_VERSION,
+  mergeMissingHmcItemsFromSeed,
+  mergeMissingHmtbItemsFromSeed,
+  mergeMissingHmrtItemsFromSeed,
 } from '@/lib/inventory/microWeldSeed';
 import Link from 'next/link';
 import { buildCombinedHistoryRows, combinedHistoryRowMemo } from '@/lib/inventory/historyRows';
@@ -18,7 +21,7 @@ import {
   type UhpCategoryId,
 } from '@/lib/inventory/uhpInventoryHelpers';
 import { createEmptyInventoryItem } from '@/lib/inventory/itemFactory';
-import { persistUhpInventoryState } from '@/lib/inventory/persistUhp';
+import { dropRemovedDefaultCategoryProducts, persistUhpInventoryState } from '@/lib/inventory/persistUhp';
 import type {
   AdjustmentHistory,
   InboundHistory,
@@ -90,8 +93,6 @@ type ProductionPlanModalState = {
 type StructureItemModalState = {
   productName: string;
   codeInput: string;
-  safetyInput: string;
-  unitInput: string;
 };
 
 export default function AdminInventoryStatusPage() {
@@ -208,15 +209,57 @@ export default function AdminInventoryStatusPage() {
       return;
     }
 
-    setUhpInventory({
-      products: Array.isArray(data?.products) ? data.products : [...INITIAL_MICRO_WELD_PRODUCTS],
+    const merged: UhpInventoryState = {
+      products: Array.isArray(data?.products)
+        ? data.products
+        : [...INITIAL_MICRO_WELD_PRODUCTS],
       tubeButtWeldProducts: Array.isArray(data?.tubeButtWeldProducts)
         ? data.tubeButtWeldProducts
         : [...INITIAL_TUBE_BUTT_WELD_PRODUCTS],
       metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
         ? data.metalFaceSealProducts
         : [...INITIAL_METAL_FACE_SEAL_PRODUCTS],
-    });
+    };
+    let catalogProducts = merged.products;
+    const hmrtResult = mergeMissingHmrtItemsFromSeed(catalogProducts);
+    catalogProducts = hmrtResult.next;
+    const hmtbResult = mergeMissingHmtbItemsFromSeed(catalogProducts);
+    catalogProducts = hmtbResult.next;
+    const hmcResult = mergeMissingHmcItemsFromSeed(catalogProducts);
+    catalogProducts = hmcResult.next;
+    const catalogItemsMerged = hmrtResult.changed || hmtbResult.changed || hmcResult.changed;
+    const mergedWithCatalog: UhpInventoryState = { ...merged, products: catalogProducts };
+    const { next, shouldPersistSlice } = dropRemovedDefaultCategoryProducts(mergedWithCatalog);
+    if (catalogItemsMerged) {
+      try {
+        await setDoc(
+          inventoryRef,
+          {
+            products: next.products,
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        console.error('Micro Weld 도면 품목 보강 저장 오류:', error);
+      }
+    }
+    if (shouldPersistSlice) {
+      try {
+        await setDoc(
+          inventoryRef,
+          {
+            tubeButtWeldProducts: next.tubeButtWeldProducts,
+            metalFaceSealProducts: next.metalFaceSealProducts,
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        console.error('레거시 TBW/MFS 제품 라인 정리 저장 오류:', error);
+      }
+    }
+    setUhpInventory(next);
   }, []);
 
   useEffect(() => {
@@ -269,8 +312,6 @@ export default function AdminInventoryStatusPage() {
     setStructureItemModal({
       productName,
       codeInput: '',
-      safetyInput: '60',
-      unitInput: 'EA',
     });
     setStructureItemFormError('');
   };
@@ -278,12 +319,6 @@ export default function AdminInventoryStatusPage() {
   const saveStructureItem = () => {
     if (!structureItemModal) return;
     const m = structureItemModal;
-    const safety = Number(m.safetyInput);
-    const unit = m.unitInput.trim() || 'EA';
-    if (!Number.isInteger(safety) || safety < 0) {
-      setStructureItemFormError('안전재고는 0 이상의 정수로 입력해 주세요.');
-      return;
-    }
     const cat = findUhpCategoryByProductName(uhpInventory, m.productName);
     if (!cat) {
       setStructureItemFormError('제품을 찾을 수 없습니다.');
@@ -307,7 +342,7 @@ export default function AdminInventoryStatusPage() {
       setStructureItemFormError('이미 같은 품목 코드가 있습니다.');
       return;
     }
-    const newItem = createEmptyInventoryItem(code, safety, unit);
+    const newItem = createEmptyInventoryItem(code, 0);
     slice[pi] = { ...product, items: [...product.items, newItem] };
 
     next[key] = slice;
@@ -1067,7 +1102,7 @@ export default function AdminInventoryStatusPage() {
           <h1 className="text-2xl font-bold text-gray-900">UHP 재고현황</h1>
           <p className="text-gray-600 mt-2">
             입고·출고·재고조정·생산계획·이력과 함께, 각 제품 카드에서{' '}
-            <span className="font-medium text-gray-800">품목 코드·안전재고</span>는 「품목 추가」로 등록할 수 있습니다.
+            <span className="font-medium text-gray-800">품목 코드</span>는 「품목 추가」로 등록할 수 있습니다.
           </p>
           <p className="mt-2 text-sm text-gray-600">
             <span className="font-medium text-gray-800">제품 라인(시리즈명·이미지)</span>만 →{' '}
@@ -1167,7 +1202,7 @@ export default function AdminInventoryStatusPage() {
                   <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                     <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-xs text-gray-600">
-                        새 품목 코드는 「품목 추가」로 등록합니다. (안전재고는 경고 기준이며 현재고와 다릅니다.)
+                        새 품목 코드는 「품목 추가」로 등록합니다.
                       </p>
                       <button
                         type="button"
@@ -2026,40 +2061,6 @@ export default function AdminInventoryStatusPage() {
                   }
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                   placeholder="예: HME-14"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="structItemSafety">
-                  안전재고 <span className="font-normal text-gray-500">(기준·현재고 아님)</span>
-                </label>
-                <input
-                  id="structItemSafety"
-                  type="number"
-                  min={0}
-                  step={1}
-                  value={structureItemModal.safetyInput}
-                  onChange={(e) =>
-                    setStructureItemModal((prev) =>
-                      prev ? { ...prev, safetyInput: e.target.value } : null
-                    )
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="structItemUnit">
-                  단위
-                </label>
-                <input
-                  id="structItemUnit"
-                  value={structureItemModal.unitInput}
-                  onChange={(e) =>
-                    setStructureItemModal((prev) =>
-                      prev ? { ...prev, unitInput: e.target.value } : null
-                    )
-                  }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="EA"
                 />
               </div>
               {structureItemFormError && (

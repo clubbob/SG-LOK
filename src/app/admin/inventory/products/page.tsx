@@ -8,8 +8,11 @@ import {
   INITIAL_MICRO_WELD_PRODUCTS,
   INITIAL_TUBE_BUTT_WELD_PRODUCTS,
   INVENTORY_SEED_VERSION,
+  mergeMissingHmcItemsFromSeed,
+  mergeMissingHmtbItemsFromSeed,
+  mergeMissingHmrtItemsFromSeed,
 } from "@/lib/inventory/microWeldSeed";
-import { persistUhpInventoryState } from "@/lib/inventory/persistUhp";
+import { dropRemovedDefaultCategoryProducts, persistUhpInventoryState } from "@/lib/inventory/persistUhp";
 import type { InventoryProduct, UhpInventoryState } from "@/lib/inventory/types";
 import {
   UHP_CATEGORY_TABS,
@@ -89,15 +92,57 @@ export default function AdminInventoryProductsPage() {
       return;
     }
 
-    setUhpInventory({
-      products: Array.isArray(data?.products) ? data.products : [...INITIAL_MICRO_WELD_PRODUCTS],
+    const merged: UhpInventoryState = {
+      products: Array.isArray(data?.products)
+        ? data.products
+        : [...INITIAL_MICRO_WELD_PRODUCTS],
       tubeButtWeldProducts: Array.isArray(data?.tubeButtWeldProducts)
         ? data.tubeButtWeldProducts
         : [...INITIAL_TUBE_BUTT_WELD_PRODUCTS],
       metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
         ? data.metalFaceSealProducts
         : [...INITIAL_METAL_FACE_SEAL_PRODUCTS],
-    });
+    };
+    let catalogProducts = merged.products;
+    const hmrtResult = mergeMissingHmrtItemsFromSeed(catalogProducts);
+    catalogProducts = hmrtResult.next;
+    const hmtbResult = mergeMissingHmtbItemsFromSeed(catalogProducts);
+    catalogProducts = hmtbResult.next;
+    const hmcResult = mergeMissingHmcItemsFromSeed(catalogProducts);
+    catalogProducts = hmcResult.next;
+    const catalogItemsMerged = hmrtResult.changed || hmtbResult.changed || hmcResult.changed;
+    const mergedWithCatalog: UhpInventoryState = { ...merged, products: catalogProducts };
+    const { next, shouldPersistSlice } = dropRemovedDefaultCategoryProducts(mergedWithCatalog);
+    if (catalogItemsMerged) {
+      try {
+        await setDoc(
+          inventoryRef,
+          {
+            products: next.products,
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        console.error("Micro Weld 도면 품목 보강 저장 오류:", error);
+      }
+    }
+    if (shouldPersistSlice) {
+      try {
+        await setDoc(
+          inventoryRef,
+          {
+            tubeButtWeldProducts: next.tubeButtWeldProducts,
+            metalFaceSealProducts: next.metalFaceSealProducts,
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        console.error("레거시 TBW/MFS 제품 라인 정리 저장 오류:", error);
+      }
+    }
+    setUhpInventory(next);
     setListenError("");
   }, []);
 
@@ -247,7 +292,7 @@ export default function AdminInventoryProductsPage() {
             저장 시 Firestore에 반영되며 <strong>UHP 재고현황</strong>과 같은 목록을 공유합니다.
           </p>
           <p className="mt-2 text-sm text-gray-600">
-            <span className="font-medium text-gray-800">품목 코드·안전재고·재고 수량·입출고·생산계획·이력</span> →{" "}
+            <span className="font-medium text-gray-800">품목 코드·재고 수량·입출고·생산계획·이력</span> →{" "}
             <Link
               href="/admin/inventory/status"
               className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900"
@@ -369,7 +414,7 @@ export default function AdminInventoryProductsPage() {
               </div>
 
               <p className="mt-4 rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-600">
-                품목 코드·안전재고·세부 variant(6종)는{" "}
+                품목 코드·세부 variant(6종)는{" "}
                 <Link
                   href="/admin/inventory/status"
                   className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900"

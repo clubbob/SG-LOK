@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { db } from "@/lib/firebase";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { db, storage } from "@/lib/firebase";
 import {
   INITIAL_METAL_FACE_SEAL_PRODUCTS,
   INITIAL_MICRO_WELD_PRODUCTS,
@@ -23,6 +23,7 @@ import {
   Timestamp,
   type DocumentSnapshot,
 } from "firebase/firestore";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 
 function cloneUhp(state: UhpInventoryState): UhpInventoryState {
   return JSON.parse(JSON.stringify(state)) as UhpInventoryState;
@@ -38,6 +39,8 @@ export default function AdminInventoryProductsPage() {
   const [listenError, setListenError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const productImageFileRef = useRef<HTMLInputElement>(null);
 
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [productModalMode, setProductModalMode] = useState<"add" | "edit">("add");
@@ -45,7 +48,7 @@ export default function AdminInventoryProductsPage() {
   const [productNameInput, setProductNameInput] = useState("");
   const [productImageInput, setProductImageInput] = useState("");
 
-  const [deleteTarget, setDeleteTarget] = useState<{ productIndex: number } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ productName: string } | null>(null);
 
   const applyInventoryDocument = useCallback(async (snapshot: DocumentSnapshot) => {
     const inventoryRef = doc(db, "inventory", "microWeldProducts");
@@ -114,6 +117,7 @@ export default function AdminInventoryProductsPage() {
   }, [applyInventoryDocument]);
 
   const categoryKey = UHP_STATE_KEYS[activeCategoryId];
+  /** Firestore 배열 순서 = 제품등록·재고현황 표시 순서 (위/아래 버튼으로 변경) */
   const categoryProducts = uhpInventory[categoryKey];
 
   const persistState = async (next: UhpInventoryState) => {
@@ -135,6 +139,8 @@ export default function AdminInventoryProductsPage() {
     setProductModalIndex(null);
     setProductNameInput("");
     setProductImageInput("/inventory/micro-elbow-hme.png");
+    setSaveError("");
+    if (productImageFileRef.current) productImageFileRef.current.value = "";
     setProductModalOpen(true);
   };
 
@@ -145,7 +151,38 @@ export default function AdminInventoryProductsPage() {
     setProductModalIndex(index);
     setProductNameInput(p.name);
     setProductImageInput(p.imageSrc);
+    setSaveError("");
+    if (productImageFileRef.current) productImageFileRef.current.value = "";
     setProductModalOpen(true);
+  };
+
+  const handleProductImageFile = async (file: File | null) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setSaveError("이미지 파일(jpg, png, webp 등)만 올릴 수 있습니다.");
+      return;
+    }
+    const maxBytes = 8 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      setSaveError("이미지는 8MB 이하만 업로드할 수 있습니다.");
+      return;
+    }
+    setSaveError("");
+    setImageUploading(true);
+    try {
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `inventory/product-images/${Date.now()}_${safe}`;
+      const storageRef = ref(storage, path);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      setProductImageInput(url);
+    } catch (err) {
+      console.error("제품 이미지 업로드 오류:", err);
+      setSaveError("이미지 업로드에 실패했습니다. Storage 권한·용량을 확인해 주세요.");
+    } finally {
+      setImageUploading(false);
+      if (productImageFileRef.current) productImageFileRef.current.value = "";
+    }
   };
 
   const saveProductModal = async () => {
@@ -179,11 +216,22 @@ export default function AdminInventoryProductsPage() {
     await persistState(next);
   };
 
+  const moveProductLine = async (index: number, delta: -1 | 1) => {
+    const slice = [...uhpInventory[categoryKey]];
+    const j = index + delta;
+    if (j < 0 || j >= slice.length) return;
+    const next = cloneUhp(uhpInventory);
+    const reordered = [...slice];
+    [reordered[index], reordered[j]] = [reordered[j], reordered[index]];
+    next[categoryKey] = reordered;
+    await persistState(next);
+  };
+
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     const next = cloneUhp(uhpInventory);
     const slice = [...next[categoryKey]];
-    next[categoryKey] = slice.filter((_, i) => i !== deleteTarget.productIndex);
+    next[categoryKey] = slice.filter((p) => p.name !== deleteTarget.productName);
     setDeleteTarget(null);
     setSaveError("");
     await persistState(next);
@@ -195,8 +243,8 @@ export default function AdminInventoryProductsPage() {
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold text-gray-900">UHP 제품등록</h1>
           <p className="text-gray-600 mt-2">
-            <strong>제품 라인(시리즈)</strong>의 이름과 이미지 경로만 이 메뉴에서 등록·수정·삭제합니다. 저장 시 Firestore에
-            반영되며 <strong>UHP 재고현황</strong>과 같은 목록을 공유합니다.
+            <strong>제품 라인(시리즈)</strong>의 이름과 이미지(파일 업로드 또는 URL·경로)만 이 메뉴에서 등록·수정·삭제합니다.
+            저장 시 Firestore에 반영되며 <strong>UHP 재고현황</strong>과 같은 목록을 공유합니다.
           </p>
           <p className="mt-2 text-sm text-gray-600">
             <span className="font-medium text-gray-800">품목 코드·안전재고·재고 수량·입출고·생산계획·이력</span> →{" "}
@@ -210,7 +258,7 @@ export default function AdminInventoryProductsPage() {
           {listenError && (
             <p className="mt-2 text-sm font-medium text-red-600">{listenError}</p>
           )}
-          {saveError && (
+          {saveError && !productModalOpen && (
             <p className="mt-2 text-sm font-medium text-red-600">{saveError}</p>
           )}
           {saving && <p className="mt-2 text-sm text-blue-600">저장 중…</p>}
@@ -243,9 +291,14 @@ export default function AdminInventoryProductsPage() {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <p className="text-sm text-gray-600">
-            등록된 제품 라인 <span className="font-semibold text-gray-900">{categoryProducts.length}</span>개
-          </p>
+          <div className="text-sm text-gray-600">
+            <p>
+              등록된 제품 라인 <span className="font-semibold text-gray-900">{categoryProducts.length}</span>개
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              표시 순서는 「위로」「아래로」로 바꿀 수 있으며 재고현황과 동일하게 저장됩니다.
+            </p>
+          </div>
           <button
             type="button"
             onClick={openAddProduct}
@@ -258,10 +311,7 @@ export default function AdminInventoryProductsPage() {
 
         <div className="space-y-6">
           {categoryProducts.map((product, pi) => (
-            <div
-              key={`${product.name}-${pi}`}
-              className="rounded-lg border border-gray-200 bg-gray-50/50 p-4"
-            >
+            <div key={product.name} className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex gap-4 min-w-0">
                   <div className="h-24 w-24 shrink-0 overflow-hidden rounded-md border border-gray-200 bg-white">
@@ -276,7 +326,29 @@ export default function AdminInventoryProductsPage() {
                     <p className="text-xs text-gray-500 mt-1 break-all">{product.imageSrc}</p>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
+                    <button
+                      type="button"
+                      onClick={() => void moveProductLine(pi, -1)}
+                      disabled={saving || pi === 0}
+                      title="위로 이동"
+                      aria-label="위로 이동"
+                      className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      위로
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void moveProductLine(pi, 1)}
+                      disabled={saving || pi === categoryProducts.length - 1}
+                      title="아래로 이동"
+                      aria-label="아래로 이동"
+                      className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      아래로
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => openEditProduct(pi)}
@@ -287,7 +359,7 @@ export default function AdminInventoryProductsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDeleteTarget({ productIndex: pi })}
+                    onClick={() => setDeleteTarget({ productName: product.name })}
                     disabled={saving}
                     className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
                   >
@@ -326,10 +398,16 @@ export default function AdminInventoryProductsPage() {
                 {productModalMode === "add" ? "제품 라인 추가" : "제품 라인 수정"}
               </h3>
               <p className="mt-1 text-xs text-gray-500">
-                재고현황에 표시되는 제품명·이미지 경로입니다.
+                재고현황에 표시되는 제품명·이미지입니다. 파일을 올리면 Firebase Storage에 저장되고 주소가
+                자동 입력됩니다.
               </p>
             </div>
             <div className="space-y-4 px-5 py-4">
+              {saveError && (
+                <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                  {saveError}
+                </p>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="prodName">
                   제품명
@@ -343,22 +421,58 @@ export default function AdminInventoryProductsPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="prodImg">
-                  이미지 경로
+                <span className="mb-1 block text-sm font-medium text-gray-700">이미지</span>
+                <input
+                  ref={productImageFileRef}
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  id="prodImgFile"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] ?? null;
+                    void handleProductImageFile(f);
+                  }}
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => productImageFileRef.current?.click()}
+                    disabled={imageUploading || saving}
+                    className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100 disabled:opacity-50"
+                  >
+                    {imageUploading ? "업로드 중…" : "파일에서 이미지 선택"}
+                  </button>
+                  {productImageInput.trim() && (
+                    <div className="mt-2 w-full rounded-md border border-gray-200 bg-gray-50 p-2">
+                      <p className="mb-1 text-xs text-gray-500">미리보기</p>
+                      {/* eslint-disable-next-line @next/next/no-img-element -- 외부 Storage URL·상대경로 혼용 */}
+                      <img
+                        src={productImageInput.trim()}
+                        alt=""
+                        className="mx-auto max-h-36 max-w-full object-contain"
+                      />
+                    </div>
+                  )}
+                </div>
+                <label className="mb-1 mt-3 block text-sm font-medium text-gray-700" htmlFor="prodImg">
+                  이미지 URL 또는 경로 (직접 입력)
                 </label>
                 <input
                   id="prodImg"
                   value={productImageInput}
                   onChange={(e) => setProductImageInput(e.target.value)}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="/inventory/..."
+                  placeholder="업로드 시 자동 입력되거나, /inventory/... 또는 https://..."
                 />
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-gray-200 px-5 py-4">
               <button
                 type="button"
-                onClick={() => setProductModalOpen(false)}
+                onClick={() => {
+                  setProductModalOpen(false);
+                  setSaveError("");
+                }}
                 className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
               >
                 취소
@@ -366,7 +480,7 @@ export default function AdminInventoryProductsPage() {
               <button
                 type="button"
                 onClick={() => void saveProductModal()}
-                disabled={saving}
+                disabled={saving || imageUploading}
                 className="rounded-md border border-blue-600 bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               >
                 저장

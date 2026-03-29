@@ -3,8 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build --turbopack",
+    "clean": "npx --yes rimraf@5 .next .next-alt",
+    "dev": "cross-env NEXT_USE_ALT_DIST=1 next dev",
+    "dev:classic": "next dev",
+    "dev:alt": "cross-env NEXT_USE_ALT_DIST=1 next dev",
+    "dev:clean": "npm run clean && npm run dev",
+    "dev:turbo": "cross-env NEXT_USE_ALT_DIST=1 next dev --turbopack",
+    "build": "next build",
+    "build:alt": "cross-env NEXT_USE_ALT_DIST=1 next build",
+    "build:clean": "npm run clean && npm run build",
+    "build:turbo": "next build --turbopack",
     "start": "next start",
     "lint": "eslint",
     "export": "next build",
@@ -24,6 +32,7 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

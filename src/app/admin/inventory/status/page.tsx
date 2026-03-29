@@ -24,6 +24,7 @@ import {
   type UhpCategoryId,
 } from '@/lib/inventory/uhpInventoryHelpers';
 import { createEmptyInventoryItem } from '@/lib/inventory/itemFactory';
+import { filterProductsBySearchQuery, pickCategoryIdForSearch } from '@/lib/inventory/searchFilter';
 import { dropRemovedDefaultCategoryProducts, persistUhpInventoryState } from '@/lib/inventory/persistUhp';
 import type {
   AdjustmentHistory,
@@ -173,6 +174,15 @@ export default function AdminInventoryStatusPage() {
   useEffect(() => {
     setProductListPage(1);
   }, [activeCategoryId, searchQuery]);
+
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length === 0) return;
+    const nextTab = pickCategoryIdForSearch(uhpInventory, q, 'admin');
+    if (nextTab != null && nextTab !== activeCategoryId) {
+      setActiveCategoryId(nextTab);
+    }
+  }, [searchQuery, uhpInventory, activeCategoryId]);
 
   const applyInventoryDocument = useCallback(async (snapshot: DocumentSnapshot) => {
     const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
@@ -1096,33 +1106,28 @@ export default function AdminInventoryStatusPage() {
     (historyViewCurrentPage - 1) * HISTORY_PAGE_SIZE,
     historyViewCurrentPage * HISTORY_PAGE_SIZE
   );
-  const displayCategoryProducts = uhpInventory[UHP_STATE_KEYS[activeCategoryId]];
-  const filteredCategoryProducts = displayCategoryProducts
-    .map((product) => {
-      const isProductNameMatched = product.name.toLowerCase().includes(normalizedQuery);
-      const filteredItems =
-        normalizedQuery === '' || isProductNameMatched
-          ? product.items
-          : product.items.filter(
-              (item) =>
-                item.code.toLowerCase().includes(normalizedQuery) ||
-                item.variants?.some((variant) =>
-                  variant.code.toLowerCase().includes(normalizedQuery)
-                )
-            );
-
-      return {
-        ...product,
-        filteredItems,
-        isProductNameMatched,
-      };
-    })
-    .filter(
-      (product) =>
-        product.filteredItems.length > 0 ||
-        normalizedQuery === '' ||
-        product.isProductNameMatched
-    );
+  const isGlobalSearch = normalizedQuery.length > 0;
+  const filteredCategoryProducts = isGlobalSearch
+    ? UHP_CATEGORY_TABS.flatMap(({ id, label }) =>
+        filterProductsBySearchQuery(
+          uhpInventory[UHP_STATE_KEYS[id]],
+          normalizedQuery,
+          'admin'
+        ).map((p) => ({
+          ...p,
+          categoryLabel: label,
+          listKey: `${id}::${p.name}`,
+        }))
+      )
+    : filterProductsBySearchQuery(
+        uhpInventory[UHP_STATE_KEYS[activeCategoryId]],
+        normalizedQuery,
+        'admin'
+      ).map((p) => ({
+        ...p,
+        categoryLabel: undefined,
+        listKey: `${activeCategoryId}::${p.name}`,
+      }));
 
   const productListTotalPages = Math.max(
     1,
@@ -1230,10 +1235,15 @@ export default function AdminInventoryStatusPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="제품명 검색..."
+              placeholder="제품명·품목코드 검색 (전체 카테고리)"
               className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
           </div>
+          {isGlobalSearch && (
+            <p className="mt-1.5 text-xs text-gray-500">
+              Micro / Tube Butt Weld / Metal Face Seal 전체에서 검색합니다.
+            </p>
+          )}
         </div>
 
         <h2 className="text-lg font-semibold text-gray-900 mb-4">제품 카테고리</h2>
@@ -1255,8 +1265,15 @@ export default function AdminInventoryStatusPage() {
         </div>
         <div className="mt-6 space-y-4">
             {pagedCategoryProducts.map((product) => (
-              <div key={product.name} className="rounded-lg border border-gray-200 bg-white p-5">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">{product.name}</h3>
+              <div key={product.listKey} className="rounded-lg border border-gray-200 bg-white p-5">
+                <h3 className="mb-4 text-lg font-semibold text-gray-900">
+                  {product.name}
+                  {product.categoryLabel != null && (
+                    <span className="ml-2 align-middle text-sm font-normal text-blue-700">
+                      ({product.categoryLabel})
+                    </span>
+                  )}
+                </h3>
                 <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
                   <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                     <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">

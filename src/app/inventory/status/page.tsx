@@ -7,12 +7,15 @@ import {
   INITIAL_METAL_FACE_SEAL_PRODUCTS,
   INITIAL_MICRO_WELD_PRODUCTS,
   INITIAL_TUBE_BUTT_WELD_PRODUCTS,
+  mergeLegacyLongElbowIntoTubeButtWeld,
+  stripHle02ItemFromLongElbowLine,
 } from '@/lib/inventory/microWeldSeed';
 import {
   UHP_CATEGORY_TABS,
   UHP_STATE_KEYS,
   type UhpCategoryId,
 } from '@/lib/inventory/uhpInventoryHelpers';
+import type { InventoryProduct as CatalogInventoryProduct } from '@/lib/inventory/types';
 import { doc, onSnapshot } from 'firebase/firestore';
 
 type InventoryVariant = {
@@ -74,15 +77,24 @@ export default function InventoryStatusPage() {
               products?: InventoryProduct[];
               tubeButtWeldProducts?: InventoryProduct[];
               metalFaceSealProducts?: InventoryProduct[];
+              longElbowProducts?: InventoryProduct[];
             }
           | undefined;
+        const tubeBase = Array.isArray(data?.tubeButtWeldProducts)
+          ? data!.tubeButtWeldProducts!
+          : FALLBACK_UHP.tubeButtWeldProducts;
+        const { next: tubeAfterLegacy } = mergeLegacyLongElbowIntoTubeButtWeld(
+          tubeBase as CatalogInventoryProduct[],
+          Array.isArray(data?.longElbowProducts)
+            ? (data.longElbowProducts as CatalogInventoryProduct[])
+            : undefined
+        );
+        const { next: tubeMerged } = stripHle02ItemFromLongElbowLine(tubeAfterLegacy);
         setUhpInventory({
           products: Array.isArray(data?.products)
             ? data!.products!
             : FALLBACK_UHP.products,
-          tubeButtWeldProducts: Array.isArray(data?.tubeButtWeldProducts)
-            ? data!.tubeButtWeldProducts!
-            : FALLBACK_UHP.tubeButtWeldProducts,
+          tubeButtWeldProducts: tubeMerged as InventoryProduct[],
           metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
             ? data!.metalFaceSealProducts!
             : FALLBACK_UHP.metalFaceSealProducts,

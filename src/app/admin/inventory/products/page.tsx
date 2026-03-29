@@ -4,13 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { db, storage } from "@/lib/firebase";
 import {
+  ensureSeedProductLinesInCategory,
   INITIAL_METAL_FACE_SEAL_PRODUCTS,
   INITIAL_MICRO_WELD_PRODUCTS,
   INITIAL_TUBE_BUTT_WELD_PRODUCTS,
   INVENTORY_SEED_VERSION,
+  mergeLegacyLongElbowIntoTubeButtWeld,
   mergeMissingHmcItemsFromSeed,
   mergeMissingHmtbItemsFromSeed,
   mergeMissingHmrtItemsFromSeed,
+  stripHle02ItemFromLongElbowLine,
 } from "@/lib/inventory/microWeldSeed";
 import { dropRemovedDefaultCategoryProducts, persistUhpInventoryState } from "@/lib/inventory/persistUhp";
 import type { InventoryProduct, UhpInventoryState } from "@/lib/inventory/types";
@@ -20,6 +23,7 @@ import {
   type UhpCategoryId,
 } from "@/lib/inventory/uhpInventoryHelpers";
 import {
+  deleteField,
   doc,
   onSnapshot,
   setDoc,
@@ -59,6 +63,7 @@ export default function AdminInventoryProductsPage() {
       products: INITIAL_MICRO_WELD_PRODUCTS,
       tubeButtWeldProducts: INITIAL_TUBE_BUTT_WELD_PRODUCTS,
       metalFaceSealProducts: INITIAL_METAL_FACE_SEAL_PRODUCTS,
+      longElbowProducts: deleteField(),
       inventorySeedVersion: INVENTORY_SEED_VERSION,
       updatedAt: Timestamp.now(),
     };
@@ -78,13 +83,52 @@ export default function AdminInventoryProductsPage() {
           products?: InventoryProduct[];
           tubeButtWeldProducts?: InventoryProduct[];
           metalFaceSealProducts?: InventoryProduct[];
+          longElbowProducts?: InventoryProduct[];
           inventorySeedVersion?: number;
         }
       | undefined;
+    const raw = snapshot.data() as Record<string, unknown> | undefined;
+    const hasLegacyLongElbowField =
+      raw != null && Object.prototype.hasOwnProperty.call(raw, "longElbowProducts");
     const needReseed = data?.inventorySeedVersion !== INVENTORY_SEED_VERSION;
     if (needReseed) {
+      const existingProducts = Array.isArray(data?.products) ? data.products : [];
+      const tubeBaseReseed = Array.isArray(data?.tubeButtWeldProducts)
+        ? data.tubeButtWeldProducts
+        : [];
+      const existingMetalReseed = Array.isArray(data?.metalFaceSealProducts)
+        ? data.metalFaceSealProducts
+        : [];
+      const elbowForReseed = mergeLegacyLongElbowIntoTubeButtWeld(
+        tubeBaseReseed,
+        Array.isArray(data?.longElbowProducts) ? data.longElbowProducts : undefined
+      );
+      const tubeStrippedReseed = stripHle02ItemFromLongElbowLine(elbowForReseed.next);
+      const tubeForReseed = ensureSeedProductLinesInCategory(
+        tubeStrippedReseed.next,
+        INITIAL_TUBE_BUTT_WELD_PRODUCTS
+      );
+      const metalForReseed = ensureSeedProductLinesInCategory(
+        existingMetalReseed,
+        INITIAL_METAL_FACE_SEAL_PRODUCTS
+      );
+      const productsForReseed = ensureSeedProductLinesInCategory(
+        existingProducts,
+        INITIAL_MICRO_WELD_PRODUCTS
+      );
       try {
-        await setDoc(inventoryRef, reseedPayload, { merge: true });
+        await setDoc(
+          inventoryRef,
+          {
+            products: productsForReseed.next,
+            tubeButtWeldProducts: tubeForReseed.next,
+            metalFaceSealProducts: metalForReseed.next,
+            longElbowProducts: deleteField(),
+            inventorySeedVersion: INVENTORY_SEED_VERSION,
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true }
+        );
       } catch (error) {
         console.error("재고 시드 재적용 오류:", error);
         setListenError("재고 시드 재적용에 실패했습니다.");
@@ -92,13 +136,19 @@ export default function AdminInventoryProductsPage() {
       return;
     }
 
+    const tubeBase = Array.isArray(data?.tubeButtWeldProducts)
+      ? data.tubeButtWeldProducts
+      : [...INITIAL_TUBE_BUTT_WELD_PRODUCTS];
+    const elbowMerge = mergeLegacyLongElbowIntoTubeButtWeld(
+      tubeBase,
+      Array.isArray(data?.longElbowProducts) ? data.longElbowProducts : undefined
+    );
+    const hle02Strip = stripHle02ItemFromLongElbowLine(elbowMerge.next);
     const merged: UhpInventoryState = {
       products: Array.isArray(data?.products)
         ? data.products
         : [...INITIAL_MICRO_WELD_PRODUCTS],
-      tubeButtWeldProducts: Array.isArray(data?.tubeButtWeldProducts)
-        ? data.tubeButtWeldProducts
-        : [...INITIAL_TUBE_BUTT_WELD_PRODUCTS],
+      tubeButtWeldProducts: hle02Strip.next,
       metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
         ? data.metalFaceSealProducts
         : [...INITIAL_METAL_FACE_SEAL_PRODUCTS],
@@ -113,6 +163,25 @@ export default function AdminInventoryProductsPage() {
     const catalogItemsMerged = hmrtResult.changed || hmtbResult.changed || hmcResult.changed;
     const mergedWithCatalog: UhpInventoryState = { ...merged, products: catalogProducts };
     const { next, shouldPersistSlice } = dropRemovedDefaultCategoryProducts(mergedWithCatalog);
+    const shouldPersistLegacyLongElbowMerge =
+      elbowMerge.changed ||
+      Boolean(hasLegacyLongElbowField) ||
+      hle02Strip.changed;
+    if (shouldPersistLegacyLongElbowMerge) {
+      try {
+        await setDoc(
+          inventoryRef,
+          {
+            tubeButtWeldProducts: next.tubeButtWeldProducts,
+            longElbowProducts: deleteField(),
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        console.error("Long Elbow(Tube) 마이그레이션 저장 오류:", error);
+      }
+    }
     if (catalogItemsMerged) {
       try {
         await setDoc(

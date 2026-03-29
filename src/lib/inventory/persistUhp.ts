@@ -16,7 +16,11 @@ export function dropRemovedDefaultCategoryProducts(state: UhpInventoryState): {
     tube.length !== state.tubeButtWeldProducts.length ||
     metal.length !== state.metalFaceSealProducts.length;
   return {
-    next: { ...state, tubeButtWeldProducts: tube, metalFaceSealProducts: metal },
+    next: {
+      ...state,
+      tubeButtWeldProducts: tube,
+      metalFaceSealProducts: metal,
+    },
     shouldPersistSlice,
   };
 }

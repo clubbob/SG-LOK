@@ -30,7 +30,7 @@ function buildProductLine(
   };
 }
 
-export const INVENTORY_SEED_VERSION = 11;
+export const INVENTORY_SEED_VERSION = 16;
 
 /** HMVE — 도면 Part No. HMVE-04·06·08 계열 */
 const HMVE_PRODUCT: InventoryProduct = {
@@ -220,10 +220,133 @@ export const INITIAL_MICRO_WELD_PRODUCTS: InventoryProduct[] = [
   HMC_PRODUCT,
 ];
 
-/** TBW / MFS 기본 제품 라인 제거 — 필요 시 제품등록에서 카테고리별로 추가 */
-export const INITIAL_TUBE_BUTT_WELD_PRODUCTS: InventoryProduct[] = [];
+/** HLE Long Elbow — 02 규격 미사용, 04·06·08·12 만 */
+const HLE_TUBE_SIZE_ROWS: { size: string; safetyStock: number }[] = [
+  { size: '04', safetyStock: 60 },
+  { size: '06', safetyStock: 60 },
+  { size: '08', safetyStock: 70 },
+  { size: '12', safetyStock: 45 },
+];
 
-export const INITIAL_METAL_FACE_SEAL_PRODUCTS: InventoryProduct[] = [];
+const LONG_ELBOW_HLE_LINE_NAME = 'Long Elbow (HLE)';
+
+/**
+ * Tube Butt Weld 카테고리 기본 제품 라인 (Long Elbow HLE는 별도 탭이 아님).
+ */
+export const INITIAL_TUBE_BUTT_WELD_PRODUCTS: InventoryProduct[] = [
+  {
+    name: LONG_ELBOW_HLE_LINE_NAME,
+    imageSrc: '/inventory/micro-elbow-hme.png',
+    items: HLE_TUBE_SIZE_ROWS.map(({ size, safetyStock }) =>
+      createEmptyInventoryItem(`HLE-${size}`, safetyStock)
+    ),
+  },
+];
+
+/**
+ * Metal Face Seal — 관리 화면에서 이름·이미지·품목을 바꿀 수 있는 샘플 1라인.
+ * (레거시 제거 대상 이름 `Metal Face Seal Elbow (MFS)` 와는 다르게 둠)
+ */
+export const INITIAL_METAL_FACE_SEAL_PRODUCTS: InventoryProduct[] = [
+  {
+    name: 'Metal Face Seal Fitting (Sample)',
+    imageSrc: '/inventory/micro-elbow-hme.png',
+    items: [
+      createEmptyInventoryItem('MFS-04', 60),
+      createEmptyInventoryItem('MFS-06', 60),
+      createEmptyInventoryItem('MFS-08', 70),
+    ],
+  },
+];
+
+/**
+ * Long Elbow(HLE) 제품 라인에서 품목 `HLE-02` 를 제거합니다(레거시 Firestore 정리).
+ */
+export function stripHle02ItemFromLongElbowLine(
+  tubeButtWeldProducts: InventoryProduct[]
+): { next: InventoryProduct[]; changed: boolean } {
+  let changed = false;
+  const next = tubeButtWeldProducts.map((p) => {
+    if (p.name !== LONG_ELBOW_HLE_LINE_NAME) return p;
+    const filtered = p.items.filter((item) => item.code.trim().toUpperCase() !== 'HLE-02');
+    if (filtered.length === p.items.length) return p;
+    changed = true;
+    return { ...p, items: filtered };
+  });
+  return { next, changed };
+}
+
+/**
+ * 시드에 정의된 제품 라인(제품명 기준)이 없으면 끝에 추가하고,
+ * 같은 이름이 있으면 시드에만 있는 품목(code)만 붙입니다.
+ * `inventorySeedVersion` 갱신 시 Firestore의 기존 제품을 통째로 덮어쓰지 않기 위함.
+ */
+export function ensureSeedProductLinesInCategory(
+  existing: InventoryProduct[],
+  seedLines: InventoryProduct[]
+): { next: InventoryProduct[]; changed: boolean } {
+  if (seedLines.length === 0) {
+    return { next: existing, changed: false };
+  }
+  let changed = false;
+  const next: InventoryProduct[] = existing.map(
+    (p) => JSON.parse(JSON.stringify(p)) as InventoryProduct
+  );
+  const indexByName = new Map(next.map((p, i) => [p.name, i] as const));
+  for (const seed of seedLines) {
+    const seedClone = JSON.parse(JSON.stringify(seed)) as InventoryProduct;
+    const idx = indexByName.get(seedClone.name);
+    if (idx === undefined) {
+      next.push(seedClone);
+      indexByName.set(seedClone.name, next.length - 1);
+      changed = true;
+      continue;
+    }
+    const line = next[idx];
+    const codes = new Set(line.items.map((i) => i.code));
+    const missing = seedClone.items.filter((i) => !codes.has(i.code));
+    if (missing.length > 0) {
+      const clones = missing.map((i) => JSON.parse(JSON.stringify(i)) as InventoryItem);
+      next[idx] = { ...line, items: [...line.items, ...clones] };
+      changed = true;
+    }
+  }
+  return { next, changed };
+}
+
+/**
+ * 예전 Firestore 필드 `longElbowProducts` 를 `tubeButtWeldProducts` 로 합칩니다.
+ * 동일 제품명이 있으면 품목(code)만 보강합니다.
+ */
+export function mergeLegacyLongElbowIntoTubeButtWeld(
+  tubeButtWeldProducts: InventoryProduct[],
+  longElbowProducts?: InventoryProduct[] | null
+): { next: InventoryProduct[]; changed: boolean } {
+  if (!Array.isArray(longElbowProducts) || longElbowProducts.length === 0) {
+    return { next: tubeButtWeldProducts, changed: false };
+  }
+  let changed = false;
+  const next: InventoryProduct[] = tubeButtWeldProducts.map(
+    (p) => JSON.parse(JSON.stringify(p)) as InventoryProduct
+  );
+  for (const leg of longElbowProducts) {
+    const legClone = JSON.parse(JSON.stringify(leg)) as InventoryProduct;
+    const idx = next.findIndex((p) => p.name === legClone.name);
+    if (idx === -1) {
+      next.push(legClone);
+      changed = true;
+      continue;
+    }
+    const existing = next[idx];
+    const codes = new Set(existing.items.map((i) => i.code));
+    const missing = legClone.items.filter((i) => !codes.has(i.code));
+    if (missing.length > 0) {
+      next[idx] = { ...existing, items: [...existing.items, ...missing] };
+      changed = true;
+    }
+  }
+  return { next, changed };
+}
 
 export const INITIAL_UHP_INVENTORY_STATE: UhpInventorySlices<InventoryProduct> = {
   products: [...INITIAL_MICRO_WELD_PRODUCTS],

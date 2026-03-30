@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
-import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, updateDoc, Timestamp, getDocs } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 import { db, storage, auth } from '@/lib/firebase';
 import { getProductMappingByCode, getAllProductMappings, addProductMapping, updateProductMapping, deleteProductMapping } from '@/lib/productMappings';
@@ -626,7 +626,7 @@ const generatePDFBlobWithProducts = async (
     const remarkLineCount = remarkLines.length;
     
     // 최대 줄 수 계산 (Heat No., Remark 중 가장 긴 줄 수)
-    const maxLineCount = Math.max(heatNoLineCount, remarkLineCount);
+    Math.max(heatNoLineCount, remarkLineCount);
     
     // MATERIAL 열 (Q'TY 우측에 배치, 각 Heat No. 값의 첫 번째 줄과 같은 높이에 표시)
     const materialText = product.material || '-'; // Material이 없으면 '-' 표시
@@ -1079,7 +1079,7 @@ const generatePDFBlobWithProducts = async (
             // 이미지 로드 검증 (타임아웃 증가: 60초)
             const base64Img = new Image();
             base64Img.src = normalizedBase64;
-            await new Promise<void>((resolve, reject) => {
+            await new Promise<void>((resolve) => {
               const timeout = setTimeout(() => {
                 console.warn(`[PDF 생성] 제품 ${index + 1} 파일 ${certIndex + 1} base64 이미지 로드 타임아웃, base64 데이터는 그대로 사용`);
                 // 타임아웃이어도 base64 데이터는 있으므로 계속 진행
@@ -1519,38 +1519,6 @@ const generatePDFBlobWithProducts = async (
   }
 };
 
-// PDF 생성 및 다운로드 함수 (기존 함수 유지)
-const generateAndDownloadPDF = async (
-  formData: {
-    certificateNo: string;
-    dateOfIssue: string;
-    customer: string;
-    poNo: string;
-    description: string;
-    code: string;
-    quantity: string;
-    testResult: string;
-    heatNo: string;
-  },
-  inspectionCertificate?: CertificateAttachment | null
-) => {
-  // 제품 데이터 준비
-  const productsDataForDownload: CertificateProduct[] = [];
-  // inspectionCertificate는 더 이상 단일 파일이 아니라 제품별로 처리되므로 빈 배열로 처리
-  const result = await generatePDFBlobWithProducts(formData, productsDataForDownload);
-  const fileName = `MATERIAL_TEST_CERTIFICATE_${formData.certificateNo || 'CERT'}_${new Date().toISOString().split('T')[0]}.pdf`;
-  
-  // Blob을 다운로드
-  const url = URL.createObjectURL(result.blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-};
-
 // 관리자 인증 확인 함수
 const checkAdminAuth = (): boolean => {
   if (typeof window === 'undefined') return false;
@@ -1680,7 +1648,7 @@ function MaterialTestCertificateEditContent() {
   const router = useRouter();
   const params = useParams();
   const certificateId = params?.id as string; // 동적 라우트에서 id 가져오기
-  const [isEditMode, setIsEditMode] = useState(true); // 수정 페이지는 항상 수정 모드
+  const [isEditMode] = useState(true); // 수정 페이지는 항상 수정 모드
   const [loadingCertificate, setLoadingCertificate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatingPDF, setGeneratingPDF] = useState(false);
@@ -2648,8 +2616,7 @@ function MaterialTestCertificateEditContent() {
     return true;
   };
 
-  // 변경사항 확인 함수 (현재 사용하지 않음 - 수정 모드에서 항상 새 PDF 생성)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // 변경사항 확인 함수
   const hasChanges = (): boolean => {
     try {
       // 수정 모드가 아니거나 기존 데이터가 없으면 변경사항 있음
@@ -3235,7 +3202,7 @@ function MaterialTestCertificateEditContent() {
       let pdfBlob: Blob | null = null;
       let failedImageCount = 0;
       let totalExpectedFiles = 0;
-      let shouldRegeneratePdf = hasChanges();
+      const shouldRegeneratePdf = hasChanges();
       let certificateFile: CertificateAttachment | null = null;
       console.log(
         '[저장] PDF 재생성 여부:',

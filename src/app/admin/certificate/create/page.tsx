@@ -591,7 +591,7 @@ const generatePDFBlobWithProducts = async (
     const remarkLineCount = remarkLines.length;
     
     // 최대 줄 수 계산 (Heat No., Remark 중 가장 긴 줄 수)
-    const maxLineCount = Math.max(heatNoLineCount, remarkLineCount);
+    Math.max(heatNoLineCount, remarkLineCount);
     
     // MATERIAL 열 (Q'TY 우측에 배치, 각 Heat No. 값의 첫 번째 줄과 같은 높이에 표시)
     const materialText = product.material || '-'; // Material이 없으면 '-' 표시

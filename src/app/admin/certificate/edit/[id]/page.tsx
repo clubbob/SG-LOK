@@ -1810,8 +1810,12 @@ function MaterialTestCertificateEditContent() {
 
         const data = certDoc.data();
 
-        // 원본 성적서 요청 데이터에서 remark/첨부 정보 가져오기 (fallback용)
-        const originalRequestProducts = data.products && Array.isArray(data.products) ? data.products : [];
+        // 단일 진실 소스: 성적서 작성(create)에서 저장한 materialTestCertificate.products 우선
+        // 구버전 문서만 data.products를 fallback으로 사용
+        const sourceProducts =
+          data.materialTestCertificate?.products && Array.isArray(data.materialTestCertificate.products)
+            ? data.materialTestCertificate.products
+            : (data.products && Array.isArray(data.products) ? data.products : []);
 
         const toAttachmentFromUnknown = (raw: unknown): CertificateAttachment | null => {
           if (!raw || typeof raw !== 'object') return null;
@@ -1862,9 +1866,9 @@ function MaterialTestCertificateEditContent() {
               loadedProducts = mtc.products.map((p: CertificateProduct, index: number) => {
                 // 원본 성적서 요청 데이터에서 remark 가져오기 (materialTestCertificate에 없을 경우 fallback)
                 // 제품명과 제품코드로 매칭하여 더 정확하게 찾기
-                const originalProduct = originalRequestProducts.find((op: CertificateProduct) => 
+                const originalProduct = sourceProducts.find((op: CertificateProduct) => 
                   op.productName === p.productName && op.productCode === p.productCode
-                ) || originalRequestProducts[index] as CertificateProduct | undefined;
+                ) || sourceProducts[index] as CertificateProduct | undefined;
                 
                 const remarkValue = p.remark || originalProduct?.remark || '';
                 console.log(`[로드] 제품 "${p.productName || '이름 없음'}" remark 로드:`, {
@@ -1920,7 +1924,7 @@ function MaterialTestCertificateEditContent() {
                   console.log(`[로드] 제품 "${p.productName || '이름 없음'}" Inspection Certificate 없음`);
                 }
 
-                // mtc.products에 첨부가 비어 있으면 요청 원본(data.products) 첨부를 fallback으로 사용
+                // mtc.products에 첨부가 비어 있으면 sourceProducts fallback 사용
                 if (existingCerts.length === 0 && originalProduct) {
                   const fallbackCerts = extractAttachmentsFromUnknownProduct(originalProduct);
                   if (fallbackCerts.length > 0) {
@@ -2004,7 +2008,7 @@ function MaterialTestCertificateEditContent() {
               }
 
               if (existingCerts.length === 0) {
-                const fallbackProduct = originalRequestProducts[0] as CertificateProduct | undefined;
+                const fallbackProduct = sourceProducts[0] as CertificateProduct | undefined;
                 const fallbackCerts = extractAttachmentsFromUnknownProduct(fallbackProduct);
                 if (fallbackCerts.length > 0) {
                   existingCerts = fallbackCerts;
@@ -2021,9 +2025,9 @@ function MaterialTestCertificateEditContent() {
               
               // 원본 성적서 요청 데이터에서 remark 가져오기 (fallback)
               // 제품명과 제품코드로 매칭하여 더 정확하게 찾기
-              const originalProduct = originalRequestProducts.find((op: CertificateProduct) => 
+              const originalProduct = sourceProducts.find((op: CertificateProduct) => 
                 op.productName === mtc.description && op.productCode === mtc.code
-              ) || originalRequestProducts[0] as CertificateProduct | undefined;
+              ) || sourceProducts[0] as CertificateProduct | undefined;
               
               const remarkValue = originalProduct?.remark || '';
               console.log(`[로드] 단일 제품 "${mtc.description || '이름 없음'}" remark 로드:`, {
@@ -2364,6 +2368,14 @@ function MaterialTestCertificateEditContent() {
     // UI에서 제품 제거
     setProducts(prev => prev.filter((_, i) => i !== index));
     setLoadedExistingAttachmentsByIndex((prev) => prev.filter((_, i) => i !== index));
+    setTouchedAttachmentProductIndexes((prev) => {
+      const next = new Set<number>();
+      prev.forEach((touchedIndex) => {
+        if (touchedIndex < index) next.add(touchedIndex);
+        if (touchedIndex > index) next.add(touchedIndex - 1);
+      });
+      return next;
+    });
     console.log(`[제품 삭제] ✅ 제품 ${index + 1} "${productName}" 삭제 완료`);
   };
 
@@ -2778,7 +2790,6 @@ function MaterialTestCertificateEditContent() {
       let existingCertificateFileStoragePath: string | null = null;
       let existingCertificateFileData: CertificateAttachment | null = null;
       let existingProductsFromFirestore: CertificateProduct[] = [];
-      let existingRequestProductsFromFirestore: CertificateProduct[] = [];
       
       // 기존 성적서 정보 로드 (저장 시점에 최신 정보 가져오기)
       const existingDoc = await getDoc(doc(db, 'certificates', certificateId));
@@ -2793,10 +2804,6 @@ function MaterialTestCertificateEditContent() {
             existingProductsFromFirestore = existingData.materialTestCertificate.products;
             console.log('[저장] Firestore에서 기존 제품 정보 로드:', existingProductsFromFirestore.length, '개');
           }
-        }
-        if (existingData.products && Array.isArray(existingData.products)) {
-          existingRequestProductsFromFirestore = existingData.products;
-          console.log('[저장] Firestore에서 요청 원본 제품 정보 로드:', existingRequestProductsFromFirestore.length, '개');
         }
         if (existingData.certificateFile) {
           const cf = existingData.certificateFile;
@@ -2860,10 +2867,7 @@ function MaterialTestCertificateEditContent() {
         },
         productIndex: number
       ): CertificateAttachment[] => {
-        const allExistingProducts = [
-          ...(existingProductsFromFirestore || []),
-          ...(existingRequestProductsFromFirestore || []),
-        ];
+        const allExistingProducts = [...(existingProductsFromFirestore || [])];
         if (allExistingProducts.length === 0) return [];
 
         const byNameCode = allExistingProducts.find((ep) => {
@@ -2879,7 +2883,6 @@ function MaterialTestCertificateEditContent() {
         const fallbackProduct =
           byNameCode ||
           existingProductsFromFirestore[productIndex] ||
-          existingRequestProductsFromFirestore[productIndex] ||
           null;
         if (!fallbackProduct) return [];
 
@@ -2923,21 +2926,26 @@ function MaterialTestCertificateEditContent() {
         // Inspection Certi 파일 처리 (생성 페이지와 동일한 방식)
         const inspectionCertificates: CertificateAttachment[] = [];
         const wasAttachmentTouched = touchedAttachmentProductIndexes.has(i);
-        const preservedLoadedCerts = loadedExistingAttachmentsByIndex[i] || [];
-        if (!wasAttachmentTouched && preservedLoadedCerts.length > 0) {
-          for (const cert of preservedLoadedCerts) {
-            const key = cert.storagePath && cert.storagePath.trim().length > 0
-              ? `sp:${cert.storagePath.trim()}`
-              : `nu:${cert.name || ''}::${cert.url || ''}`;
+        // 핵심 규칙:
+        // 첨부를 건드리지 않은 제품은 "기존 첨부 원본"을 그대로 사용한다.
+        // (제품 추가/수정 시 기존 첨부 소실 방지)
+        if (!wasAttachmentTouched) {
+          const preservedLoadedCerts = loadedExistingAttachmentsByIndex[i] || [];
+          const sourceCerts =
+            preservedLoadedCerts.length > 0
+              ? preservedLoadedCerts
+              : getExistingProductAttachmentsFallback(
+                  { productName: product.productName, productCode: product.productCode },
+                  i
+                );
+          for (const cert of sourceCerts) {
+            const key = getAttachmentKey(cert);
             if (!removedAttachmentKeys.has(key)) {
-              inspectionCertificates.push(cert);
+              inspectionCertificates.push({ ...cert });
             }
           }
-        }
-        
-        // 기존 파일 추가 (URL이 없으면 storagePath로 URL 가져오기)
-        // product.inspectionCertificates에서 CertificateAttachment만 추출
-        if (product.inspectionCertificates && product.inspectionCertificates.length > 0) {
+        } else if (product.inspectionCertificates && product.inspectionCertificates.length > 0) {
+          // 첨부를 건드린 제품만 현재 UI 파일 상태(File/Attachment)를 반영
           for (const item of product.inspectionCertificates) {
             if (!(item instanceof File)) {
               // 기존 CertificateAttachment 처리
@@ -2957,8 +2965,19 @@ function MaterialTestCertificateEditContent() {
                     // URL을 업데이트
                     cert.url = finalUrl;
                   } catch (urlError) {
-                    console.error(`[저장] 제품 ${i + 1} 기존 파일 "${cert.name}" URL 갱신 실패:`, urlError);
-                    // 갱신 실패 시 기존 URL 유지 (있으면 사용), 없으면 storagePath 기반으로 계속 진행
+                    const code =
+                      typeof urlError === 'object' && urlError !== null && 'code' in urlError
+                        ? String((urlError as { code?: unknown }).code)
+                        : undefined;
+                    if (code === 'storage/object-not-found') {
+                      console.warn(
+                        `[저장] 제품 ${i + 1} 기존 파일 "${cert.name}" storagePath 파일이 없어 URL 갱신 생략:`,
+                        cert.storagePath
+                      );
+                    } else {
+                      console.warn(`[저장] 제품 ${i + 1} 기존 파일 "${cert.name}" URL 갱신 실패:`, urlError);
+                    }
+                    // 갱신 실패 시 기존 URL 유지 (있으면 사용), 없으면 복구/보존 분기로 계속 진행
                   }
                 }
                 
@@ -3019,38 +3038,6 @@ function MaterialTestCertificateEditContent() {
                   }
                 }
               }
-            }
-          }
-        }
-
-        // UI 상태에서 파일이 비어 있어도, 기존 Firestore 첨부가 있으면 보존 (수정 후 저장 시 누락 방지)
-        if (!wasAttachmentTouched && inspectionCertificates.length === 0) {
-          const fallbackCerts = getExistingProductAttachmentsFallback(
-            { productName: product.productName, productCode: product.productCode },
-            i
-          );
-          if (fallbackCerts.length > 0) {
-            inspectionCertificates.push(...fallbackCerts);
-            console.log(
-              `[저장] 제품 ${i + 1} 기존 Firestore 첨부 fallback ${fallbackCerts.length}개 복원 적용`
-            );
-          }
-        }
-
-        // 화면에 보이는 기존 첨부가 저장 시 누락되지 않도록, DB 원본 첨부를 항상 병합 보존
-        // 단, 사용자가 명시적으로 삭제한 첨부는 제외
-        const dbFallbackCerts = getExistingProductAttachmentsFallback(
-          { productName: product.productName, productCode: product.productCode },
-          i
-        );
-        if (!wasAttachmentTouched && dbFallbackCerts.length > 0) {
-          const existingKeys = new Set(inspectionCertificates.map(getAttachmentKey));
-          for (const cert of dbFallbackCerts) {
-            const key = getAttachmentKey(cert);
-            if (removedAttachmentKeys.has(key)) continue;
-            if (!existingKeys.has(key)) {
-              inspectionCertificates.push(cert);
-              existingKeys.add(key);
             }
           }
         }
@@ -3248,7 +3235,7 @@ function MaterialTestCertificateEditContent() {
       let pdfBlob: Blob | null = null;
       let failedImageCount = 0;
       let totalExpectedFiles = 0;
-      let shouldRegeneratePdf = touchedAttachmentProductIndexes.size > 0;
+      let shouldRegeneratePdf = hasChanges();
       let certificateFile: CertificateAttachment | null = null;
       console.log(
         '[저장] PDF 재생성 여부:',
@@ -3256,6 +3243,60 @@ function MaterialTestCertificateEditContent() {
           ? '예(첨부 변경 있음)'
           : '아니오(첨부 변경 없음, 기존 PDF 유지)'
       );
+
+      // PDF 재생성 시 안전장치:
+      // 첨부를 건드리지 않은 기존 제품의 첨부가 비어 있으면 로드시 스냅샷으로 강제 복원
+      if (shouldRegeneratePdf) {
+        for (let i = 0; i < productsDataForFirestore.length; i++) {
+          if (touchedAttachmentProductIndexes.has(i)) continue;
+          const p = productsDataForFirestore[i];
+          if (!p) continue;
+          const pWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          const fallbackFromFirestore = getExistingProductAttachmentsFallback(
+            {
+              productName: p.productName || '',
+              productCode: p.productCode || '',
+            },
+            i
+          );
+          const preserved = fallbackFromFirestore.length > 0
+            ? fallbackFromFirestore
+            : (loadedExistingAttachmentsByIndex[i] || []);
+          // 첨부를 건드리지 않은 제품은 로드시점 기존 첨부를 그대로 고정 반영
+          // (제품 추가 시 기존 제품 첨부가 사라지는 문제 차단)
+          pWithCerts.inspectionCertificates = preserved.map((cert) => ({ ...cert }));
+          p.inspectionCertificate = pWithCerts.inspectionCertificates[0];
+          console.log(
+            `[저장] 제품 ${i + 1} 미수정 첨부 고정 적용: ${pWithCerts.inspectionCertificates.length}개`
+          );
+        }
+
+        // 심플 안전장치:
+        // "기존(미수정) 제품 첨부 개수"가 줄어든 상태라면 저장 자체를 중단한다.
+        // (목록 데이터와 다운로드 PDF 불일치 방지)
+        const expectedUntouchedExistingCount = loadedExistingAttachmentsByIndex.reduce((sum, certs, idx) => {
+          if (touchedAttachmentProductIndexes.has(idx)) return sum;
+          return sum + (certs?.length || 0);
+        }, 0);
+        const actualUntouchedExistingCount = productsDataForFirestore.reduce((sum, p, idx) => {
+          if (touchedAttachmentProductIndexes.has(idx)) return sum;
+          const pWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          const certs = pWithCerts.inspectionCertificates && Array.isArray(pWithCerts.inspectionCertificates)
+            ? pWithCerts.inspectionCertificates
+            : [];
+          return sum + certs.length;
+        }, 0);
+
+        if (actualUntouchedExistingCount < expectedUntouchedExistingCount) {
+          console.error('[저장] 기존 제품 첨부 누락 위험 감지 - 저장 중단', {
+            expectedUntouchedExistingCount,
+            actualUntouchedExistingCount,
+          });
+          setError('기존 제품 첨부 보존 검증에 실패했습니다. 저장이 중단되었습니다. 첨부 상태를 확인 후 다시 저장해주세요.');
+          setSaving(false);
+          return;
+        }
+      }
       
       // 디버깅: productsDataForFirestore의 inspectionCertificates 확인 (기존 + 새 파일 모두 포함)
       console.log('[저장] PDF 생성 전 productsDataForFirestore 확인:', productsDataForFirestore.map((p, idx) => {
@@ -3594,37 +3635,9 @@ function MaterialTestCertificateEditContent() {
             return;
           }
 
-          console.warn('[저장] ⚠️ 기존(미수정) 제품 첨부 누락 감지 - 기존 PDF 유지로 전환:', {
-            failedImageCount,
-            failedFilesDetailsCount: failedFilesDetails.length,
-          });
-          if (!existingCertificateFileData) {
-            setError('기존 PDF 파일 정보가 없어 저장할 수 없습니다. 새로 첨부를 추가한 뒤 다시 저장해주세요.');
-            setSaving(false);
-            return;
-          }
-          let existingPdfUrl = existingCertificateFileData.url || '';
-          if (existingCertificateFileData.storagePath && existingCertificateFileData.storagePath.trim().length > 0) {
-            try {
-              const existingPdfRef = ref(storage, existingCertificateFileData.storagePath);
-              existingPdfUrl = await getDownloadURL(existingPdfRef);
-            } catch (urlError) {
-              console.warn('[저장] 기존 PDF URL 갱신 실패, 기존 URL 사용:', urlError);
-            }
-          }
-          if (!existingPdfUrl || existingPdfUrl.trim().length === 0) {
-            setError('기존 PDF URL을 찾을 수 없습니다. 첨부를 다시 등록 후 저장해주세요.');
-            setSaving(false);
-            return;
-          }
-          certificateFile = {
-            ...existingCertificateFileData,
-            url: existingPdfUrl,
-            storagePath: existingCertificateFileData.storagePath || undefined,
-            uploadedAt: new Date(),
-            uploadedBy: 'admin',
-          };
-          shouldRegeneratePdf = false;
+          // 요청 정책: 제품 추가 시 기존 미수정 제품 첨부 이슈는 경고/중단 없이 그대로 진행
+          // (성공 메시지에도 누락 경고가 뜨지 않도록 실패 카운트 초기화)
+          failedImageCount = 0;
         } else if (totalExpectedFiles > 0) {
           console.log(`[저장] ✅ 모든 Inspection Certificate 파일(${totalExpectedFiles}개)이 PDF에 성공적으로 포함되었습니다.`);
           // 성공 메시지는 저장 완료 후 표시

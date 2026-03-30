@@ -124,8 +124,34 @@ export default function AdminCertificatePage() {
             return;
           }
           
-          // products 배열이 있으면 첫 번째 제품 정보를 단일 필드로 매핑 (하위 호환성)
-          const firstProduct = data.products && data.products.length > 0 ? data.products[0] : null;
+          // 목록 표시는 작성/수정에서 실제 저장되는 materialTestCertificate.products를 우선 사용
+          // (구버전 문서는 data.products로 fallback)
+          const mtcProducts =
+            data.materialTestCertificate?.products && Array.isArray(data.materialTestCertificate.products)
+              ? data.materialTestCertificate.products
+              : [];
+          const legacyProducts = data.products && Array.isArray(data.products) ? data.products : [];
+          const effectiveProducts = mtcProducts.length > 0 ? mtcProducts : legacyProducts;
+          const firstProduct = effectiveProducts.length > 0 ? effectiveProducts[0] : null;
+          const summarizedProductName =
+            effectiveProducts.length <= 1
+              ? (firstProduct?.productName || data.productName)
+              : `${firstProduct?.productName || data.productName || '제품'} 외 ${effectiveProducts.length - 1}건`;
+          const summarizedProductCode =
+            effectiveProducts.length <= 1
+              ? (firstProduct?.productCode || data.productCode)
+              : `${firstProduct?.productCode || data.productCode || '-'} 외 ${effectiveProducts.length - 1}건`;
+          const summarizedQuantity = effectiveProducts.length > 0
+            ? effectiveProducts.reduce((sum: number, p: { quantity?: number | string }) => {
+                const value =
+                  typeof p.quantity === 'number'
+                    ? p.quantity
+                    : typeof p.quantity === 'string'
+                      ? Number.parseInt(p.quantity, 10)
+                      : 0;
+                return sum + (Number.isFinite(value) ? value : 0);
+              }, 0)
+            : (firstProduct?.quantity || data.quantity);
           
           certificatesData.push({
             id: doc.id,
@@ -135,11 +161,11 @@ export default function AdminCertificatePage() {
             userCompany: data.userCompany,
             customerName: data.customerName,
             orderNumber: data.orderNumber,
-            products: data.products || [],
-            productName: firstProduct?.productName || data.productName,
-            productCode: firstProduct?.productCode || data.productCode,
+            products: effectiveProducts,
+            productName: summarizedProductName,
+            productCode: summarizedProductCode,
             lotNumber: firstProduct?.lotNumber || data.lotNumber,
-            quantity: firstProduct?.quantity || data.quantity,
+            quantity: summarizedQuantity,
             certificateType: data.certificateType || 'quality',
             requestDate: data.requestDate?.toDate() || new Date(),
             requestedCompletionDate: data.requestedCompletionDate?.toDate(),
@@ -277,10 +303,13 @@ export default function AdminCertificatePage() {
         }
       }
       
+      // 캐시된 구버전 PDF가 열리지 않도록 cache-busting 쿼리 추가
+      const cacheBustedDownloadUrl = `${downloadUrl}${downloadUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+
       // CORS 문제를 피하기 위해 fetch를 사용하지 않고 직접 a 태그로 다운로드 시도
       // 외부 URL의 경우 브라우저가 download 속성을 무시할 수 있지만, 시도해봄
       const link = document.createElement('a');
-      link.href = downloadUrl;
+      link.href = cacheBustedDownloadUrl;
       link.download = fileName;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';

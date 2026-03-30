@@ -1004,7 +1004,10 @@ const generatePDFBlobWithProducts = async (
           inspectionCert.url = updated;
           console.log(`[PDF 생성] 제품 ${index + 1} 파일 ${certIndex + 1} URL 갱신 성공`);
         } catch (urlError) {
-          const code = (urlError as any)?.code;
+          const code =
+            typeof urlError === 'object' && urlError !== null && 'code' in urlError
+              ? String((urlError as { code?: unknown }).code)
+              : undefined;
           if (code === 'storage/object-not-found') {
             console.warn(
               `[PDF 생성] 제품 ${index + 1} 파일 ${certIndex + 1} storagePath 객체가 없어 URL 갱신 불가`
@@ -1012,7 +1015,7 @@ const generatePDFBlobWithProducts = async (
           } else {
             console.warn(
               `[PDF 생성] 제품 ${index + 1} 파일 ${certIndex + 1} URL 갱신 실패:`,
-              (urlError as any)?.message || String(urlError)
+              urlError instanceof Error ? urlError.message : String(urlError)
             );
           }
           // 갱신 실패해도 기존 finalUrl(base64가 있으면) 또는 storagePath 기반 다운로드에서 계속 진행
@@ -1192,8 +1195,11 @@ const generatePDFBlobWithProducts = async (
                 await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
               }
               } catch (storageError) {
-                const code = (storageError as any)?.code;
-                const msg = (storageError as any)?.message || String(storageError);
+                const code =
+                  typeof storageError === 'object' && storageError !== null && 'code' in storageError
+                    ? String((storageError as { code?: unknown }).code)
+                    : undefined;
+                const msg = storageError instanceof Error ? storageError.message : String(storageError);
                 if (code === 'storage/object-not-found') {
                   console.warn(
                     `[PDF 생성] storagePath 객체가 존재하지 않음(누락) - 제품 ${index + 1} 파일 ${certIndex + 1}, 시도 ${attempt}/${maxRetries}:`,
@@ -1732,7 +1738,7 @@ function MaterialTestCertificateEditContent() {
   const [loadedExistingAttachmentsByIndex, setLoadedExistingAttachmentsByIndex] = useState<CertificateAttachment[][]>([]);
   const [touchedAttachmentProductIndexes, setTouchedAttachmentProductIndexes] = useState<Set<number>>(new Set());
 
-  // 성적서 번호 자동 생성 함수
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const generateCertificateNo = async (): Promise<string> => {
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
@@ -1807,29 +1813,32 @@ function MaterialTestCertificateEditContent() {
         // 원본 성적서 요청 데이터에서 remark/첨부 정보 가져오기 (fallback용)
         const originalRequestProducts = data.products && Array.isArray(data.products) ? data.products : [];
 
-        const toAttachmentFromUnknown = (raw: any): CertificateAttachment | null => {
+        const toAttachmentFromUnknown = (raw: unknown): CertificateAttachment | null => {
           if (!raw || typeof raw !== 'object') return null;
+          const record = raw as Record<string, unknown>;
+          const uploadedAtCandidate = record.uploadedAt;
           return {
-            name: raw.name || '',
-            url: raw.url || '',
-            storagePath: raw.storagePath || undefined,
-            size: raw.size || 0,
-            type: raw.type || '',
+            name: typeof record.name === 'string' ? record.name : '',
+            url: typeof record.url === 'string' ? record.url : '',
+            storagePath: typeof record.storagePath === 'string' ? record.storagePath : undefined,
+            size: typeof record.size === 'number' ? record.size : 0,
+            type: typeof record.type === 'string' ? record.type : '',
             uploadedAt:
-              raw.uploadedAt && typeof raw.uploadedAt === 'object' && 'toDate' in raw.uploadedAt
-                ? raw.uploadedAt.toDate()
-                : (raw.uploadedAt instanceof Date ? raw.uploadedAt : new Date()),
-            uploadedBy: raw.uploadedBy || 'admin',
+              uploadedAtCandidate && typeof uploadedAtCandidate === 'object' && 'toDate' in uploadedAtCandidate
+                ? (uploadedAtCandidate as { toDate: () => Date }).toDate()
+                : (uploadedAtCandidate instanceof Date ? uploadedAtCandidate : new Date()),
+            uploadedBy: typeof record.uploadedBy === 'string' ? record.uploadedBy : 'admin',
           };
         };
 
-        const extractAttachmentsFromUnknownProduct = (rawProduct: any): CertificateAttachment[] => {
+        const extractAttachmentsFromUnknownProduct = (rawProduct: unknown): CertificateAttachment[] => {
           if (!rawProduct || typeof rawProduct !== 'object') return [];
-          const fromArray = Array.isArray(rawProduct.inspectionCertificates)
-            ? rawProduct.inspectionCertificates.map(toAttachmentFromUnknown).filter(Boolean) as CertificateAttachment[]
+          const productRecord = rawProduct as Record<string, unknown>;
+          const fromArray = Array.isArray(productRecord.inspectionCertificates)
+            ? productRecord.inspectionCertificates.map(toAttachmentFromUnknown).filter(Boolean) as CertificateAttachment[]
             : [];
           if (fromArray.length > 0) return fromArray;
-          const single = toAttachmentFromUnknown(rawProduct.inspectionCertificate);
+          const single = toAttachmentFromUnknown(productRecord.inspectionCertificate);
           return single ? [single] : [];
         };
 
@@ -2374,7 +2383,7 @@ function MaterialTestCertificateEditContent() {
     });
     
     setProducts(prev => {
-      const newProducts = prev.map((p, i) => ({ ...p })); // 깊은 복사
+      const newProducts = prev.map((p) => ({ ...p })); // 깊은 복사
       const newFiles = Array.from(files);
       
       if (!newProducts[index]) {
@@ -2815,29 +2824,32 @@ function MaterialTestCertificateEditContent() {
       const productsData: CertificateProduct[] = [];
       const productsDataForFirestore: CertificateProduct[] = []; // Firestore 저장용 (기존 + 새 파일)
 
-      const toNormalizedAttachment = (raw: any): CertificateAttachment | null => {
+      const toNormalizedAttachment = (raw: unknown): CertificateAttachment | null => {
         if (!raw || typeof raw !== 'object') return null;
+        const record = raw as Record<string, unknown>;
+        const uploadedAtCandidate = record.uploadedAt;
         return {
-          name: raw.name || '',
-          url: raw.url || '',
-          storagePath: raw.storagePath || undefined,
-          size: raw.size || 0,
-          type: raw.type || '',
+          name: typeof record.name === 'string' ? record.name : '',
+          url: typeof record.url === 'string' ? record.url : '',
+          storagePath: typeof record.storagePath === 'string' ? record.storagePath : undefined,
+          size: typeof record.size === 'number' ? record.size : 0,
+          type: typeof record.type === 'string' ? record.type : '',
           uploadedAt:
-            raw.uploadedAt && typeof raw.uploadedAt === 'object' && 'toDate' in raw.uploadedAt
-              ? raw.uploadedAt.toDate()
-              : (raw.uploadedAt instanceof Date ? raw.uploadedAt : new Date()),
-          uploadedBy: raw.uploadedBy || 'admin',
+            uploadedAtCandidate && typeof uploadedAtCandidate === 'object' && 'toDate' in uploadedAtCandidate
+              ? (uploadedAtCandidate as { toDate: () => Date }).toDate()
+              : (uploadedAtCandidate instanceof Date ? uploadedAtCandidate : new Date()),
+          uploadedBy: typeof record.uploadedBy === 'string' ? record.uploadedBy : 'admin',
         };
       };
 
-      const extractCertsFromProduct = (rawProduct: any): CertificateAttachment[] => {
+      const extractCertsFromProduct = (rawProduct: unknown): CertificateAttachment[] => {
         if (!rawProduct || typeof rawProduct !== 'object') return [];
-        const fromArray = Array.isArray(rawProduct.inspectionCertificates)
-          ? rawProduct.inspectionCertificates.map(toNormalizedAttachment).filter(Boolean) as CertificateAttachment[]
+        const productRecord = rawProduct as Record<string, unknown>;
+        const fromArray = Array.isArray(productRecord.inspectionCertificates)
+          ? productRecord.inspectionCertificates.map(toNormalizedAttachment).filter(Boolean) as CertificateAttachment[]
           : [];
         if (fromArray.length > 0) return fromArray;
-        const fromSingle = toNormalizedAttachment(rawProduct.inspectionCertificate);
+        const fromSingle = toNormalizedAttachment(productRecord.inspectionCertificate);
         return fromSingle ? [fromSingle] : [];
       };
 
@@ -2854,7 +2866,7 @@ function MaterialTestCertificateEditContent() {
         ];
         if (allExistingProducts.length === 0) return [];
 
-        const byNameCode = allExistingProducts.find((ep: any) => {
+        const byNameCode = allExistingProducts.find((ep) => {
           const epName = String(ep?.productName || '').trim();
           const epCode = String(ep?.productCode || '').trim();
           return (
@@ -2862,12 +2874,12 @@ function MaterialTestCertificateEditContent() {
             epName === currentProduct.productName.trim() &&
             (epCode === currentProduct.productCode.trim() || currentProduct.productCode.trim().length === 0)
           );
-        }) as any;
+        });
 
         const fallbackProduct =
           byNameCode ||
-          (existingProductsFromFirestore[productIndex] as any) ||
-          (existingRequestProductsFromFirestore[productIndex] as any) ||
+          existingProductsFromFirestore[productIndex] ||
+          existingRequestProductsFromFirestore[productIndex] ||
           null;
         if (!fallbackProduct) return [];
 
@@ -3906,6 +3918,7 @@ function MaterialTestCertificateEditContent() {
   };
 
   // PDF 미리보기 함수 (저장하지 않고 PDF만 생성)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handlePreviewPDF = async () => {
     if (!validateForm()) {
       return;
@@ -4033,7 +4046,7 @@ function MaterialTestCertificateEditContent() {
                   // URL 갱신 실패해도 storagePath가 있으면 generatePDFBlobWithProducts에서 다시 시도 가능
                   console.warn(
                     `[PDF 미리보기] 기존 파일 "${cert.name}" URL 갱신 실패 (storagePath 그대로 사용):`,
-                    (urlError as any)?.message || String(urlError)
+                    (urlError instanceof Error ? urlError.message : String(urlError))
                   );
                   inspectionCertificates.push(cert);
                 }

@@ -4,12 +4,12 @@
   "private": true,
   "scripts": {
     "clean": "npx --yes rimraf@5 .next .next-alt",
-    "dev": "cross-env NEXT_TRACE_SPAN_THRESHOLD_MS=999999999 next dev",
+    "dev": "cross-env NEXT_TRACE_SPAN_THRESHOLD_MS=999999999 next dev --port 3000",
     "dev:clean": "npm run clean && npm run dev",
     "build": "next build",
     "build:clean": "npm run clean && npm run build",
     "build:turbo": "next build --turbopack",
-    "start": "next start",
+    "start": "next start --port 3000",
     "lint": "eslint",
     "export": "next build",
     "deploy": "npm run export && firebase deploy --only hosting"

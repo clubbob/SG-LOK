@@ -419,7 +419,7 @@ export default function AdminInventoryProductsPage() {
             disabled={saving}
             className="rounded-md border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            제품 라인 추가
+            제품 추가
           </button>
         </div>
 
@@ -498,7 +498,7 @@ export default function AdminInventoryProductsPage() {
 
           {categoryProducts.length === 0 && (
             <p className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
-              이 카테고리에 등록된 제품 라인이 없습니다. 「제품 라인 추가」를 눌러 주세요.
+              이 카테고리에 등록된 제품이 없습니다. 「제품 추가」를 눌러 주세요.
             </p>
           )}
         </div>
@@ -509,7 +509,7 @@ export default function AdminInventoryProductsPage() {
           <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
             <div className="border-b border-gray-200 px-5 py-4">
               <h3 className="text-lg font-semibold text-gray-900">
-                {productModalMode === "add" ? "제품 라인 추가" : "제품 라인 수정"}
+                {productModalMode === "add" ? "제품 추가" : "제품 수정"}
               </h3>
               <p className="mt-1 text-xs text-gray-500">
                 재고현황에 표시되는 제품명·이미지입니다. 파일을 올리면 Firebase Storage에 저장되고 주소가

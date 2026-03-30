@@ -3844,31 +3844,8 @@ function MaterialTestCertificateContent() {
       }
       
       setSuccess(successMessage);
-      setIsEditMode(true);
-      
-      // 저장 후 상태 업데이트: 새로 업로드한 파일을 existingInspectionCertis로 이동
-      setProducts(prev => prev.map((product, index) => {
-        const productData = productsData[index];
-        if (!productData) return product;
-        
-        // 저장된 inspectionCertificates 배열 가져오기
-        const productWithCerts = productData as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
-        const savedCerts = productWithCerts.inspectionCertificates && Array.isArray(productWithCerts.inspectionCertificates)
-          ? productWithCerts.inspectionCertificates
-          : (productData.inspectionCertificate ? [productData.inspectionCertificate] : []);
-        
-        // 새로 업로드한 파일들을 existingInspectionCertis로 이동하고 inspectionCertiFiles는 비우기
-        return {
-          ...product,
-          existingInspectionCertis: savedCerts,
-          inspectionCertiFiles: [],
-        };
-      }));
-      
-      // 저장 완료 후 2초 뒤 목록 페이지로 이동
-      setTimeout(() => {
-        router.push('/admin/certificate');
-      }, 2000);
+      // 작성 완료 시 수정 화면 상태로 전환하지 않고 바로 목록으로 이동
+      router.push('/admin/certificate');
     } catch (error) {
       console.error('저장 오류:', error);
       const firebaseError = error as { code?: string; message?: string };

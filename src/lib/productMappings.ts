@@ -97,14 +97,23 @@ export const addProductMapping = async (
   userId?: string
 ): Promise<string> => {
   try {
+    const normalizedCode = productCode.toUpperCase();
+    const normalizedName = productName.trim().toUpperCase();
+
     // 중복 확인
     const existing = await getProductMappingByCode(productCode);
     if (existing) {
+      const existingName = (existing.productName || '').trim().toUpperCase();
+      // 동일 코드 + 동일 이름이면 이미 원하는 상태이므로 성공 처리
+      if (existingName === normalizedName) {
+        if (existing.id) return existing.id;
+        return 'existing';
+      }
       throw new DuplicateProductMappingError(productCode);
     }
     
     const newMapping = {
-      productCode: productCode.toUpperCase(),
+      productCode: normalizedCode,
       productName: productName,
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now(),

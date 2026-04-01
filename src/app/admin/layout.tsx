@@ -120,7 +120,7 @@ const adminMenuItems: MenuItem[] = [
     ),
     subItems: [
       { id: 'inventory-status', label: 'UHP 재고현황', path: '/admin/inventory/status' },
-      { id: 'inventory-products', label: 'UHP 제품등록', path: '/admin/inventory/products' },
+      { id: 'inventory-products', label: '제품 이미지 등록', path: '/admin/inventory/products' },
     ],
   },
 ];

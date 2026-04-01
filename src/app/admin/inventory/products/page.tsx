@@ -355,7 +355,7 @@ export default function AdminInventoryProductsPage() {
     <div className="p-6 sm:p-8">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">UHP 제품등록</h1>
+          <h1 className="text-2xl font-bold text-gray-900">제품 이미지 등록</h1>
           <p className="text-gray-600 mt-2">
             <strong>제품 라인(시리즈)</strong>의 이름과 이미지(파일 업로드 또는 URL·경로)만 이 메뉴에서 등록·수정·삭제합니다.
             저장 시 Firestore에 반영되며 <strong>UHP 재고현황</strong>과 같은 목록을 공유합니다.

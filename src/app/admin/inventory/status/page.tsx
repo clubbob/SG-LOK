@@ -605,6 +605,35 @@ export default function AdminInventoryStatusPage() {
     void persistUhpInventory(nextState);
   };
 
+  const handleAddProductLine = () => {
+    const nameInput = prompt('추가할 제품명을 입력해 주세요.');
+    const name = nameInput?.trim() ?? '';
+    if (!name) return;
+
+    const existsInAnyCategory =
+      uhpInventory.products.some((line) => line.name.trim() === name) ||
+      uhpInventory.tubeButtWeldProducts.some((line) => line.name.trim() === name) ||
+      uhpInventory.metalFaceSealProducts.some((line) => line.name.trim() === name);
+    if (existsInAnyCategory) {
+      setSyncError('이미 같은 이름의 제품 라인이 있습니다.');
+      return;
+    }
+
+    const key = UHP_STATE_KEYS[activeCategoryId];
+    const nextState: UhpInventoryState = JSON.parse(JSON.stringify(uhpInventory)) as UhpInventoryState;
+    nextState[key] = [
+      ...nextState[key],
+      {
+        name,
+        imageSrc: '/inventory/micro-elbow-hme.png',
+        items: [],
+      },
+    ];
+
+    setUhpInventory(nextState);
+    void persistUhpInventory(nextState);
+  };
+
   const handleDeleteItem = (productName: string, itemCode: string) => {
     const category = findUhpCategoryByProductName(uhpInventory, productName);
     if (!category) {
@@ -630,6 +659,51 @@ export default function AdminInventoryStatusPage() {
 
     if (!removed) {
       setSyncError('삭제할 품목을 찾을 수 없습니다.');
+      return;
+    }
+
+    setUhpInventory(nextState);
+    void persistUhpInventory(nextState);
+  };
+
+  const handleRenameItem = (productName: string, itemCode: string) => {
+    const category = findUhpCategoryByProductName(uhpInventory, productName);
+    if (!category) {
+      setSyncError('품목을 찾을 수 없습니다.');
+      return;
+    }
+
+    const nextCodeInput = prompt('변경할 품목 코드를 입력해 주세요.', itemCode);
+    const nextCode = nextCodeInput?.trim() ?? '';
+    if (!nextCode || nextCode === itemCode) return;
+
+    const key = UHP_STATE_KEYS[category];
+    const targetProduct = uhpInventory[key].find((line) => line.name === productName);
+    if (!targetProduct) {
+      setSyncError('품목을 찾을 수 없습니다.');
+      return;
+    }
+    if (targetProduct.items.some((item) => item.code === nextCode)) {
+      setSyncError('이미 같은 품목 코드가 있습니다.');
+      return;
+    }
+
+    const nextState: UhpInventoryState = JSON.parse(JSON.stringify(uhpInventory)) as UhpInventoryState;
+    let renamed = false;
+    nextState[key] = nextState[key].map((line) => {
+      if (line.name !== productName) return line;
+      return {
+        ...line,
+        items: line.items.map((item) => {
+          if (item.code !== itemCode) return item;
+          renamed = true;
+          return { ...item, code: nextCode };
+        }),
+      };
+    });
+
+    if (!renamed) {
+      setSyncError('수정할 품목을 찾을 수 없습니다.');
       return;
     }
 
@@ -1391,7 +1465,7 @@ export default function AdminInventoryStatusPage() {
               href="/admin/inventory/products"
               className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900"
             >
-              UHP 제품등록
+              제품 이미지 등록
             </Link>
           </p>
           {syncError && (
@@ -1403,7 +1477,7 @@ export default function AdminInventoryStatusPage() {
             href="/admin/inventory/products"
             className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm transition-colors hover:bg-gray-50"
           >
-            UHP 제품등록
+            제품 이미지 등록
           </Link>
           <button
             type="button"
@@ -1453,7 +1527,16 @@ export default function AdminInventoryStatusPage() {
           )}
         </div>
 
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">제품 카테고리</h2>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-gray-900">제품 카테고리</h2>
+          <button
+            type="button"
+            onClick={handleAddProductLine}
+            className="inline-flex items-center justify-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+          >
+            + 제품 추가
+          </button>
+        </div>
         <div className="flex flex-wrap gap-2">
           {UHP_CATEGORY_TABS.map(({ id, label }) => (
             <button
@@ -1538,6 +1621,13 @@ export default function AdminInventoryStatusPage() {
                               >
                                 총 현재고 {currentStock} {item.unit}
                               </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRenameItem(product.name, item.code)}
+                                className="rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                              >
+                                품목 수정
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => handleDeleteItem(product.name, item.code)}

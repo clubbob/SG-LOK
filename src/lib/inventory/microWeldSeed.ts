@@ -30,7 +30,7 @@ function buildProductLine(
   };
 }
 
-export const INVENTORY_SEED_VERSION = 16;
+export const INVENTORY_SEED_VERSION = 17;
 
 /** HMVE — 도면 Part No. HMVE-04·06·08 계열 */
 const HMVE_PRODUCT: InventoryProduct = {
@@ -244,19 +244,12 @@ export const INITIAL_TUBE_BUTT_WELD_PRODUCTS: InventoryProduct[] = [
 ];
 
 /**
- * Metal Face Seal — 관리 화면에서 이름·이미지·품목을 바꿀 수 있는 샘플 1라인.
- * (레거시 제거 대상 이름 `Metal Face Seal Elbow (MFS)` 와는 다르게 둠)
+ * Metal Face Seal 기본 라인
+ * - 요청 반영: Sample 라인 제거
+ * - HMGS Micro Gland S 라인 기본 제공
  */
 export const INITIAL_METAL_FACE_SEAL_PRODUCTS: InventoryProduct[] = [
-  {
-    name: 'Metal Face Seal Fitting (Sample)',
-    imageSrc: '/inventory/micro-elbow-hme.png',
-    items: [
-      createEmptyInventoryItem('MFS-04', 60),
-      createEmptyInventoryItem('MFS-06', 60),
-      createEmptyInventoryItem('MFS-08', 70),
-    ],
-  },
+  buildProductLine('Micro Gland S (HMGS)', '/inventory/micro-elbow-hme.png', 'HMGS'),
 ];
 
 /**

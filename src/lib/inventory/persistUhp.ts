@@ -4,7 +4,10 @@ import type { UhpInventoryState } from './types';
 
 /** 예전 시드에만 있던 기본 제품 라인 — 앱에서 제거했으나 Firestore에 남은 경우 정리 */
 const STRIP_TUBE_DEFAULT_NAMES = new Set(['Tube Butt Weld Elbow (TBW)']);
-const STRIP_METAL_DEFAULT_NAMES = new Set(['Metal Face Seal Elbow (MFS)']);
+const STRIP_METAL_DEFAULT_NAMES = new Set([
+  'Metal Face Seal Elbow (MFS)',
+  'Metal Face Seal Fitting (Sample)',
+]);
 
 export function dropRemovedDefaultCategoryProducts(state: UhpInventoryState): {
   next: UhpInventoryState;

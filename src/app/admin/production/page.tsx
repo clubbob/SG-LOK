@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { collection, query, getDocs, Timestamp, onSnapshot, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -52,6 +52,7 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
 
 export default function AdminProductionPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [error, setError] = useState('');
@@ -156,19 +157,29 @@ export default function AdminProductionPage() {
 
   // 검색 필터링
   useEffect(() => {
+    const statusFilterParam = searchParams.get('status');
+    const statusFiltered = statusFilterParam
+      ? requests.filter((request) => {
+          if (statusFilterParam === 'in_progress') {
+            return request.status === 'confirmed' || request.status === 'in_progress';
+          }
+          return request.status === statusFilterParam;
+        })
+      : requests;
+
     if (!searchQuery.trim()) {
-      setFilteredRequests(requests);
+      setFilteredRequests(statusFiltered);
       // 검색어가 없을 때는 마지막 페이지로 이동 (최신 항목 표시)
-      if (requests.length > 0) {
+      if (statusFiltered.length > 0) {
         const ITEMS_PER_PAGE = 10;
-        const totalPages = Math.ceil(requests.length / ITEMS_PER_PAGE);
+        const totalPages = Math.ceil(statusFiltered.length / ITEMS_PER_PAGE);
         setCurrentPage(totalPages > 0 ? totalPages : 1);
       }
       return;
     }
 
     const query = searchQuery.toLowerCase().trim();
-    const filtered = requests.filter((request) => {
+    const filtered = statusFiltered.filter((request) => {
       const productName = request.productName?.toLowerCase() || '';
       const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const customerName = request.customerName?.toLowerCase() || '';
@@ -187,7 +198,7 @@ export default function AdminProductionPage() {
 
     setFilteredRequests(filtered);
     setCurrentPage(1); // 검색 시 첫 페이지로 리셋
-  }, [searchQuery, requests]);
+  }, [searchQuery, requests, searchParams]);
 
   // 페이지네이션
   useEffect(() => {

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui';
 import { collection, query, getDocs, doc, updateDoc, Timestamp, onSnapshot, deleteDoc } from 'firebase/firestore';
@@ -63,6 +63,7 @@ const checkAdminAuth = (): boolean => {
 
 export default function AdminCertificatePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loadingCertificates, setLoadingCertificates] = useState(true);
   const [error, setError] = useState('');
@@ -202,19 +203,31 @@ export default function AdminCertificatePage() {
 
   // 검색 필터링
   useEffect(() => {
+    const statusFilterParam = searchParams.get('status');
+    const validStatusFilter =
+      statusFilterParam === 'pending' ||
+      statusFilterParam === 'in_progress' ||
+      statusFilterParam === 'completed' ||
+      statusFilterParam === 'cancelled'
+        ? statusFilterParam
+        : null;
+    const statusFiltered = validStatusFilter
+      ? certificates.filter((cert) => cert.status === validStatusFilter)
+      : certificates;
+
     if (!searchQuery.trim()) {
-      setFilteredCertificates(certificates);
+      setFilteredCertificates(statusFiltered);
       // 검색어가 없을 때는 마지막 페이지로 이동 (최신 항목 표시)
-      if (certificates.length > 0) {
+      if (statusFiltered.length > 0) {
         const ITEMS_PER_PAGE = 10;
-        const totalPages = Math.ceil(certificates.length / ITEMS_PER_PAGE);
+        const totalPages = Math.ceil(statusFiltered.length / ITEMS_PER_PAGE);
         setCurrentPage(totalPages > 0 ? totalPages : 1);
       }
       return;
     }
 
     const query = searchQuery.toLowerCase().trim();
-    const filtered = certificates.filter((cert) => {
+    const filtered = statusFiltered.filter((cert) => {
       // 요청자
       const userName = cert.userName?.toLowerCase() || '';
       // 고객명
@@ -245,7 +258,7 @@ export default function AdminCertificatePage() {
 
     setFilteredCertificates(filtered);
     setCurrentPage(1);
-  }, [searchQuery, certificates]);
+  }, [searchQuery, certificates, searchParams]);
 
   // 페이지네이션
   useEffect(() => {

@@ -100,6 +100,98 @@ type StructureItemModalState = {
   codeInput: string;
 };
 
+const LEGACY_HMGS_LINE_NAME = 'HMGS Micro Gland S';
+const HMGS_LINE_NAME = 'Micro Gland S (HMGS)';
+const HMGS_LINE_NAME_KEYS = new Set([
+  LEGACY_HMGS_LINE_NAME.trim().toLowerCase(),
+  HMGS_LINE_NAME.trim().toLowerCase(),
+]);
+
+const normalizeLineNameKey = (name: string): string => name.trim().toLowerCase();
+
+function dedupeProductLinesByName(lines: InventoryProduct[]): {
+  next: InventoryProduct[];
+  changed: boolean;
+} {
+  const deduped: InventoryProduct[] = [];
+  let changed = false;
+
+  for (const line of lines) {
+    const key = normalizeLineNameKey(line.name);
+    const existingIndex = deduped.findIndex((p) => normalizeLineNameKey(p.name) === key);
+    if (existingIndex < 0) {
+      deduped.push(line);
+      continue;
+    }
+
+    changed = true;
+    const existing = deduped[existingIndex]!;
+    const existingCodes = new Set(existing.items.map((item) => item.code));
+    const mergedItems = [...existing.items];
+    for (const item of line.items) {
+      if (existingCodes.has(item.code)) continue;
+      mergedItems.push(item);
+      existingCodes.add(item.code);
+    }
+    deduped[existingIndex] = {
+      ...existing,
+      items: mergedItems,
+      imageSrc: existing.imageSrc || line.imageSrc,
+    };
+  }
+
+  if (deduped.length !== lines.length) {
+    changed = true;
+  }
+
+  return { next: deduped, changed };
+}
+
+function dedupeProductLinesByStructure(lines: InventoryProduct[]): {
+  next: InventoryProduct[];
+  changed: boolean;
+} {
+  const deduped: InventoryProduct[] = [];
+  const seen = new Set<string>();
+  let changed = false;
+
+  for (const line of lines) {
+    const itemCodes = [...line.items.map((item) => item.code.trim().toUpperCase())].sort();
+    const signature = `${(line.imageSrc || '').trim().toLowerCase()}::${itemCodes.join('|')}`;
+    if (seen.has(signature)) {
+      changed = true;
+      continue;
+    }
+    seen.add(signature);
+    deduped.push(line);
+  }
+
+  return { next: deduped, changed };
+}
+
+function stripHmgsOutsideMetal(state: UhpInventoryState): {
+  next: UhpInventoryState;
+  changed: boolean;
+} {
+  const products = state.products.filter(
+    (line) => !HMGS_LINE_NAME_KEYS.has(normalizeLineNameKey(line.name))
+  );
+  const tubeButtWeldProducts = state.tubeButtWeldProducts.filter(
+    (line) => !HMGS_LINE_NAME_KEYS.has(normalizeLineNameKey(line.name))
+  );
+  const changed =
+    products.length !== state.products.length ||
+    tubeButtWeldProducts.length !== state.tubeButtWeldProducts.length;
+  return {
+    next: {
+      ...state,
+      products,
+      tubeButtWeldProducts,
+    },
+    changed,
+  };
+}
+
 export default function AdminInventoryStatusPage() {
   const HISTORY_PAGE_SIZE = 20;
   const HISTORY_KEEP_LIMIT = 100;
@@ -223,9 +315,12 @@ export default function AdminInventoryStatusPage() {
       const tubeBaseReseed = Array.isArray(data?.tubeButtWeldProducts)
         ? data.tubeButtWeldProducts
         : [];
-      const existingMetalReseed = Array.isArray(data?.metalFaceSealProducts)
+      const existingMetalReseedRaw = Array.isArray(data?.metalFaceSealProducts)
         ? data.metalFaceSealProducts
         : [];
+      const existingMetalReseed = existingMetalReseedRaw.map((line) =>
+        line.name === LEGACY_HMGS_LINE_NAME ? { ...line, name: HMGS_LINE_NAME } : line
+      );
       const elbowForReseed = mergeLegacyLongElbowIntoTubeButtWeld(
         tubeBaseReseed,
         Array.isArray(data?.longElbowProducts) ? data.longElbowProducts : undefined
@@ -235,6 +330,7 @@ export default function AdminInventoryStatusPage() {
         tubeStrippedReseed.next,
         INITIAL_TUBE_BUTT_WELD_PRODUCTS
       );
+      const tubeDedupedForReseed = dedupeProductLinesByName(tubeForReseed.next);
       const metalForReseed = ensureSeedProductLinesInCategory(
         existingMetalReseed,
         INITIAL_METAL_FACE_SEAL_PRODUCTS
@@ -243,13 +339,27 @@ export default function AdminInventoryStatusPage() {
         existingProducts,
         INITIAL_MICRO_WELD_PRODUCTS
       );
+      const productsDedupedForReseed = dedupeProductLinesByName(productsForReseed.next);
+      const metalDedupedForReseed = dedupeProductLinesByName(metalForReseed.next);
+      const strippedHmgsForReseed = stripHmgsOutsideMetal({
+        products: productsDedupedForReseed.next,
+        tubeButtWeldProducts: tubeDedupedForReseed.next,
+        metalFaceSealProducts: metalDedupedForReseed.next,
+      });
+      const reseedProductsByStructure = dedupeProductLinesByStructure(strippedHmgsForReseed.next.products);
+      const reseedTubeByStructure = dedupeProductLinesByStructure(
+        strippedHmgsForReseed.next.tubeButtWeldProducts
+      );
+      const reseedMetalByStructure = dedupeProductLinesByStructure(
+        strippedHmgsForReseed.next.metalFaceSealProducts
+      );
       try {
         await setDoc(
           inventoryRef,
           {
-            products: productsForReseed.next,
-            tubeButtWeldProducts: tubeForReseed.next,
-            metalFaceSealProducts: metalForReseed.next,
+            products: reseedProductsByStructure.next,
+            tubeButtWeldProducts: reseedTubeByStructure.next,
+            metalFaceSealProducts: reseedMetalByStructure.next,
             longElbowProducts: deleteField(),
             inventorySeedVersion: INVENTORY_SEED_VERSION,
             updatedAt: Timestamp.now(),
@@ -271,14 +381,21 @@ export default function AdminInventoryStatusPage() {
       Array.isArray(data?.longElbowProducts) ? data.longElbowProducts : undefined
     );
     const hle02Strip = stripHle02ItemFromLongElbowLine(elbowMerge.next);
+    const tubeDeduped = dedupeProductLinesByName(hle02Strip.next);
+    const normalizedMetalFaceSealProducts = (
+      Array.isArray(data?.metalFaceSealProducts)
+        ? data.metalFaceSealProducts
+        : [...INITIAL_METAL_FACE_SEAL_PRODUCTS]
+    ).map((line) =>
+      line.name === LEGACY_HMGS_LINE_NAME ? { ...line, name: HMGS_LINE_NAME } : line
+    );
+
     const merged: UhpInventoryState = {
       products: Array.isArray(data?.products)
         ? data.products
         : [...INITIAL_MICRO_WELD_PRODUCTS],
-      tubeButtWeldProducts: hle02Strip.next,
-      metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
-        ? data.metalFaceSealProducts
-        : [...INITIAL_METAL_FACE_SEAL_PRODUCTS],
+      tubeButtWeldProducts: tubeDeduped.next,
+      metalFaceSealProducts: normalizedMetalFaceSealProducts,
     };
     let catalogProducts = merged.products;
     const hmrtResult = mergeMissingHmrtItemsFromSeed(catalogProducts);
@@ -289,11 +406,43 @@ export default function AdminInventoryStatusPage() {
     catalogProducts = hmcResult.next;
     const catalogItemsMerged = hmrtResult.changed || hmtbResult.changed || hmcResult.changed;
     const mergedWithCatalog: UhpInventoryState = { ...merged, products: catalogProducts };
-    const { next, shouldPersistSlice } = dropRemovedDefaultCategoryProducts(mergedWithCatalog);
+    const dedupedProducts = dedupeProductLinesByName(mergedWithCatalog.products);
+    const dedupedTube = dedupeProductLinesByName(mergedWithCatalog.tubeButtWeldProducts);
+    const dedupedMetal = dedupeProductLinesByName(mergedWithCatalog.metalFaceSealProducts);
+    const dedupedMerged: UhpInventoryState = {
+      ...mergedWithCatalog,
+      products: dedupedProducts.next,
+      tubeButtWeldProducts: dedupedTube.next,
+      metalFaceSealProducts: dedupedMetal.next,
+    };
+    const hmgsStripped = stripHmgsOutsideMetal(dedupedMerged);
+    const dedupedProductsByStructure = dedupeProductLinesByStructure(hmgsStripped.next.products);
+    const dedupedTubeByStructure = dedupeProductLinesByStructure(hmgsStripped.next.tubeButtWeldProducts);
+    const dedupedMetalByStructure = dedupeProductLinesByStructure(hmgsStripped.next.metalFaceSealProducts);
+    const structureDedupedState: UhpInventoryState = {
+      ...hmgsStripped.next,
+      products: dedupedProductsByStructure.next,
+      tubeButtWeldProducts: dedupedTubeByStructure.next,
+      metalFaceSealProducts: dedupedMetalByStructure.next,
+    };
+    const dedupedAnyChanged =
+      dedupedProducts.changed ||
+      dedupedTube.changed ||
+      dedupedMetal.changed ||
+      dedupedProductsByStructure.changed ||
+      dedupedTubeByStructure.changed ||
+      dedupedMetalByStructure.changed;
+    const { next, shouldPersistSlice } = dropRemovedDefaultCategoryProducts(structureDedupedState);
+    const hmgsRenamedInMetal = normalizedMetalFaceSealProducts.some(
+      (line) => line.name === HMGS_LINE_NAME
+    ) && (Array.isArray(data?.metalFaceSealProducts)
+      ? data.metalFaceSealProducts.some((line) => line.name === LEGACY_HMGS_LINE_NAME)
+      : false);
     const shouldPersistLegacyLongElbowMerge =
       elbowMerge.changed ||
       Boolean(hasLegacyLongElbowField) ||
-      hle02Strip.changed;
+      hle02Strip.changed ||
+      tubeDeduped.changed;
     if (shouldPersistLegacyLongElbowMerge) {
       try {
         await setDoc(
@@ -309,7 +458,7 @@ export default function AdminInventoryStatusPage() {
         console.error('Long Elbow(Tube) 마이그레이션 저장 오류:', error);
       }
     }
-    if (catalogItemsMerged) {
+    if (catalogItemsMerged || dedupedProducts.changed || hmgsStripped.changed) {
       try {
         await setDoc(
           inventoryRef,
@@ -323,7 +472,7 @@ export default function AdminInventoryStatusPage() {
         console.error('Micro Weld 도면 품목 보강 저장 오류:', error);
       }
     }
-    if (shouldPersistSlice) {
+    if (shouldPersistSlice || hmgsRenamedInMetal || dedupedAnyChanged) {
       try {
         await setDoc(
           inventoryRef,
@@ -428,6 +577,64 @@ export default function AdminInventoryStatusPage() {
     setUhpInventory(next);
     void persistUhpInventory(next);
     closeStructureItemModal();
+  };
+
+  const handleDeleteProductLine = (productName: string) => {
+    const category = findUhpCategoryByProductName(uhpInventory, productName);
+    if (!category) {
+      setSyncError('삭제할 제품을 찾을 수 없습니다.');
+      return;
+    }
+
+    if (!confirm(`"${productName}" 제품 라인을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`)) {
+      return;
+    }
+
+    const key = UHP_STATE_KEYS[category];
+    const nextState: UhpInventoryState = JSON.parse(JSON.stringify(uhpInventory)) as UhpInventoryState;
+    const beforeCount = nextState[key].length;
+    nextState[key] = nextState[key].filter((line) => line.name !== productName);
+    const removedCount = beforeCount - nextState[key].length;
+
+    if (removedCount <= 0) {
+      setSyncError('삭제할 제품을 찾을 수 없습니다.');
+      return;
+    }
+
+    setUhpInventory(nextState);
+    void persistUhpInventory(nextState);
+  };
+
+  const handleDeleteItem = (productName: string, itemCode: string) => {
+    const category = findUhpCategoryByProductName(uhpInventory, productName);
+    if (!category) {
+      setSyncError('품목을 찾을 수 없습니다.');
+      return;
+    }
+
+    if (!confirm(`"${itemCode}" 품목을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`)) {
+      return;
+    }
+
+    const key = UHP_STATE_KEYS[category];
+    const nextState: UhpInventoryState = JSON.parse(JSON.stringify(uhpInventory)) as UhpInventoryState;
+    let removed = false;
+    nextState[key] = nextState[key].map((line) => {
+      if (line.name !== productName) return line;
+      const filteredItems = line.items.filter((item) => item.code !== itemCode);
+      if (filteredItems.length !== line.items.length) {
+        removed = true;
+      }
+      return { ...line, items: filteredItems };
+    });
+
+    if (!removed) {
+      setSyncError('삭제할 품목을 찾을 수 없습니다.');
+      return;
+    }
+
+    setUhpInventory(nextState);
+    void persistUhpInventory(nextState);
   };
 
   const closeInboundModal = () => {
@@ -1290,13 +1497,22 @@ export default function AdminInventoryStatusPage() {
                       <p className="text-xs text-gray-600">
                         새 품목 코드는 「품목 추가」로 등록합니다.
                       </p>
-                      <button
-                        type="button"
-                        onClick={() => openAddStructureItem(product.name)}
-                        className="inline-flex shrink-0 items-center justify-center rounded-md border border-dashed border-blue-300 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
-                      >
-                        + 품목 추가
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openAddStructureItem(product.name)}
+                          className="inline-flex shrink-0 items-center justify-center rounded-md border border-dashed border-blue-300 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+                        >
+                          + 품목 추가
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteProductLine(product.name)}
+                          className="inline-flex shrink-0 items-center justify-center rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                        >
+                          제품 삭제
+                        </button>
+                      </div>
                     </div>
                     {product.filteredItems.length === 0 ? (
                       <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-6 text-center text-sm text-gray-500">
@@ -1316,11 +1532,20 @@ export default function AdminInventoryStatusPage() {
                               <>
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm font-semibold text-gray-800">{item.code}</p>
-                            <span
-                              className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700"
-                            >
-                              총 현재고 {currentStock} {item.unit}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700"
+                              >
+                                총 현재고 {currentStock} {item.unit}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteItem(product.name, item.code)}
+                                className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                              >
+                                품목 삭제
+                              </button>
+                            </div>
                           </div>
                           {item.variants && item.variants.length > 0 && (
                             <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">

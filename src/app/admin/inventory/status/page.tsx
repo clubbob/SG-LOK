@@ -586,7 +586,10 @@ export default function AdminInventoryStatusPage() {
       return;
     }
 
-    if (!confirm(`"${productName}" 제품 라인을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`)) {
+    if (!confirm(`"${productName}" 제품 라인을 삭제하시겠습니까?`)) {
+      return;
+    }
+    if (!confirm(`최종 확인: "${productName}" 제품 라인을 정말 삭제할까요?\n삭제 후에는 복구할 수 없습니다.`)) {
       return;
     }
 
@@ -634,6 +637,32 @@ export default function AdminInventoryStatusPage() {
     void persistUhpInventory(nextState);
   };
 
+  const handleDeleteProductLineByName = () => {
+    const nameInput = prompt('삭제할 제품명을 입력해 주세요.');
+    const targetName = nameInput?.trim() ?? '';
+    if (!targetName) return;
+    if (!confirm(`"${targetName}" 제품 라인을 삭제하시겠습니까?`)) {
+      return;
+    }
+    if (!confirm(`최종 확인: "${targetName}" 제품 라인을 정말 삭제할까요?\n삭제 후에는 복구할 수 없습니다.`)) {
+      return;
+    }
+
+    const key = UHP_STATE_KEYS[activeCategoryId];
+    const nextState: UhpInventoryState = JSON.parse(JSON.stringify(uhpInventory)) as UhpInventoryState;
+    const beforeCount = nextState[key].length;
+    nextState[key] = nextState[key].filter((line) => line.name.trim() !== targetName);
+    const removedCount = beforeCount - nextState[key].length;
+
+    if (removedCount <= 0) {
+      setSyncError('현재 탭에서 해당 제품명을 찾을 수 없습니다.');
+      return;
+    }
+
+    setUhpInventory(nextState);
+    void persistUhpInventory(nextState);
+  };
+
   const handleDeleteItem = (productName: string, itemCode: string) => {
     const category = findUhpCategoryByProductName(uhpInventory, productName);
     if (!category) {
@@ -641,7 +670,10 @@ export default function AdminInventoryStatusPage() {
       return;
     }
 
-    if (!confirm(`"${itemCode}" 품목을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.`)) {
+    if (!confirm(`"${itemCode}" 품목을 삭제하시겠습니까?`)) {
+      return;
+    }
+    if (!confirm(`최종 확인: "${itemCode}" 품목을 정말 삭제할까요?\n삭제 후에는 복구할 수 없습니다.`)) {
       return;
     }
 
@@ -1454,7 +1486,7 @@ export default function AdminInventoryStatusPage() {
     <div className="p-6 sm:p-8">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">UHP 재고현황</h1>
+          <h1 className="text-2xl font-bold text-gray-900">UHP 제품재고</h1>
           <p className="text-gray-600 mt-2">
             입고·출고·재고조정·생산계획·이력과 함께, 각 제품 카드에서{' '}
             <span className="font-medium text-gray-800">품목 코드</span>는 「품목 추가」로 등록할 수 있습니다.
@@ -1529,13 +1561,22 @@ export default function AdminInventoryStatusPage() {
 
         <div className="mb-4 flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-gray-900">제품 카테고리</h2>
-          <button
-            type="button"
-            onClick={handleAddProductLine}
-            className="inline-flex items-center justify-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
-          >
-            + 제품 추가
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAddProductLine}
+              className="inline-flex items-center justify-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+            >
+              + 제품 추가
+            </button>
+            <button
+              type="button"
+              onClick={handleDeleteProductLineByName}
+              className="inline-flex items-center justify-center rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+            >
+              제품 삭제
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           {UHP_CATEGORY_TABS.map(({ id, label }) => (
@@ -1580,22 +1621,13 @@ export default function AdminInventoryStatusPage() {
                       <p className="text-xs text-gray-600">
                         새 품목 코드는 「품목 추가」로 등록합니다.
                       </p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => openAddStructureItem(product.name)}
-                          className="inline-flex shrink-0 items-center justify-center rounded-md border border-dashed border-blue-300 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
-                        >
-                          + 품목 추가
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteProductLine(product.name)}
-                          className="inline-flex shrink-0 items-center justify-center rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
-                        >
-                          제품 삭제
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openAddStructureItem(product.name)}
+                        className="inline-flex shrink-0 items-center justify-center rounded-md border border-dashed border-blue-300 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+                      >
+                        + 품목 추가
+                      </button>
                     </div>
                     {product.filteredItems.length === 0 ? (
                       <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-6 text-center text-sm text-gray-500">

@@ -358,7 +358,7 @@ export default function AdminInventoryProductsPage() {
           <h1 className="text-2xl font-bold text-gray-900">제품 이미지 등록</h1>
           <p className="text-gray-600 mt-2">
             <strong>제품 라인(시리즈)</strong>의 이름과 이미지(파일 업로드 또는 URL·경로)만 이 메뉴에서 등록·수정·삭제합니다.
-            저장 시 Firestore에 반영되며 <strong>UHP 재고현황</strong>과 같은 목록을 공유합니다.
+            저장 시 Firestore에 반영되며 <strong>UHP 제품재고</strong>와 같은 목록을 공유합니다.
           </p>
           <p className="mt-2 text-sm text-gray-600">
             <span className="font-medium text-gray-800">품목 코드·재고 수량·입출고·생산계획·이력</span> →{" "}
@@ -366,7 +366,7 @@ export default function AdminInventoryProductsPage() {
               href="/admin/inventory/status"
               className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900"
             >
-              UHP 재고현황
+              UHP 제품재고
             </Link>
           </p>
           {listenError && (
@@ -381,7 +381,7 @@ export default function AdminInventoryProductsPage() {
           href="/admin/inventory/status"
           className="inline-flex shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm transition-colors hover:bg-gray-50"
         >
-          UHP 재고현황
+          UHP 제품재고
         </Link>
       </div>
 
@@ -488,7 +488,7 @@ export default function AdminInventoryProductsPage() {
                   href="/admin/inventory/status"
                   className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900"
                 >
-                  UHP 재고현황
+                  UHP 제품재고
                 </Link>
                 에서 이 제품 카드의 「품목 추가」로 등록합니다. (현재 연결된 품목{" "}
                 <span className="font-semibold text-gray-800">{product.items.length}</span>개)

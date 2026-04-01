@@ -44,6 +44,7 @@ import {
   Timestamp,
   type DocumentSnapshot,
 } from 'firebase/firestore';
+import { useSearchParams } from 'next/navigation';
 
 type InboundModalState = {
   isOpen: boolean;
@@ -196,6 +197,7 @@ export default function AdminInventoryStatusPage() {
   const HISTORY_PAGE_SIZE = 20;
   const HISTORY_KEEP_LIMIT = 100;
   const PRODUCT_LIST_PAGE_SIZE = 10;
+  const searchParams = useSearchParams();
   const [activeCategoryId, setActiveCategoryId] = useState<UhpCategoryId>('microWeld');
   const [searchQuery, setSearchQuery] = useState('');
   const [productListPage, setProductListPage] = useState(1);
@@ -1382,6 +1384,44 @@ export default function AdminInventoryStatusPage() {
   };
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
+  const stockFilterParam = searchParams.get('stock');
+  const stockFilter: 'in' | 'out' | null =
+    stockFilterParam === 'in' || stockFilterParam === 'out' ? stockFilterParam : null;
+  const planFilterParam = searchParams.get('plan');
+  const hasPlanFilter = planFilterParam === 'exists';
+  const getItemCurrentStock = (item: InventoryItem): number =>
+    item.variants && item.variants.length > 0
+      ? item.variants.reduce((sum, variant) => sum + variant.currentStock, 0)
+      : item.currentStock;
+  const applyStockFilter = <T extends { filteredItems: InventoryItem[] }>(products: T[]): T[] => {
+    if (!stockFilter) return products;
+    const filtered = products
+      .map((product) => ({
+        ...product,
+        filteredItems: product.filteredItems.filter((item) =>
+          stockFilter === 'in' ? getItemCurrentStock(item) > 0 : getItemCurrentStock(item) <= 0
+        ),
+      }))
+      .filter((product) => product.filteredItems.length > 0);
+    return filtered as T[];
+  };
+  const applyPlanFilter = <T extends { filteredItems: InventoryItem[] }>(products: T[]): T[] => {
+    if (!hasPlanFilter) return products;
+    const filtered = products
+      .map((product) => ({
+        ...product,
+        filteredItems: product.filteredItems.filter((item) => {
+          const plans = Array.isArray(item.productionPlanHistory) ? item.productionPlanHistory : [];
+          const totalPlanned = plans.reduce(
+            (sum, plan) => sum + (typeof plan.plannedQuantity === 'number' ? plan.plannedQuantity : 0),
+            0
+          );
+          return totalPlanned > 0;
+        }),
+      }))
+      .filter((product) => product.filteredItems.length > 0);
+    return filtered as T[];
+  };
   const modalTargetItem = findProductInUhpSlices(uhpInventory, inboundModal.productName)?.items.find(
     (item) => item.code === inboundModal.itemCode
   );
@@ -1420,7 +1460,7 @@ export default function AdminInventoryStatusPage() {
     historyViewCurrentPage * HISTORY_PAGE_SIZE
   );
   const isGlobalSearch = normalizedQuery.length > 0;
-  const filteredCategoryProducts = isGlobalSearch
+  const baseFilteredCategoryProducts = isGlobalSearch
     ? UHP_CATEGORY_TABS.flatMap(({ id, label }) =>
         filterProductsBySearchQuery(
           uhpInventory[UHP_STATE_KEYS[id]],
@@ -1441,6 +1481,7 @@ export default function AdminInventoryStatusPage() {
         categoryLabel: undefined,
         listKey: `${activeCategoryId}::${p.name}`,
       }));
+  const filteredCategoryProducts = applyPlanFilter(applyStockFilter(baseFilteredCategoryProducts));
 
   const productListTotalPages = Math.max(
     1,
@@ -1460,10 +1501,7 @@ export default function AdminInventoryStatusPage() {
     productListEffectivePage * PRODUCT_LIST_PAGE_SIZE
   );
 
-  const getCurrentStock = (item: InventoryItem): number =>
-    item.variants && item.variants.length > 0
-      ? item.variants.reduce((sum, variant) => sum + variant.currentStock, 0)
-      : item.currentStock;
+  const getCurrentStock = (item: InventoryItem): number => getItemCurrentStock(item);
 
   const getVariantProductionPlanInfo = (item: InventoryItem, variantCode: string) => {
     const plans = (item.productionPlanHistory ?? []).filter(

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { collection, query, where, onSnapshot, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, doc, query, where, onSnapshot, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 const ADMIN_SESSION_KEY = 'admin_session';
@@ -54,6 +54,12 @@ export default function AdminPage() {
     pending: 0,
     inProgress: 0,
     completed: 0,
+  });
+  const [inventoryStats, setInventoryStats] = useState({
+    totalItems: 0,
+    inStock: 0,
+    outOfStock: 0,
+    planExists: 0,
   });
   const [loading, setLoading] = useState(true);
 
@@ -210,11 +216,79 @@ export default function AdminPage() {
       }
     );
 
+    // 재고 통계 구독 (품목 기준: 재고 보유 / 미보유)
+    const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
+    const unsubscribeInventory = onSnapshot(
+      inventoryRef,
+      (snapshot) => {
+        const data = snapshot.data() as
+          | {
+              products?: Array<{ items?: Array<{ currentStock?: number; variants?: Array<{ currentStock?: number }> }> }>;
+              tubeButtWeldProducts?: Array<{ items?: Array<{ currentStock?: number; variants?: Array<{ currentStock?: number }> }> }>;
+              metalFaceSealProducts?: Array<{ items?: Array<{ currentStock?: number; variants?: Array<{ currentStock?: number }> }> }>;
+            }
+          | undefined;
+
+        const getItemStock = (item: {
+          currentStock?: number;
+          variants?: Array<{ currentStock?: number }>;
+        }): number => {
+          if (Array.isArray(item.variants) && item.variants.length > 0) {
+            return item.variants.reduce((sum, v) => sum + (typeof v.currentStock === 'number' ? v.currentStock : 0), 0);
+          }
+          return typeof item.currentStock === 'number' ? item.currentStock : 0;
+        };
+
+        let totalItemsCount = 0;
+        let inStockCount = 0;
+        let outOfStockCount = 0;
+        let planExistsCount = 0;
+
+        const slices = [
+          ...(Array.isArray(data?.products) ? data.products : []),
+          ...(Array.isArray(data?.tubeButtWeldProducts) ? data.tubeButtWeldProducts : []),
+          ...(Array.isArray(data?.metalFaceSealProducts) ? data.metalFaceSealProducts : []),
+        ];
+
+        slices.forEach((product) => {
+          const items = Array.isArray(product.items) ? product.items : [];
+          items.forEach((item) => {
+            totalItemsCount += 1;
+            const stock = getItemStock(item);
+            if (stock > 0) {
+              inStockCount += 1;
+            } else {
+              outOfStockCount += 1;
+            }
+            const plans = Array.isArray(item.productionPlanHistory) ? item.productionPlanHistory : [];
+            const totalPlanned = plans.reduce(
+              (sum, plan) => sum + (typeof plan.plannedQuantity === 'number' ? plan.plannedQuantity : 0),
+              0
+            );
+            if (totalPlanned > 0) {
+              planExistsCount += 1;
+            }
+          });
+        });
+
+        setInventoryStats({
+          totalItems: totalItemsCount,
+          inStock: inStockCount,
+          outOfStock: outOfStockCount,
+          planExists: planExistsCount,
+        });
+      },
+      (error) => {
+        console.error('재고 통계 조회 오류:', error);
+      }
+    );
+
     return () => {
       unsubscribeUsers();
       unsubscribeInquiries();
       unsubscribeProduction();
       unsubscribeCertificates();
+      unsubscribeInventory();
     };
   }, [router]);
 
@@ -494,6 +568,76 @@ export default function AdminPage() {
                   <div className="bg-green-500 rounded-lg p-2">
                     <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </Link>
+          </div>
+        </div>
+
+        {/* 재고관리 섹션 */}
+        <div className="mb-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <h2 className="text-base font-semibold text-gray-900 mb-3">재고관리</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <Link href="/admin/inventory/status" className="block h-full">
+              <div className="bg-gradient-to-br from-sky-50 to-sky-100 rounded-lg p-3 border border-sky-200 hover:shadow-md transition-all hover:scale-[1.02]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-600 mb-0.5">전체 품목</p>
+                    <p className="text-2xl font-bold text-gray-900">{inventoryStats.totalItems}</p>
+                  </div>
+                  <div className="bg-sky-500 rounded-lg p-2">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            <Link href="/admin/inventory/status?stock=in" className="block h-full">
+              <div className="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-3 border border-indigo-200 hover:shadow-md transition-all hover:scale-[1.02]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-600 mb-0.5">품목 재고 보유</p>
+                    <p className="text-2xl font-bold text-gray-900">{inventoryStats.inStock}</p>
+                  </div>
+                  <div className="bg-indigo-500 rounded-lg p-2">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0v10l-8 4m8-14l-8 4m0 10L4 17V7m8 4L4 7m8 4l8-4" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            <Link href="/admin/inventory/status?stock=out" className="block h-full">
+              <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-3 border border-purple-200 hover:shadow-md transition-all hover:scale-[1.02]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-600 mb-0.5">품목 재고 미보유</p>
+                    <p className="text-2xl font-bold text-gray-900">{inventoryStats.outOfStock}</p>
+                  </div>
+                  <div className="bg-purple-500 rounded-lg p-2">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2 1.586-1.586a2 2 0 012.828 0L20 14m-6-8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </Link>
+
+            <Link href="/admin/inventory/status?plan=exists" className="block h-full">
+              <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-3 border border-emerald-200 hover:shadow-md transition-all hover:scale-[1.02]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-gray-600 mb-0.5">생산계획 존재</p>
+                    <p className="text-2xl font-bold text-gray-900">{inventoryStats.planExists}</p>
+                  </div>
+                  <div className="bg-emerald-500 rounded-lg p-2">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
                 </div>

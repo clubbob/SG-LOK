@@ -1545,12 +1545,6 @@ export default function AdminInventoryStatusPage() {
           )}
         </div>
         <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-          <Link
-            href="/admin/inventory/products"
-            className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm transition-colors hover:bg-gray-50"
-          >
-            제품 이미지 등록
-          </Link>
           <button
             type="button"
             onClick={() => void refreshInventoryFromServer()}
@@ -1576,45 +1570,46 @@ export default function AdminInventoryStatusPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-        <div className="mb-4">
-          <div className="relative">
-            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
-              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
-              </svg>
-            </span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
+      <div className="mb-4">
+        <div className="relative">
+          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+            </svg>
+          </span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setTabSelectionLockedByUser(false);
+            }}
+            placeholder="제품명·품목코드 검색 (현재 카테고리)"
+            className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          />
+          {searchQuery.trim().length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('');
                 setTabSelectionLockedByUser(false);
               }}
-              placeholder="제품명·품목코드 검색 (현재 카테고리)"
-              className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-            />
-            {searchQuery.trim().length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  setTabSelectionLockedByUser(false);
-                }}
-                className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                aria-label="검색어 지우기"
-                title="검색어 지우기"
-              >
-                ×
-              </button>
-            )}
-          </div>
-          {isSearching && (
-            <p className="mt-1.5 text-xs text-gray-500">
-              현재 선택한 탭에서만 검색합니다.
-            </p>
+              className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              aria-label="검색어 지우기"
+              title="검색어 지우기"
+            >
+              ×
+            </button>
           )}
         </div>
+        {isSearching && (
+          <p className="mt-1.5 text-xs text-gray-500">
+            현재 선택한 탭에서만 검색합니다.
+          </p>
+        )}
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
 
         <div className="mb-4 flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-gray-900">제품 카테고리</h2>

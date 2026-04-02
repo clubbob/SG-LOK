@@ -377,12 +377,6 @@ export default function AdminInventoryProductsPage() {
           )}
           {saving && <p className="mt-2 text-sm text-blue-600">저장 중…</p>}
         </div>
-        <Link
-          href="/admin/inventory/status"
-          className="inline-flex shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm transition-colors hover:bg-gray-50"
-        >
-          UHP 제품재고
-        </Link>
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">

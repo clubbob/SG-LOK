@@ -57,7 +57,10 @@ export default function AdminInventoryProductsPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<{ productName: string } | null>(null);
 
-  const applyInventoryDocument = useCallback(async (snapshot: DocumentSnapshot) => {
+  const applyInventoryDocument = useCallback(async (
+    snapshot: DocumentSnapshot,
+    allowAutoPersist: boolean = false
+  ) => {
     const inventoryRef = doc(db, "inventory", "microWeldProducts");
     const reseedPayload = {
       products: INITIAL_MICRO_WELD_PRODUCTS,
@@ -70,7 +73,9 @@ export default function AdminInventoryProductsPage() {
 
     if (!snapshot.exists()) {
       try {
-        await setDoc(inventoryRef, reseedPayload);
+        if (allowAutoPersist) {
+          await setDoc(inventoryRef, reseedPayload);
+        }
       } catch (error) {
         console.error("재고 초기 데이터 저장 오류:", error);
         setListenError("재고 초기 데이터 저장에 실패했습니다.");
@@ -116,22 +121,24 @@ export default function AdminInventoryProductsPage() {
         existingProducts,
         INITIAL_MICRO_WELD_PRODUCTS
       );
-      try {
-        await setDoc(
-          inventoryRef,
-          {
-            products: productsForReseed.next,
-            tubeButtWeldProducts: tubeForReseed.next,
-            metalFaceSealProducts: metalForReseed.next,
-            longElbowProducts: deleteField(),
-            inventorySeedVersion: INVENTORY_SEED_VERSION,
-            updatedAt: Timestamp.now(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        console.error("재고 시드 재적용 오류:", error);
-        setListenError("재고 시드 재적용에 실패했습니다.");
+      if (allowAutoPersist) {
+        try {
+          await setDoc(
+            inventoryRef,
+            {
+              products: productsForReseed.next,
+              tubeButtWeldProducts: tubeForReseed.next,
+              metalFaceSealProducts: metalForReseed.next,
+              longElbowProducts: deleteField(),
+              inventorySeedVersion: INVENTORY_SEED_VERSION,
+              updatedAt: Timestamp.now(),
+            },
+            { merge: true }
+          );
+        } catch (error) {
+          console.error("재고 시드 재적용 오류:", error);
+          setListenError("재고 시드 재적용에 실패했습니다.");
+        }
       }
       return;
     }
@@ -167,7 +174,7 @@ export default function AdminInventoryProductsPage() {
       elbowMerge.changed ||
       Boolean(hasLegacyLongElbowField) ||
       hle02Strip.changed;
-    if (shouldPersistLegacyLongElbowMerge) {
+    if (allowAutoPersist && shouldPersistLegacyLongElbowMerge) {
       try {
         await setDoc(
           inventoryRef,
@@ -182,7 +189,7 @@ export default function AdminInventoryProductsPage() {
         console.error("Long Elbow(Tube) 마이그레이션 저장 오류:", error);
       }
     }
-    if (catalogItemsMerged) {
+    if (allowAutoPersist && catalogItemsMerged) {
       try {
         await setDoc(
           inventoryRef,
@@ -196,7 +203,7 @@ export default function AdminInventoryProductsPage() {
         console.error("Micro Weld 도면 품목 보강 저장 오류:", error);
       }
     }
-    if (shouldPersistSlice) {
+    if (allowAutoPersist && shouldPersistSlice) {
       try {
         await setDoc(
           inventoryRef,
@@ -220,7 +227,7 @@ export default function AdminInventoryProductsPage() {
     const unsubscribe = onSnapshot(
       inventoryRef,
       (snapshot) => {
-        void applyInventoryDocument(snapshot);
+        void applyInventoryDocument(snapshot, false);
       },
       (error) => {
         console.error("재고 데이터 동기화 오류:", error);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { db } from '@/lib/firebase';
 import {
   ensureSeedProductLinesInCategory,
@@ -158,7 +158,10 @@ function dedupeProductLinesByStructure(lines: InventoryProduct[]): {
 
   for (const line of lines) {
     const itemCodes = [...line.items.map((item) => item.code.trim().toUpperCase())].sort();
-    const signature = `${(line.imageSrc || '').trim().toLowerCase()}::${itemCodes.join('|')}`;
+    // 제품명이 다르면 같은 구조/이미지여도 다른 제품 라인으로 취급해야 함
+    // (신규 제품은 빈 items + 빈 imageSrc가 흔해서 구조만으로 dedupe하면 오인 삭제됨)
+    const normalizedName = normalizeLineNameKey(line.name);
+    const signature = `${normalizedName}::${(line.imageSrc || '').trim().toLowerCase()}::${itemCodes.join('|')}`;
     if (seen.has(signature)) {
       changed = true;
       continue;
@@ -265,6 +268,10 @@ export default function AdminInventoryStatusPage() {
 
   const [structureItemModal, setStructureItemModal] = useState<StructureItemModalState | null>(null);
   const [structureItemFormError, setStructureItemFormError] = useState('');
+  const isAutoPersistingRef = useRef(false);
+  const lastAutoPersistSignatureRef = useRef('');
+  const isPersistingRef = useRef(false);
+  const pendingPersistStateRef = useRef<UhpInventoryState | null>(null);
 
   useEffect(() => {
     setProductListPage(1);
@@ -280,8 +287,12 @@ export default function AdminInventoryStatusPage() {
     }
   }, [searchQuery, uhpInventory, activeCategoryId, tabSelectionLockedByUser]);
 
-  const applyInventoryDocument = useCallback(async (snapshot: DocumentSnapshot) => {
+  const applyInventoryDocument = useCallback(async (
+    snapshot: DocumentSnapshot,
+    allowAutoPersist: boolean = false
+  ) => {
     const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
+    const isPendingLocalWrite = snapshot.metadata.hasPendingWrites;
     const reseedPayload = {
       products: INITIAL_MICRO_WELD_PRODUCTS,
       tubeButtWeldProducts: INITIAL_TUBE_BUTT_WELD_PRODUCTS,
@@ -293,8 +304,13 @@ export default function AdminInventoryStatusPage() {
 
     if (!snapshot.exists()) {
       try {
-        await setDoc(inventoryRef, reseedPayload);
+        if (allowAutoPersist && !isPendingLocalWrite && !isAutoPersistingRef.current) {
+          isAutoPersistingRef.current = true;
+          await setDoc(inventoryRef, reseedPayload);
+          isAutoPersistingRef.current = false;
+        }
       } catch (error) {
+        isAutoPersistingRef.current = false;
         console.error('재고 초기 데이터 저장 오류:', error);
         setSyncError('재고 초기 데이터 저장에 실패했습니다.');
       }
@@ -357,22 +373,27 @@ export default function AdminInventoryStatusPage() {
       const reseedMetalByStructure = dedupeProductLinesByStructure(
         strippedHmgsForReseed.next.metalFaceSealProducts
       );
-      try {
-        await setDoc(
-          inventoryRef,
-          {
-            products: reseedProductsByStructure.next,
-            tubeButtWeldProducts: reseedTubeByStructure.next,
-            metalFaceSealProducts: reseedMetalByStructure.next,
-            longElbowProducts: deleteField(),
-            inventorySeedVersion: INVENTORY_SEED_VERSION,
-            updatedAt: Timestamp.now(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        console.error('재고 시드 재적용 오류:', error);
-        setSyncError('재고 시드 재적용에 실패했습니다.');
+      if (allowAutoPersist && !isPendingLocalWrite && !isAutoPersistingRef.current) {
+        try {
+          isAutoPersistingRef.current = true;
+          await setDoc(
+            inventoryRef,
+            {
+              products: reseedProductsByStructure.next,
+              tubeButtWeldProducts: reseedTubeByStructure.next,
+              metalFaceSealProducts: reseedMetalByStructure.next,
+              longElbowProducts: deleteField(),
+              inventorySeedVersion: INVENTORY_SEED_VERSION,
+              updatedAt: Timestamp.now(),
+            },
+            { merge: true }
+          );
+        } catch (error) {
+          console.error('재고 시드 재적용 오류:', error);
+          setSyncError('재고 시드 재적용에 실패했습니다.');
+        } finally {
+          isAutoPersistingRef.current = false;
+        }
       }
       return;
     }
@@ -447,48 +468,43 @@ export default function AdminInventoryStatusPage() {
       Boolean(hasLegacyLongElbowField) ||
       hle02Strip.changed ||
       tubeDeduped.changed;
+    const autoPersistPayload: Record<string, unknown> = {};
     if (shouldPersistLegacyLongElbowMerge) {
-      try {
-        await setDoc(
-          inventoryRef,
-          {
-            tubeButtWeldProducts: next.tubeButtWeldProducts,
-            longElbowProducts: deleteField(),
-            updatedAt: Timestamp.now(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        console.error('Long Elbow(Tube) 마이그레이션 저장 오류:', error);
-      }
+      autoPersistPayload.tubeButtWeldProducts = next.tubeButtWeldProducts;
+      autoPersistPayload.longElbowProducts = deleteField();
     }
     if (catalogItemsMerged || dedupedProducts.changed || hmgsStripped.changed) {
-      try {
-        await setDoc(
-          inventoryRef,
-          {
-            products: next.products,
-            updatedAt: Timestamp.now(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        console.error('Micro Weld 도면 품목 보강 저장 오류:', error);
-      }
+      autoPersistPayload.products = next.products;
     }
     if (shouldPersistSlice || hmgsRenamedInMetal || dedupedAnyChanged) {
-      try {
-        await setDoc(
-          inventoryRef,
-          {
-            tubeButtWeldProducts: next.tubeButtWeldProducts,
-            metalFaceSealProducts: next.metalFaceSealProducts,
-            updatedAt: Timestamp.now(),
-          },
-          { merge: true }
-        );
-      } catch (error) {
-        console.error('레거시 TBW/MFS 제품 라인 정리 저장 오류:', error);
+      autoPersistPayload.tubeButtWeldProducts = next.tubeButtWeldProducts;
+      autoPersistPayload.metalFaceSealProducts = next.metalFaceSealProducts;
+    }
+    const shouldAutoPersist = Object.keys(autoPersistPayload).length > 0;
+    if (allowAutoPersist && shouldAutoPersist && !isPendingLocalWrite) {
+      const signature = JSON.stringify({
+        products: autoPersistPayload.products ?? null,
+        tubeButtWeldProducts: autoPersistPayload.tubeButtWeldProducts ?? null,
+        metalFaceSealProducts: autoPersistPayload.metalFaceSealProducts ?? null,
+        hasLongElbowDelete: Object.prototype.hasOwnProperty.call(autoPersistPayload, 'longElbowProducts'),
+      });
+      if (!isAutoPersistingRef.current && signature !== lastAutoPersistSignatureRef.current) {
+        isAutoPersistingRef.current = true;
+        try {
+          await setDoc(
+            inventoryRef,
+            {
+              ...autoPersistPayload,
+              updatedAt: Timestamp.now(),
+            },
+            { merge: true }
+          );
+          lastAutoPersistSignatureRef.current = signature;
+        } catch (error) {
+          console.error('재고 자동 정리 저장 오류:', error);
+        } finally {
+          isAutoPersistingRef.current = false;
+        }
       }
     }
     setUhpInventory(next);
@@ -499,7 +515,7 @@ export default function AdminInventoryStatusPage() {
     const unsubscribe = onSnapshot(
       inventoryRef,
       (snapshot) => {
-        void applyInventoryDocument(snapshot);
+        void applyInventoryDocument(snapshot, false);
       },
       (error) => {
         console.error('재고 데이터 동기화 오류:', error);
@@ -516,7 +532,7 @@ export default function AdminInventoryStatusPage() {
     try {
       const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
       const snapshot = await getDocFromServer(inventoryRef);
-      await applyInventoryDocument(snapshot);
+      await applyInventoryDocument(snapshot, true);
     } catch (error) {
       console.error('재고 새로고침 오류:', error);
       setSyncError('재고 데이터를 불러오지 못했습니다.');
@@ -526,12 +542,51 @@ export default function AdminInventoryStatusPage() {
   };
 
   const persistUhpInventory = async (nextState: UhpInventoryState) => {
+    // 연속 저장 요청을 1건으로 병합해 Firestore write queue 포화를 방지
+    pendingPersistStateRef.current = nextState;
+    if (isPersistingRef.current) {
+      return;
+    }
+
+    isPersistingRef.current = true;
     try {
-      await persistUhpInventoryState(nextState);
+      while (pendingPersistStateRef.current) {
+        const stateToSave = pendingPersistStateRef.current;
+        pendingPersistStateRef.current = null;
+        let saved = false;
+        let attempt = 0;
+        while (!saved && attempt < 5) {
+          attempt += 1;
+          try {
+            await persistUhpInventoryState(stateToSave);
+            saved = true;
+          } catch (error) {
+            const code =
+              typeof error === 'object' &&
+              error !== null &&
+              'code' in error &&
+              typeof (error as { code?: unknown }).code === 'string'
+                ? (error as { code: string }).code
+                : '';
+            const retryable =
+              code === 'resource-exhausted' ||
+              code === 'unavailable' ||
+              code === 'aborted' ||
+              code === 'deadline-exceeded';
+            if (!retryable || attempt >= 5) {
+              throw error;
+            }
+            const delayMs = Math.min(3000, 300 * 2 ** (attempt - 1));
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+        }
+      }
       setSyncError('');
     } catch (error) {
       console.error('재고 데이터 저장 오류:', error);
-      setSyncError('재고 데이터 저장에 실패했습니다.');
+      setSyncError('재고 데이터 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.');
+    } finally {
+      isPersistingRef.current = false;
     }
   };
 
@@ -655,16 +710,13 @@ export default function AdminInventoryStatusPage() {
     const name = nameInput?.trim() ?? '';
     if (!name) return;
 
-    const existsInAnyCategory =
-      uhpInventory.products.some((line) => line.name.trim() === name) ||
-      uhpInventory.tubeButtWeldProducts.some((line) => line.name.trim() === name) ||
-      uhpInventory.metalFaceSealProducts.some((line) => line.name.trim() === name);
-    if (existsInAnyCategory) {
-      setSyncError('이미 같은 이름의 제품 라인이 있습니다.');
+    const key = UHP_STATE_KEYS[activeCategoryId];
+    const existsInCurrentCategory = uhpInventory[key].some((line) => line.name.trim() === name);
+    if (existsInCurrentCategory) {
+      setSyncError('현재 탭에 같은 이름의 제품 라인이 있습니다.');
       return;
     }
 
-    const key = UHP_STATE_KEYS[activeCategoryId];
     const nextState: UhpInventoryState = JSON.parse(JSON.stringify(uhpInventory)) as UhpInventoryState;
     nextState[key] = [
       ...nextState[key],
@@ -674,6 +726,14 @@ export default function AdminInventoryStatusPage() {
         items: [],
       },
     ];
+
+    // 추가 직후 검색조건과 무관하게 해당 탭의 마지막 페이지로 이동
+    // (10개 초과 시에도 계속 등록/확인이 가능해야 함)
+    const nextPage = Math.max(1, Math.ceil(nextState[key].length / PRODUCT_LIST_PAGE_SIZE));
+    setSearchQuery('');
+    setProductListPage(nextPage);
+    setTabSelectionLockedByUser(true);
+    setSyncError('');
 
     setUhpInventory(nextState);
     void persistUhpInventory(nextState);
@@ -1884,6 +1944,60 @@ export default function AdminInventoryStatusPage() {
                     >
                       이전
                     </button>
+
+                    {(() => {
+                      const total = productListTotalPages;
+                      const current = productListEffectivePage;
+                      const maxButtons = 10;
+
+                      // 총 페이지가 적으면 전부, 많으면 현재 기준으로 일부만 표시
+                      const parts: Array<number | 'ellipsis'> =
+                        total <= maxButtons
+                          ? Array.from({ length: total }, (_, i) => i + 1)
+                          : (() => {
+                              const left = Math.max(2, current - 2);
+                              const right = Math.min(total - 1, current + 2);
+                              const out: Array<number | 'ellipsis'> = [];
+                              out.push(1);
+                              if (left > 2) out.push('ellipsis');
+                              for (let p = left; p <= right; p++) out.push(p);
+                              if (right < total - 1) out.push('ellipsis');
+                              out.push(total);
+                              return out;
+                            })();
+
+                      return parts.map((part, idx) => {
+                        if (part === 'ellipsis') {
+                          return (
+                            <span
+                              key={`ellipsis-${idx}`}
+                              className="select-none px-1 text-gray-400"
+                            >
+                              …
+                            </span>
+                          );
+                        }
+
+                        const pageNum = part;
+                        const isActive = pageNum === current;
+                        return (
+                          <button
+                            key={pageNum}
+                            type="button"
+                            onClick={() => setProductListPage(pageNum)}
+                            className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+                              isActive
+                                ? 'border-blue-500 bg-blue-500 text-white'
+                                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                            }`}
+                            aria-current={isActive ? 'page' : undefined}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      });
+                    })()}
+
                     <button
                       type="button"
                       onClick={() =>

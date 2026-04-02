@@ -38,6 +38,7 @@ function cloneUhp(state: UhpInventoryState): UhpInventoryState {
 
 export default function AdminInventoryProductsPage() {
   const [activeCategoryId, setActiveCategoryId] = useState<UhpCategoryId>("microWeld");
+  const [searchQuery, setSearchQuery] = useState("");
   const [uhpInventory, setUhpInventory] = useState<UhpInventoryState>(() => ({
     products: [...INITIAL_MICRO_WELD_PRODUCTS],
     tubeButtWeldProducts: [...INITIAL_TUBE_BUTT_WELD_PRODUCTS],
@@ -240,6 +241,10 @@ export default function AdminInventoryProductsPage() {
   const categoryKey = UHP_STATE_KEYS[activeCategoryId];
   /** Firestore 배열 순서 = 제품등록·재고현황 표시 순서 (위/아래 버튼으로 변경) */
   const categoryProducts = uhpInventory[categoryKey];
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredCategoryProducts = normalizedSearchQuery
+    ? categoryProducts.filter((product) => product.name.toLowerCase().includes(normalizedSearchQuery))
+    : categoryProducts;
 
   const persistState = async (next: UhpInventoryState) => {
     setSaving(true);
@@ -386,8 +391,37 @@ export default function AdminInventoryProductsPage() {
         </div>
       </div>
 
+      <div className="mb-4">
+        <div className="relative">
+          <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+            </svg>
+          </span>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="제품명 검색"
+            className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+          />
+          {searchQuery.trim().length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              aria-label="검색어 지우기"
+              title="검색어 지우기"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">카테고리</h2>
+
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">제품 카테고리</h2>
         <div className="flex flex-wrap gap-2 mb-6">
           {UHP_CATEGORY_TABS.map(({ id, label }) => (
             <button
@@ -408,7 +442,7 @@ export default function AdminInventoryProductsPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="text-sm text-gray-600">
             <p>
-              등록된 제품 라인 <span className="font-semibold text-gray-900">{categoryProducts.length}</span>개
+              등록된 제품 라인 <span className="font-semibold text-gray-900">{filteredCategoryProducts.length}</span>개
             </p>
             <p className="mt-1 text-xs text-gray-500">
               표시 순서는 「위로」「아래로」로 바꿀 수 있으며 재고현황과 동일하게 저장됩니다.
@@ -425,7 +459,10 @@ export default function AdminInventoryProductsPage() {
         </div>
 
         <div className="space-y-6">
-          {categoryProducts.map((product, pi) => (
+          {filteredCategoryProducts.map((product) => {
+            const pi = categoryProducts.findIndex((line) => line.name === product.name);
+            if (pi < 0) return null;
+            return (
             <div key={product.name} className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex gap-4 min-w-0">
@@ -501,11 +538,11 @@ export default function AdminInventoryProductsPage() {
                 <span className="font-semibold text-gray-800">{product.items.length}</span>개)
               </p>
             </div>
-          ))}
+          )})}
 
-          {categoryProducts.length === 0 && (
+          {filteredCategoryProducts.length === 0 && (
             <p className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
-              이 카테고리에 등록된 제품이 없습니다. 「제품 추가」를 눌러 주세요.
+              검색 결과가 없습니다.
             </p>
           )}
         </div>

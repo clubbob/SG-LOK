@@ -10,7 +10,7 @@ import {
   mergeLegacyLongElbowIntoTubeButtWeld,
   stripHle02ItemFromLongElbowLine,
 } from '@/lib/inventory/microWeldSeed';
-import { filterProductsBySearchQuery, pickCategoryIdForSearch } from '@/lib/inventory/searchFilter';
+import { filterProductsBySearchQuery } from '@/lib/inventory/searchFilter';
 import {
   UHP_CATEGORY_TABS,
   UHP_STATE_KEYS,
@@ -62,6 +62,7 @@ export default function InventoryStatusPage() {
   const [activeCategoryId, setActiveCategoryId] = useState<UhpCategoryId>('microWeld');
   const [searchQuery, setSearchQuery] = useState('');
   const [productListPage, setProductListPage] = useState(1);
+  const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(new Set());
   const [uhpInventory, setUhpInventory] = useState<UhpUserInventoryState>(FALLBACK_UHP);
 
   useEffect(() => {
@@ -113,47 +114,18 @@ export default function InventoryStatusPage() {
     setProductListPage(1);
   }, [activeCategoryId, searchQuery]);
 
-  useEffect(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (q.length === 0) return;
-    const nextTab = pickCategoryIdForSearch(
-      {
-        products: uhpInventory.products as CatalogInventoryProduct[],
-        tubeButtWeldProducts: uhpInventory.tubeButtWeldProducts as CatalogInventoryProduct[],
-        metalFaceSealProducts: uhpInventory.metalFaceSealProducts as CatalogInventoryProduct[],
-      },
-      q,
-      'strict'
-    );
-    if (nextTab != null && nextTab !== activeCategoryId) {
-      setActiveCategoryId(nextTab);
-    }
-  }, [searchQuery, uhpInventory, activeCategoryId]);
-
   const normalizedQuery = searchQuery.trim().toLowerCase();
-  const isGlobalSearch = normalizedQuery.length > 0;
+  const isSearching = normalizedQuery.length > 0;
 
-  const filteredCategoryProducts = isGlobalSearch
-    ? UHP_CATEGORY_TABS.flatMap(({ id, label }) =>
-        filterProductsBySearchQuery(
-          uhpInventory[UHP_STATE_KEYS[id]] as CatalogInventoryProduct[],
-          normalizedQuery,
-          'strict'
-        ).map((p) => ({
-          ...p,
-          categoryLabel: label,
-          listKey: `${id}::${p.name}`,
-        }))
-      )
-    : filterProductsBySearchQuery(
-        uhpInventory[UHP_STATE_KEYS[activeCategoryId]] as CatalogInventoryProduct[],
-        normalizedQuery,
-        'strict'
-      ).map((p) => ({
-        ...p,
-        categoryLabel: undefined,
-        listKey: `${activeCategoryId}::${p.name}`,
-      }));
+  const filteredCategoryProducts = filterProductsBySearchQuery(
+    uhpInventory[UHP_STATE_KEYS[activeCategoryId]] as CatalogInventoryProduct[],
+    normalizedQuery,
+    'strict'
+  ).map((p) => ({
+    ...p,
+    categoryLabel: undefined,
+    listKey: `${activeCategoryId}::${p.name}`,
+  }));
 
   const productListTotalPages = Math.max(
     1,
@@ -200,28 +172,40 @@ export default function InventoryStatusPage() {
             <p className="text-gray-600 mt-2">현재 UHP 재고 현황을 검색하는 페이지입니다.</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <div className="mb-4">
-              <div className="relative">
-                <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
-                  </svg>
-                </span>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="제품명·품목코드 검색 (전체 카테고리)"
-                  className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
-              {isGlobalSearch && (
-                <p className="mt-1.5 text-xs text-gray-500">
-                  Micro / Tube Butt Weld / Metal Face Seal 전체에서 검색합니다.
-                </p>
+          <div className="mb-4">
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+                </svg>
+              </span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="제품명 검색"
+                className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+              {searchQuery.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  aria-label="검색어 지우기"
+                  title="검색어 지우기"
+                >
+                  ×
+                </button>
               )}
             </div>
+            {isSearching && (
+              <p className="mt-1.5 text-xs text-gray-500">
+                현재 선택한 탭에서만 검색합니다.
+              </p>
+            )}
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
 
             <h2 className="text-lg font-semibold text-gray-900 mb-4">제품 카테고리</h2>
             <div className="flex flex-wrap gap-2">
@@ -254,11 +238,18 @@ export default function InventoryStatusPage() {
                   <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
                     <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                       <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
-                        {product.imageSrc?.trim() ? (
+                        {product.imageSrc?.trim() && !brokenImageKeys.has(product.listKey) ? (
                           <img
                             src={product.imageSrc}
                             alt={product.name}
                             className="h-full w-full object-contain"
+                            onError={() =>
+                              setBrokenImageKeys((prev) => {
+                                const next = new Set(prev);
+                                next.add(product.listKey);
+                                return next;
+                              })
+                            }
                           />
                         ) : (
                           <div className="flex h-full w-full items-center justify-center text-sm font-medium text-gray-400">

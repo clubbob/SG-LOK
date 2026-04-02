@@ -204,6 +204,7 @@ export default function AdminInventoryStatusPage() {
   const [activeCategoryId, setActiveCategoryId] = useState<UhpCategoryId>('microWeld');
   const [searchQuery, setSearchQuery] = useState('');
   const [tabSelectionLockedByUser, setTabSelectionLockedByUser] = useState(false);
+  const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(new Set());
   const [productListPage, setProductListPage] = useState(1);
   const [uhpInventory, setUhpInventory] = useState<UhpInventoryState>(() => ({
     products: [...INITIAL_MICRO_WELD_PRODUCTS],
@@ -1534,15 +1535,27 @@ export default function AdminInventoryStatusPage() {
     historyViewCurrentPage * HISTORY_PAGE_SIZE
   );
   const isSearching = normalizedQuery.length > 0;
-  const baseFilteredCategoryProducts = filterProductsBySearchQuery(
-    uhpInventory[UHP_STATE_KEYS[activeCategoryId]],
-    normalizedQuery,
-    'admin'
-  ).map((p) => ({
-    ...p,
-    categoryLabel: undefined,
-    listKey: `${activeCategoryId}::${p.name}`,
-  }));
+  const baseFilteredCategoryProducts = isSearching
+    ? UHP_CATEGORY_TABS.flatMap(({ id, label }) =>
+        filterProductsBySearchQuery(
+          uhpInventory[UHP_STATE_KEYS[id]],
+          normalizedQuery,
+          'admin'
+        ).map((p) => ({
+          ...p,
+          categoryLabel: label,
+          listKey: `${id}::${p.name}`,
+        }))
+      )
+    : filterProductsBySearchQuery(
+        uhpInventory[UHP_STATE_KEYS[activeCategoryId]],
+        normalizedQuery,
+        'admin'
+      ).map((p) => ({
+        ...p,
+        categoryLabel: undefined,
+        listKey: `${activeCategoryId}::${p.name}`,
+      }));
   const filteredCategoryProducts = applyPlanFilter(applyStockFilter(baseFilteredCategoryProducts));
 
   const productListTotalPages = Math.max(
@@ -1644,7 +1657,7 @@ export default function AdminInventoryStatusPage() {
               setSearchQuery(e.target.value);
               setTabSelectionLockedByUser(false);
             }}
-            placeholder="제품명·품목코드 검색 (현재 카테고리)"
+            placeholder="제품명 검색"
             className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
           {searchQuery.trim().length > 0 && (
@@ -1664,7 +1677,7 @@ export default function AdminInventoryStatusPage() {
         </div>
         {isSearching && (
           <p className="mt-1.5 text-xs text-gray-500">
-            현재 선택한 탭에서만 검색합니다.
+            Micro / Tube Butt Weld / Metal Face Seal 전체에서 검색합니다.
           </p>
         )}
       </div>
@@ -1736,11 +1749,18 @@ export default function AdminInventoryStatusPage() {
                 <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
                   <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                     <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
-                      {product.imageSrc?.trim() ? (
+                      {product.imageSrc?.trim() && !brokenImageKeys.has(product.listKey) ? (
                         <img
                           src={product.imageSrc}
                           alt={product.name}
                           className="h-full w-full object-contain"
+                          onError={() =>
+                            setBrokenImageKeys((prev) => {
+                              const next = new Set(prev);
+                              next.add(product.listKey);
+                              return next;
+                            })
+                          }
                         />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center text-sm font-medium text-gray-400">

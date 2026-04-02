@@ -252,7 +252,7 @@ export default function AdminInventoryProductsPage() {
     setProductModalMode("add");
     setProductModalIndex(null);
     setProductNameInput("");
-    setProductImageInput("/inventory/micro-elbow-hme.png");
+    setProductImageInput("");
     setSaveError("");
     if (productImageFileRef.current) productImageFileRef.current.value = "";
     setProductModalOpen(true);
@@ -301,7 +301,7 @@ export default function AdminInventoryProductsPage() {
 
   const saveProductModal = async () => {
     const name = productNameInput.trim();
-    const imageSrc = productImageInput.trim() || "/inventory/micro-elbow-hme.png";
+    const imageSrc = productImageInput.trim();
     if (!name) {
       setSaveError("제품명을 입력해 주세요.");
       return;
@@ -429,15 +429,21 @@ export default function AdminInventoryProductsPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex gap-4 min-w-0">
                   <div className="h-24 w-24 shrink-0 overflow-hidden rounded-md border border-gray-200 bg-white">
-                    <img
-                      src={product.imageSrc}
-                      alt=""
-                      className="h-full w-full object-contain"
-                    />
+                    {product.imageSrc?.trim() ? (
+                      <img
+                        src={product.imageSrc}
+                        alt=""
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-xs font-medium text-gray-400">
+                        제품 이미지 없음
+                      </div>
+                    )}
                   </div>
                   <div className="min-w-0">
                     <h3 className="text-lg font-semibold text-gray-900">{product.name}</h3>
-                    <p className="text-xs text-gray-500 mt-1 break-all">{product.imageSrc}</p>
+                    <p className="text-xs text-gray-500 mt-1 break-all">{product.imageSrc || '제품 이미지 없음'}</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 shrink-0">

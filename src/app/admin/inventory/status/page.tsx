@@ -200,6 +200,7 @@ export default function AdminInventoryStatusPage() {
   const searchParams = useSearchParams();
   const [activeCategoryId, setActiveCategoryId] = useState<UhpCategoryId>('microWeld');
   const [searchQuery, setSearchQuery] = useState('');
+  const [tabSelectionLockedByUser, setTabSelectionLockedByUser] = useState(false);
   const [productListPage, setProductListPage] = useState(1);
   const [uhpInventory, setUhpInventory] = useState<UhpInventoryState>(() => ({
     products: [...INITIAL_MICRO_WELD_PRODUCTS],
@@ -272,11 +273,12 @@ export default function AdminInventoryStatusPage() {
   useEffect(() => {
     const q = searchQuery.trim().toLowerCase();
     if (q.length === 0) return;
+    if (tabSelectionLockedByUser) return;
     const nextTab = pickCategoryIdForSearch(uhpInventory, q, 'admin');
     if (nextTab != null && nextTab !== activeCategoryId) {
       setActiveCategoryId(nextTab);
     }
-  }, [searchQuery, uhpInventory, activeCategoryId]);
+  }, [searchQuery, uhpInventory, activeCategoryId, tabSelectionLockedByUser]);
 
   const applyInventoryDocument = useCallback(async (snapshot: DocumentSnapshot) => {
     const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
@@ -610,6 +612,44 @@ export default function AdminInventoryStatusPage() {
     void persistUhpInventory(nextState);
   };
 
+  const handleRenameProductLine = (productName: string) => {
+    const category = findUhpCategoryByProductName(uhpInventory, productName);
+    if (!category) {
+      setSyncError('수정할 제품을 찾을 수 없습니다.');
+      return;
+    }
+
+    const nextNameInput = prompt('변경할 제품명을 입력해 주세요.', productName);
+    const nextName = nextNameInput?.trim() ?? '';
+    if (!nextName || nextName === productName) return;
+
+    const duplicated =
+      uhpInventory.products.some((line) => line.name === nextName) ||
+      uhpInventory.tubeButtWeldProducts.some((line) => line.name === nextName) ||
+      uhpInventory.metalFaceSealProducts.some((line) => line.name === nextName);
+    if (duplicated) {
+      setSyncError('이미 같은 이름의 제품 라인이 있습니다.');
+      return;
+    }
+
+    const key = UHP_STATE_KEYS[category];
+    const nextState: UhpInventoryState = JSON.parse(JSON.stringify(uhpInventory)) as UhpInventoryState;
+    let renamed = false;
+    nextState[key] = nextState[key].map((line) => {
+      if (line.name !== productName) return line;
+      renamed = true;
+      return { ...line, name: nextName };
+    });
+
+    if (!renamed) {
+      setSyncError('수정할 제품을 찾을 수 없습니다.');
+      return;
+    }
+
+    setUhpInventory(nextState);
+    void persistUhpInventory(nextState);
+  };
+
   const handleAddProductLine = () => {
     const nameInput = prompt('추가할 제품명을 입력해 주세요.');
     const name = nameInput?.trim() ?? '';
@@ -630,36 +670,10 @@ export default function AdminInventoryStatusPage() {
       ...nextState[key],
       {
         name,
-        imageSrc: '/inventory/micro-elbow-hme.png',
+        imageSrc: '',
         items: [],
       },
     ];
-
-    setUhpInventory(nextState);
-    void persistUhpInventory(nextState);
-  };
-
-  const handleDeleteProductLineByName = () => {
-    const nameInput = prompt('삭제할 제품명을 입력해 주세요.');
-    const targetName = nameInput?.trim() ?? '';
-    if (!targetName) return;
-    if (!confirm(`"${targetName}" 제품 라인을 삭제하시겠습니까?`)) {
-      return;
-    }
-    if (!confirm(`최종 확인: "${targetName}" 제품 라인을 정말 삭제할까요?\n삭제 후에는 복구할 수 없습니다.`)) {
-      return;
-    }
-
-    const key = UHP_STATE_KEYS[activeCategoryId];
-    const nextState: UhpInventoryState = JSON.parse(JSON.stringify(uhpInventory)) as UhpInventoryState;
-    const beforeCount = nextState[key].length;
-    nextState[key] = nextState[key].filter((line) => line.name.trim() !== targetName);
-    const removedCount = beforeCount - nextState[key].length;
-
-    if (removedCount <= 0) {
-      setSyncError('현재 탭에서 해당 제품명을 찾을 수 없습니다.');
-      return;
-    }
 
     setUhpInventory(nextState);
     void persistUhpInventory(nextState);
@@ -1459,28 +1473,16 @@ export default function AdminInventoryStatusPage() {
     (historyViewCurrentPage - 1) * HISTORY_PAGE_SIZE,
     historyViewCurrentPage * HISTORY_PAGE_SIZE
   );
-  const isGlobalSearch = normalizedQuery.length > 0;
-  const baseFilteredCategoryProducts = isGlobalSearch
-    ? UHP_CATEGORY_TABS.flatMap(({ id, label }) =>
-        filterProductsBySearchQuery(
-          uhpInventory[UHP_STATE_KEYS[id]],
-          normalizedQuery,
-          'admin'
-        ).map((p) => ({
-          ...p,
-          categoryLabel: label,
-          listKey: `${id}::${p.name}`,
-        }))
-      )
-    : filterProductsBySearchQuery(
-        uhpInventory[UHP_STATE_KEYS[activeCategoryId]],
-        normalizedQuery,
-        'admin'
-      ).map((p) => ({
-        ...p,
-        categoryLabel: undefined,
-        listKey: `${activeCategoryId}::${p.name}`,
-      }));
+  const isSearching = normalizedQuery.length > 0;
+  const baseFilteredCategoryProducts = filterProductsBySearchQuery(
+    uhpInventory[UHP_STATE_KEYS[activeCategoryId]],
+    normalizedQuery,
+    'admin'
+  ).map((p) => ({
+    ...p,
+    categoryLabel: undefined,
+    listKey: `${activeCategoryId}::${p.name}`,
+  }));
   const filteredCategoryProducts = applyPlanFilter(applyStockFilter(baseFilteredCategoryProducts));
 
   const productListTotalPages = Math.max(
@@ -1585,14 +1587,31 @@ export default function AdminInventoryStatusPage() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="제품명·품목코드 검색 (전체 카테고리)"
-              className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setTabSelectionLockedByUser(false);
+              }}
+              placeholder="제품명·품목코드 검색 (현재 카테고리)"
+              className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
+            {searchQuery.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setTabSelectionLockedByUser(false);
+                }}
+                className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label="검색어 지우기"
+                title="검색어 지우기"
+              >
+                ×
+              </button>
+            )}
           </div>
-          {isGlobalSearch && (
+          {isSearching && (
             <p className="mt-1.5 text-xs text-gray-500">
-              Micro / Tube Butt Weld / Metal Face Seal 전체에서 검색합니다.
+              현재 선택한 탭에서만 검색합니다.
             </p>
           )}
         </div>
@@ -1607,13 +1626,6 @@ export default function AdminInventoryStatusPage() {
             >
               + 제품 추가
             </button>
-            <button
-              type="button"
-              onClick={handleDeleteProductLineByName}
-              className="inline-flex items-center justify-center rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
-            >
-              제품 삭제
-            </button>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1621,7 +1633,12 @@ export default function AdminInventoryStatusPage() {
             <button
               key={id}
               type="button"
-              onClick={() => setActiveCategoryId(id)}
+              onClick={() => {
+                setActiveCategoryId(id);
+                if (searchQuery.trim().length > 0) {
+                  setTabSelectionLockedByUser(true);
+                }
+              }}
               className={`rounded-md border px-4 py-2.5 text-sm font-medium transition-colors ${
                 activeCategoryId === id
                   ? 'border-blue-600 bg-blue-600 text-white'
@@ -1635,22 +1652,46 @@ export default function AdminInventoryStatusPage() {
         <div className="mt-6 space-y-4">
             {pagedCategoryProducts.map((product) => (
               <div key={product.listKey} className="rounded-lg border border-gray-200 bg-white p-5">
-                <h3 className="mb-4 text-lg font-semibold text-gray-900">
-                  {product.name}
-                  {product.categoryLabel != null && (
-                    <span className="ml-2 align-middle text-sm font-normal text-blue-700">
-                      ({product.categoryLabel})
-                    </span>
-                  )}
-                </h3>
+                <div className="mb-4 flex items-center justify-between gap-2">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    {product.name}
+                    {product.categoryLabel != null && (
+                      <span className="ml-2 align-middle text-sm font-normal text-blue-700">
+                        ({product.categoryLabel})
+                      </span>
+                    )}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleRenameProductLine(product.name)}
+                      className="inline-flex items-center justify-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                    >
+                      제품 수정
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteProductLine(product.name)}
+                      className="inline-flex items-center justify-center rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+                    >
+                      제품 삭제
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
                   <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                     <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
-                      <img
-                        src={product.imageSrc}
-                        alt={product.name}
-                        className="h-full w-full object-contain"
-                      />
+                      {product.imageSrc?.trim() ? (
+                        <img
+                          src={product.imageSrc}
+                          alt={product.name}
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-sm font-medium text-gray-400">
+                          제품 이미지 없음
+                        </div>
+                      )}
                     </div>
                   </div>
 

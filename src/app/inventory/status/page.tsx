@@ -254,11 +254,17 @@ export default function InventoryStatusPage() {
                   <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
                     <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
                       <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
-                        <img
-                          src={product.imageSrc}
-                          alt={product.name}
-                          className="h-full w-full object-contain"
-                        />
+                        {product.imageSrc?.trim() ? (
+                          <img
+                            src={product.imageSrc}
+                            alt={product.name}
+                            className="h-full w-full object-contain"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-sm font-medium text-gray-400">
+                            제품 이미지 없음
+                          </div>
+                        )}
                       </div>
                     </div>
 

@@ -250,7 +250,7 @@ export default function Header() {
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
                           onClick={() => setIsInventoryMenuOpen(false)}
                         >
-                          재고관리메인
+                          재고관리 메인
                         </Link>
                         <Link
                           href="/inventory/status"
@@ -515,7 +515,7 @@ export default function Header() {
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                재고관리메인
+                재고관리 메인
               </Link>
               <Link
                 href="/inventory/status"

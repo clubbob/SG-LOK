@@ -223,9 +223,27 @@ export default function AdminPage() {
       (snapshot) => {
         const data = snapshot.data() as
           | {
-              products?: Array<{ items?: Array<{ currentStock?: number; variants?: Array<{ currentStock?: number }> }> }>;
-              tubeButtWeldProducts?: Array<{ items?: Array<{ currentStock?: number; variants?: Array<{ currentStock?: number }> }> }>;
-              metalFaceSealProducts?: Array<{ items?: Array<{ currentStock?: number; variants?: Array<{ currentStock?: number }> }> }>;
+              products?: Array<{
+                items?: Array<{
+                  currentStock?: number;
+                  variants?: Array<{ currentStock?: number }>;
+                  productionPlanHistory?: Array<{ plannedQuantity?: number }>;
+                }>;
+              }>;
+              tubeButtWeldProducts?: Array<{
+                items?: Array<{
+                  currentStock?: number;
+                  variants?: Array<{ currentStock?: number }>;
+                  productionPlanHistory?: Array<{ plannedQuantity?: number }>;
+                }>;
+              }>;
+              metalFaceSealProducts?: Array<{
+                items?: Array<{
+                  currentStock?: number;
+                  variants?: Array<{ currentStock?: number }>;
+                  productionPlanHistory?: Array<{ plannedQuantity?: number }>;
+                }>;
+              }>;
             }
           | undefined;
 

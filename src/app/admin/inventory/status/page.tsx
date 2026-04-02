@@ -1534,8 +1534,18 @@ export default function AdminInventoryStatusPage() {
     (historyViewCurrentPage - 1) * HISTORY_PAGE_SIZE,
     historyViewCurrentPage * HISTORY_PAGE_SIZE
   );
+  type ProductListRow = {
+    name: string;
+    imageSrc: string;
+    items: InventoryItem[];
+    filteredItems: InventoryItem[];
+    isProductNameMatched: boolean;
+    listKey: string;
+    categoryLabel?: string;
+  };
+
   const isSearching = normalizedQuery.length > 0;
-  const baseFilteredCategoryProducts = isSearching
+  const baseFilteredCategoryProducts: ProductListRow[] = isSearching
     ? UHP_CATEGORY_TABS.flatMap(({ id, label }) =>
         filterProductsBySearchQuery(
           uhpInventory[UHP_STATE_KEYS[id]],

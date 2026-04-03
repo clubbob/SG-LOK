@@ -10,13 +10,19 @@ import {
   mergeLegacyLongElbowIntoTubeButtWeld,
   stripHle02ItemFromLongElbowLine,
 } from '@/lib/inventory/microWeldSeed';
-import { filterProductsBySearchQuery } from '@/lib/inventory/searchFilter';
+import {
+  filterProductsBySearchQuery,
+  pickCategoryIdForSearch,
+} from '@/lib/inventory/searchFilter';
 import {
   UHP_CATEGORY_TABS,
   UHP_STATE_KEYS,
   type UhpCategoryId,
 } from '@/lib/inventory/uhpInventoryHelpers';
-import type { InventoryProduct as CatalogInventoryProduct } from '@/lib/inventory/types';
+import type {
+  InventoryProduct as CatalogInventoryProduct,
+  UhpInventoryState,
+} from '@/lib/inventory/types';
 import { doc, onSnapshot } from 'firebase/firestore';
 
 type InventoryVariant = {
@@ -61,6 +67,7 @@ const PRODUCT_LIST_PAGE_SIZE = 10;
 export default function InventoryStatusPage() {
   const [activeCategoryId, setActiveCategoryId] = useState<UhpCategoryId>('microWeld');
   const [searchQuery, setSearchQuery] = useState('');
+  const [tabSelectionLockedByUser, setTabSelectionLockedByUser] = useState(false);
   const [productListPage, setProductListPage] = useState(1);
   const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(new Set());
   const [uhpInventory, setUhpInventory] = useState<UhpUserInventoryState>(FALLBACK_UHP);
@@ -114,18 +121,50 @@ export default function InventoryStatusPage() {
     setProductListPage(1);
   }, [activeCategoryId, searchQuery]);
 
+  useEffect(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length === 0) return;
+    if (tabSelectionLockedByUser) return;
+    const nextTab = pickCategoryIdForSearch(uhpInventory as UhpInventoryState, q, 'admin');
+    if (nextTab != null && nextTab !== activeCategoryId) {
+      setActiveCategoryId(nextTab);
+    }
+  }, [searchQuery, uhpInventory, activeCategoryId, tabSelectionLockedByUser]);
+
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
 
-  const filteredCategoryProducts = filterProductsBySearchQuery(
-    uhpInventory[UHP_STATE_KEYS[activeCategoryId]] as CatalogInventoryProduct[],
-    normalizedQuery,
-    'strict'
-  ).map((p) => ({
-    ...p,
-    categoryLabel: undefined,
-    listKey: `${activeCategoryId}::${p.name}`,
-  }));
+  type ProductListRow = {
+    name: string;
+    imageSrc: string;
+    items: InventoryItem[];
+    filteredItems: InventoryItem[];
+    isProductNameMatched: boolean;
+    listKey: string;
+    categoryLabel?: string;
+  };
+
+  const filteredCategoryProducts: ProductListRow[] = isSearching
+    ? UHP_CATEGORY_TABS.flatMap(({ id, label }) =>
+        filterProductsBySearchQuery(
+          uhpInventory[UHP_STATE_KEYS[id]] as CatalogInventoryProduct[],
+          normalizedQuery,
+          'admin'
+        ).map((p) => ({
+          ...p,
+          categoryLabel: label,
+          listKey: `${id}::${p.name}`,
+        }))
+      )
+    : filterProductsBySearchQuery(
+        uhpInventory[UHP_STATE_KEYS[activeCategoryId]] as CatalogInventoryProduct[],
+        normalizedQuery,
+        'strict'
+      ).map((p) => ({
+        ...p,
+        categoryLabel: undefined,
+        listKey: `${activeCategoryId}::${p.name}`,
+      }));
 
   const productListTotalPages = Math.max(
     1,
@@ -182,14 +221,20 @@ export default function InventoryStatusPage() {
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setTabSelectionLockedByUser(false);
+                }}
                 placeholder="제품명 검색"
                 className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
               {searchQuery.trim().length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setTabSelectionLockedByUser(false);
+                  }}
                   className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600"
                   aria-label="검색어 지우기"
                   title="검색어 지우기"
@@ -200,7 +245,7 @@ export default function InventoryStatusPage() {
             </div>
             {isSearching && (
               <p className="mt-1.5 text-xs text-gray-500">
-                현재 선택한 탭에서만 검색합니다.
+                Micro / Tube Butt Weld / Metal Face Seal 전체에서 검색합니다.
               </p>
             )}
           </div>
@@ -213,7 +258,12 @@ export default function InventoryStatusPage() {
                 <button
                   key={id}
                   type="button"
-                  onClick={() => setActiveCategoryId(id)}
+                  onClick={() => {
+                    setActiveCategoryId(id);
+                    if (searchQuery.trim().length > 0) {
+                      setTabSelectionLockedByUser(true);
+                    }
+                  }}
                   className={`rounded-md border px-4 py-2.5 text-sm font-medium transition-colors ${
                     activeCategoryId === id
                       ? 'border-blue-600 bg-blue-600 text-white'
@@ -352,6 +402,59 @@ export default function InventoryStatusPage() {
                       >
                         이전
                       </button>
+
+                      {(() => {
+                        const total = productListTotalPages;
+                        const current = productListEffectivePage;
+                        const maxButtons = 10;
+
+                        const parts: Array<number | 'ellipsis'> =
+                          total <= maxButtons
+                            ? Array.from({ length: total }, (_, i) => i + 1)
+                            : (() => {
+                                const left = Math.max(2, current - 2);
+                                const right = Math.min(total - 1, current + 2);
+                                const out: Array<number | 'ellipsis'> = [];
+                                out.push(1);
+                                if (left > 2) out.push('ellipsis');
+                                for (let p = left; p <= right; p++) out.push(p);
+                                if (right < total - 1) out.push('ellipsis');
+                                out.push(total);
+                                return out;
+                              })();
+
+                        return parts.map((part, idx) => {
+                          if (part === 'ellipsis') {
+                            return (
+                              <span
+                                key={`ellipsis-${idx}`}
+                                className="select-none px-1 text-gray-400"
+                              >
+                                …
+                              </span>
+                            );
+                          }
+
+                          const pageNum = part;
+                          const isActive = pageNum === current;
+                          return (
+                            <button
+                              key={pageNum}
+                              type="button"
+                              onClick={() => setProductListPage(pageNum)}
+                              className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+                                isActive
+                                  ? 'border-blue-500 bg-blue-500 text-white'
+                                  : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                              }`}
+                              aria-current={isActive ? 'page' : undefined}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        });
+                      })()}
+
                       <button
                         type="button"
                         onClick={() =>

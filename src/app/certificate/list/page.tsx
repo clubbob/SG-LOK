@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
@@ -38,7 +38,7 @@ const truncateText = (text: string, maxLength: number = 15): string => {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 };
 
-export default function CertificateListPage() {
+function CertificateListPageContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -748,3 +748,19 @@ export default function CertificateListPage() {
   );
 }
 
+export default function CertificateListPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+            <p className="mt-4 text-gray-600">로딩 중...</p>
+          </div>
+        </div>
+      }
+    >
+      <CertificateListPageContent />
+    </Suspense>
+  );
+}

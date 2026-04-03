@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
@@ -28,7 +28,7 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
 };
 
 
-export default function ProductionRequestListPage() {
+function ProductionRequestListPageContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -768,3 +768,19 @@ export default function ProductionRequestListPage() {
   );
 }
 
+export default function ProductionRequestListPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+            <p className="mt-4 text-gray-600">로딩 중...</p>
+          </div>
+        </div>
+      }
+    >
+      <ProductionRequestListPageContent />
+    </Suspense>
+  );
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { Header, Footer } from '@/components/layout';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,7 +10,7 @@ import { db } from '@/lib/firebase';
 import { Inquiry } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 
-export default function MyInquiriesPage() {
+function MyInquiriesPageContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -320,3 +320,19 @@ export default function MyInquiriesPage() {
   );
 }
 
+export default function MyInquiriesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+            <p className="mt-4 text-gray-600">로딩 중...</p>
+          </div>
+        </div>
+      }
+    >
+      <MyInquiriesPageContent />
+    </Suspense>
+  );
+}

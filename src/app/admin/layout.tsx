@@ -123,6 +123,21 @@ const adminMenuItems: MenuItem[] = [
       { id: 'inventory-products', label: '제품 이미지 등록', path: '/admin/inventory/products' },
     ],
   },
+  {
+    id: 'substitute',
+    label: '대체품찾기',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+        />
+      </svg>
+    ),
+    subItems: [{ id: 'substitute-menu', label: '대체품찾기', path: '/admin/substitute/menu' }],
+  },
 ];
 
 export default function AdminLayout({
@@ -172,6 +187,9 @@ export default function AdminLayout({
     // 재고관리 관련 페이지일 때 메뉴 자동 확장
     if (pathname?.startsWith('/admin/inventory')) {
       setExpandedMenus(prev => new Set(prev).add('inventory'));
+    }
+    if (pathname?.startsWith('/admin/substitute')) {
+      setExpandedMenus(prev => new Set(prev).add('substitute'));
     }
   }, [router, pathname]);
 
@@ -335,7 +353,15 @@ export default function AdminLayout({
 
               return (
                 <React.Fragment key={item.id}>
-                  <div className={`mb-1 ${item.id === 'production' ? 'border-t border-gray-200 pt-3 mt-3' : ''}`}>
+                  <div
+                    className={`mb-1 ${
+                      item.id === 'production'
+                        ? 'border-t border-gray-200 pt-3 mt-3'
+                        : item.id === 'substitute'
+                          ? 'border-t border-gray-200 pt-3 mt-2'
+                          : ''
+                    }`}
+                  >
                   {hasSubItems ? (
                     <>
                       {item.path ? (

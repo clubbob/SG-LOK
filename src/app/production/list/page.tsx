@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,6 +31,7 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
 export default function ProductionRequestListPage() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [error, setError] = useState('');
@@ -51,9 +52,12 @@ export default function ProductionRequestListPage() {
     }
   }, [loading, isAuthenticated, router]);
 
-  // 생산요청 목록 불러오기 (실시간 업데이트)
+  // 생산요청 목록 불러오기 (실시간 업데이트) — 프로필 로딩 전에도 구독 시작(무한 로딩 방지)
   useEffect(() => {
-    if (!isAuthenticated || !userProfile) return;
+    if (!isAuthenticated) {
+      setLoadingRequests(false);
+      return;
+    }
 
     setLoadingRequests(true);
     setError('');
@@ -123,41 +127,52 @@ export default function ProductionRequestListPage() {
     return () => {
       unsubscribeSnapshot();
     };
-  }, [isAuthenticated, userProfile]);
+  }, [isAuthenticated]);
 
-  // 검색 필터링
+  // 상태(URL) + 검색 필터링 (관리자 생산 목록과 동일한 status 쿼리)
   useEffect(() => {
+    const statusFilterParam = searchParams.get('status');
+    const statusFiltered = statusFilterParam
+      ? requests.filter((request) => {
+          if (statusFilterParam === 'in_progress') {
+            return request.status === 'confirmed' || request.status === 'in_progress';
+          }
+          return request.status === statusFilterParam;
+        })
+      : requests;
+
     if (!searchQuery.trim()) {
-      setFilteredRequests(requests);
-      // 검색어가 없을 때는 마지막 페이지로 이동 (최신 항목 표시)
-      if (requests.length > 0) {
+      setFilteredRequests(statusFiltered);
+      if (statusFiltered.length > 0) {
         const ITEMS_PER_PAGE = 10;
-        const totalPages = Math.ceil(requests.length / ITEMS_PER_PAGE);
+        const totalPages = Math.ceil(statusFiltered.length / ITEMS_PER_PAGE);
         setCurrentPage(totalPages > 0 ? totalPages : 1);
+      } else {
+        setCurrentPage(1);
       }
       return;
     }
 
-    const query = searchQuery.toLowerCase().trim();
-    const filtered = requests.filter((request) => {
+    const q = searchQuery.toLowerCase().trim();
+    const filtered = statusFiltered.filter((request) => {
       const productName = request.productName?.toLowerCase() || '';
       const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const customerName = request.customerName?.toLowerCase() || '';
       const userName = request.userName?.toLowerCase() || '';
       const statusLabel = STATUS_LABELS[request.status]?.toLowerCase() || request.status || '';
       return (
-        productName.includes(query) ||
-        productionReason.includes(query) ||
-        customerName.includes(query) ||
-        userName.includes(query) ||
-        statusLabel.includes(query) ||
-        request.status.includes(query)
+        productName.includes(q) ||
+        productionReason.includes(q) ||
+        customerName.includes(q) ||
+        userName.includes(q) ||
+        statusLabel.includes(q) ||
+        request.status.includes(q)
       );
     });
 
     setFilteredRequests(filtered);
-    setCurrentPage(1); // 검색 시 첫 페이지로 리셋
-  }, [searchQuery, requests]);
+    setCurrentPage(1);
+  }, [searchQuery, requests, searchParams]);
 
   // 페이지네이션
   useEffect(() => {

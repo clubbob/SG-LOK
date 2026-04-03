@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Header, Footer } from '@/components/layout';
 import { db } from '@/lib/firebase';
 import {
@@ -65,6 +66,13 @@ const FALLBACK_UHP: UhpUserInventoryState = {
 const PRODUCT_LIST_PAGE_SIZE = 10;
 
 export default function InventoryStatusPage() {
+  const searchParams = useSearchParams();
+  const stockFilterParam = searchParams.get('stock');
+  const stockFilter: 'in' | 'out' | null =
+    stockFilterParam === 'in' || stockFilterParam === 'out' ? stockFilterParam : null;
+  const planFilterParam = searchParams.get('plan');
+  const hasPlanFilter = planFilterParam === 'exists';
+
   const [activeCategoryId, setActiveCategoryId] = useState<UhpCategoryId>('microWeld');
   const [searchQuery, setSearchQuery] = useState('');
   const [tabSelectionLockedByUser, setTabSelectionLockedByUser] = useState(false);
@@ -119,7 +127,7 @@ export default function InventoryStatusPage() {
 
   useEffect(() => {
     setProductListPage(1);
-  }, [activeCategoryId, searchQuery]);
+  }, [activeCategoryId, searchQuery, stockFilterParam, planFilterParam]);
 
   useEffect(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -144,7 +152,43 @@ export default function InventoryStatusPage() {
     categoryLabel?: string;
   };
 
-  const filteredCategoryProducts: ProductListRow[] = isSearching
+  const getItemCurrentStock = (item: InventoryItem): number =>
+    item.variants && item.variants.length > 0
+      ? item.variants.reduce((sum, variant) => sum + variant.currentStock, 0)
+      : item.currentStock;
+
+  const applyStockFilter = <T extends { filteredItems: InventoryItem[] }>(products: T[]): T[] => {
+    if (!stockFilter) return products;
+    const filtered = products
+      .map((product) => ({
+        ...product,
+        filteredItems: product.filteredItems.filter((item) =>
+          stockFilter === 'in' ? getItemCurrentStock(item) > 0 : getItemCurrentStock(item) <= 0
+        ),
+      }))
+      .filter((product) => product.filteredItems.length > 0);
+    return filtered as T[];
+  };
+
+  const applyPlanFilter = <T extends { filteredItems: InventoryItem[] }>(products: T[]): T[] => {
+    if (!hasPlanFilter) return products;
+    const filtered = products
+      .map((product) => ({
+        ...product,
+        filteredItems: product.filteredItems.filter((item) => {
+          const plans = Array.isArray(item.productionPlanHistory) ? item.productionPlanHistory : [];
+          const totalPlanned = plans.reduce(
+            (sum, plan) => sum + (typeof plan.plannedQuantity === 'number' ? plan.plannedQuantity : 0),
+            0
+          );
+          return totalPlanned > 0;
+        }),
+      }))
+      .filter((product) => product.filteredItems.length > 0);
+    return filtered as T[];
+  };
+
+  const baseFilteredCategoryProducts: ProductListRow[] = isSearching
     ? UHP_CATEGORY_TABS.flatMap(({ id, label }) =>
         filterProductsBySearchQuery(
           uhpInventory[UHP_STATE_KEYS[id]] as CatalogInventoryProduct[],
@@ -165,6 +209,8 @@ export default function InventoryStatusPage() {
         categoryLabel: undefined,
         listKey: `${activeCategoryId}::${p.name}`,
       }));
+
+  const filteredCategoryProducts = applyPlanFilter(applyStockFilter(baseFilteredCategoryProducts));
 
   const productListTotalPages = Math.max(
     1,

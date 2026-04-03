@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Header, Footer } from '@/components/layout';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Inquiry } from '@/types';
@@ -13,6 +13,7 @@ import { formatDateTime } from '@/lib/utils';
 export default function MyInquiriesPage() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loadingInquiries, setLoadingInquiries] = useState(true);
   const [selectedInquiry, setSelectedInquiry] = useState<Inquiry | null>(null);
@@ -77,6 +78,14 @@ export default function MyInquiriesPage() {
     }
   };
 
+  const filteredInquiries = useMemo(() => {
+    const raw = searchParams.get('status');
+    const statusFilter =
+      raw === 'pending' || raw === 'read' || raw === 'replied' ? raw : null;
+    if (!statusFilter) return inquiries;
+    return inquiries.filter((i) => i.status === statusFilter);
+  }, [inquiries, searchParams]);
+
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; className: string }> = {
       pending: { label: '대기중', className: 'bg-yellow-100 text-yellow-800' },
@@ -124,16 +133,20 @@ export default function MyInquiriesPage() {
             </Button>
           </div>
 
-          {inquiries.length === 0 ? (
+          {filteredInquiries.length === 0 ? (
             <div className="bg-white rounded-lg shadow-sm p-12 text-center">
               <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
               </svg>
-              <p className="text-gray-500 mb-4">문의 내역이 없습니다.</p>
+              <p className="text-gray-500 mb-4">
+                {inquiries.length === 0
+                  ? '문의 내역이 없습니다.'
+                  : '해당 상태의 문의가 없습니다.'}
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
-              {inquiries.map((inquiry) => (
+              {filteredInquiries.map((inquiry) => (
                 <div
                   key={inquiry.id}
                   className="bg-white rounded-lg shadow-sm p-6 cursor-pointer hover:shadow-md transition-shadow"

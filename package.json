@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "clean": "npx --yes rimraf@5 .next .next-alt",
-    "dev": "cross-env NEXT_TRACE_SPAN_THRESHOLD_MS=999999999 next dev --port 3000",
+    "dev": "node scripts/dev.mjs",
     "dev:clean": "npm run clean && npm run dev",
     "build": "next build",
     "build:clean": "npm run clean && npm run build",
@@ -37,6 +37,7 @@
     "cross-env": "^7.0.3",
     "eslint": "^9",
     "eslint-config-next": "^15.5.14",
+    "get-port": "^7.2.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

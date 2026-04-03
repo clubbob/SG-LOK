@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
@@ -41,6 +41,7 @@ const truncateText = (text: string, maxLength: number = 15): string => {
 export default function CertificateListPage() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loadingCertificates, setLoadingCertificates] = useState(true);
   const [error, setError] = useState('');
@@ -61,9 +62,12 @@ export default function CertificateListPage() {
     }
   }, [loading, isAuthenticated, router]);
 
-  // 성적서 목록 불러오기 (실시간 업데이트)
+  // 성적서 목록 불러오기 (실시간 업데이트) — 프로필 로딩 전에도 구독 시작
   useEffect(() => {
-    if (!isAuthenticated || !userProfile) return;
+    if (!isAuthenticated) {
+      setLoadingCertificates(false);
+      return;
+    }
 
     setLoadingCertificates(true);
     setError('');
@@ -136,54 +140,61 @@ export default function CertificateListPage() {
     return () => {
       unsubscribeSnapshot();
     };
-  }, [isAuthenticated, userProfile]);
+  }, [isAuthenticated]);
 
-  // 검색 필터링
+  // 상태(URL) + 검색 필터링 (관리자 성적서 목록과 동일한 status 쿼리)
   useEffect(() => {
+    const statusFilterParam = searchParams.get('status');
+    const validStatusFilter =
+      statusFilterParam === 'pending' ||
+      statusFilterParam === 'in_progress' ||
+      statusFilterParam === 'completed' ||
+      statusFilterParam === 'cancelled'
+        ? statusFilterParam
+        : null;
+    const statusFiltered = validStatusFilter
+      ? certificates.filter((cert) => cert.status === validStatusFilter)
+      : certificates;
+
     if (!searchQuery.trim()) {
-      setFilteredCertificates(certificates);
-      // 검색어가 없을 때는 마지막 페이지로 이동 (최신 항목 표시)
-      if (certificates.length > 0) {
+      setFilteredCertificates(statusFiltered);
+      if (statusFiltered.length > 0) {
         const ITEMS_PER_PAGE = 10;
-        const totalPages = Math.ceil(certificates.length / ITEMS_PER_PAGE);
+        const totalPages = Math.ceil(statusFiltered.length / ITEMS_PER_PAGE);
         setCurrentPage(totalPages > 0 ? totalPages : 1);
+      } else {
+        setCurrentPage(1);
       }
       return;
     }
 
-    const query = searchQuery.toLowerCase().trim();
-    const filtered = certificates.filter((cert) => {
-      // 요청자
+    const q = searchQuery.toLowerCase().trim();
+    const filtered = statusFiltered.filter((cert) => {
       const userName = cert.userName?.toLowerCase() || '';
-      // 고객명
       const customerName = cert.customerName?.toLowerCase() || '';
-      // 발주번호
       const orderNumber = cert.orderNumber?.toLowerCase() || '';
-      // 제품명 (기존 필드 및 products 배열)
       const productName = cert.productName?.toLowerCase() || '';
       const productsProductNames = cert.products?.map(p => p.productName?.toLowerCase() || '').join(' ') || '';
-      // 제품코드 (기존 필드 및 products 배열)
       const productCode = cert.productCode?.toLowerCase() || '';
       const productsProductCodes = cert.products?.map(p => p.productCode?.toLowerCase() || '').join(' ') || '';
-      // 상태
       const statusLabel = STATUS_LABELS[cert.status]?.toLowerCase() || cert.status || '';
 
       return (
-        userName.includes(query) ||
-        customerName.includes(query) ||
-        orderNumber.includes(query) ||
-        productName.includes(query) ||
-        productsProductNames.includes(query) ||
-        productCode.includes(query) ||
-        productsProductCodes.includes(query) ||
-        statusLabel.includes(query) ||
-        cert.status.includes(query)
+        userName.includes(q) ||
+        customerName.includes(q) ||
+        orderNumber.includes(q) ||
+        productName.includes(q) ||
+        productsProductNames.includes(q) ||
+        productCode.includes(q) ||
+        productsProductCodes.includes(q) ||
+        statusLabel.includes(q) ||
+        cert.status.includes(q)
       );
     });
 
     setFilteredCertificates(filtered);
-    setCurrentPage(1); // 검색 시 첫 페이지로 리셋
-  }, [searchQuery, certificates]);
+    setCurrentPage(1);
+  }, [searchQuery, certificates, searchParams]);
 
   // 페이지네이션
   useEffect(() => {

@@ -74,7 +74,7 @@ export default function AdminSubstituteMastersPage() {
             href="/admin/substitute/code-db"
             className="font-medium underline underline-offset-2 hover:text-blue-700"
           >
-            대체품찾기 → 코드 DB
+            Code Find → 코드 DB
           </Link>
           에서 자동/수동 시드됩니다.
         </p>

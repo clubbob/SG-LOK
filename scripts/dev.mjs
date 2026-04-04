@@ -86,7 +86,10 @@ if (AUTO_PORT && port !== START_PORT) {
   console.log('');
 }
 console.log(
-  '  [tip] 반영 이상 시: npm run dev:refresh 또는 브라우저 Ctrl+Shift+R\n'
+  '  [tip] 저장 후 Internal Server Error·접속 불가 시:\n' +
+    '        ① 터미널에 빨간 스택이 있는지 확인  ② npm run dev:refresh (.next 초기화)\n' +
+    '        ③ 그래도면 npm run dev:3000 (포트 강제 종료 없이 순수 next dev)\n' +
+    '        ④ 포트 충돌 시: set DEV_NO_KILL=1 후 npm run dev\n'
 );
 if (!AUTO_PORT && !NO_KILL) {
   console.log(

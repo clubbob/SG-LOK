@@ -36,7 +36,7 @@ export default function SubstituteMainPage() {
       <Header />
       <main className="flex-1 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">대체품찾기</h1>
+          <h1 className="text-3xl font-bold text-gray-900 mb-6">Code Find</h1>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
             <Link href="/substitute/menu">
@@ -88,7 +88,7 @@ export default function SubstituteMainPage() {
 
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-lg p-8 mt-10">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-gray-900 mb-3">대체품찾기 시스템</h2>
+              <h2 className="text-3xl font-bold text-gray-900 mb-3">Code Find 시스템</h2>
               <p className="text-lg text-gray-700 max-w-3xl mx-auto">
                 Swagelok 계열 코드를 정규화해 검색하고, 등록된 대체 관계·신뢰도·출처 정보를 한 화면에서
                 점검할 수 있습니다.

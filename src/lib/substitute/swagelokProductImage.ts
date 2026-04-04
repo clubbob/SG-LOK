@@ -19,7 +19,7 @@ function isAllowedImageUrl(u: string): boolean {
 }
 
 /**
- * 대체품찾기 화면용 Swagelok 참고 이미지 URL.
+ * Code Find 화면용 Swagelok 참고 이미지 URL.
  * 우선순위: 매핑 문서 `image_url_from` → `swagelokImageOverrides.json` (정규화 품번 키)
  */
 export function resolveSwagelokImageUrl(

@@ -368,7 +368,7 @@ export default function SubstituteMenuPage() {
         product_name_to: quickSlokName.trim(),
         confidence: CONFIDENCE.PUBLIC_CROSS_REFERENCE,
         source_type: SOURCE_TYPE.PUBLIC_CROSS_REFERENCE,
-        source_name: '대체품찾기',
+        source_name: 'Code Find',
         source_url: '',
         source_note: '',
         remarks: '',
@@ -484,7 +484,7 @@ export default function SubstituteMenuPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">대체품찾기</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Code Find</h1>
               <p className="text-gray-600 mt-2 text-sm sm:text-base">
                 Swagelok 품번을 정확히 입력하면 <strong>S-LOK 대체 품번</strong>을 표시합니다.
               </p>

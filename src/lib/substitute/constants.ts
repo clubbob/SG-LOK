@@ -57,7 +57,7 @@ export const COLLECTIONS = {
 export const TUBE_FITTING_CATEGORY = 'Tube Fitting' as const;
 
 /**
- * 대체품찾기 화면에서 팝업으로 여는 카탈로그 PDF.
+ * Code Find 화면에서 팝업으로 여는 카탈로그 PDF.
  * 원본: `public/catalogs/Swagelok-Tube-Fittings.pdf`, `S-LOK-Tube-Fittings.pdf`
  * (.env 로 전체 URL 덮어쓰기 가능)
  */

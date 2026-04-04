@@ -287,7 +287,7 @@ export default function Header() {
                       : 'text-white hover:bg-blue-600 hover:text-white'
                   }`}
                 >
-                  대체품찾기
+                  Code Find
                   <svg
                     className={`w-4 h-4 transition-transform ${isSubstituteMenuOpen ? 'rotate-180' : ''}`}
                     fill="none"
@@ -316,14 +316,14 @@ export default function Header() {
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
                           onClick={() => setIsSubstituteMenuOpen(false)}
                         >
-                          대체품찾기 메인
+                          Code Find 메인
                         </Link>
                         <Link
                           href="/substitute/menu"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
                           onClick={() => setIsSubstituteMenuOpen(false)}
                         >
-                          대체품찾기
+                          코드 검색
                         </Link>
                       </div>
                     </div>
@@ -595,7 +595,7 @@ export default function Header() {
                 UHP 재고현황
               </Link>
 
-              <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-blue-100/90">대체품찾기</p>
+              <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-blue-100/90">Code Find</p>
               <Link
                 href="/substitute"
                 className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
@@ -605,7 +605,7 @@ export default function Header() {
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                대체품찾기 메인
+                Code Find 메인
               </Link>
               <Link
                 href="/substitute/menu"
@@ -616,7 +616,7 @@ export default function Header() {
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                대체품찾기
+                코드 검색
               </Link>
 
               <Link

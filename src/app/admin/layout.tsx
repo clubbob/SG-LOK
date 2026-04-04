@@ -125,7 +125,7 @@ const adminMenuItems: MenuItem[] = [
   },
   {
     id: 'substitute',
-    label: '대체품찾기',
+    label: 'Code Find',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path

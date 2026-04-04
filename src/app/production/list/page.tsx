@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
-import { collection, query, orderBy, getDocs, Timestamp, doc, deleteDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, doc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionRequest, ProductionRequestStatus } from '@/types';
 import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
@@ -52,10 +52,15 @@ function ProductionRequestListPageContent() {
     }
   }, [loading, isAuthenticated, router]);
 
-  // 생산요청 목록 불러오기 (실시간 업데이트) — 프로필 로딩 전에도 구독 시작(무한 로딩 방지)
+  // 생산요청 목록: 로그인 사용자 본인이 등록한 요청만 조회
   useEffect(() => {
     if (!isAuthenticated) {
       setLoadingRequests(false);
+      setRequests([]);
+      return;
+    }
+    if (!userProfile?.id) {
+      setLoadingRequests(true);
       return;
     }
 
@@ -63,7 +68,7 @@ function ProductionRequestListPageContent() {
     setError('');
     
     const requestsRef = collection(db, 'productionRequests');
-    const q = query(requestsRef, orderBy('createdAt', 'desc'));
+    const q = query(requestsRef, where('userId', '==', userProfile.id));
     
     const unsubscribeSnapshot = onSnapshot(
       q,
@@ -127,7 +132,7 @@ function ProductionRequestListPageContent() {
     return () => {
       unsubscribeSnapshot();
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userProfile?.id]);
 
   // 상태(URL) + 검색 필터링 (관리자 생산 목록과 동일한 status 쿼리)
   useEffect(() => {
@@ -196,6 +201,9 @@ function ProductionRequestListPageContent() {
   };
 
   const handleDelete = async (request: ProductionRequest) => {
+    if (userProfile?.id && request.userId !== userProfile.id) {
+      return;
+    }
     if (!confirm(`정말로 "${request.productName}" 생산요청을 삭제하시겠습니까?`)) {
       return;
     }

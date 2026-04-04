@@ -55,3 +55,14 @@ export const COLLECTIONS = {
 
 /** Tube Fitting 1차 파서 카테고리 */
 export const TUBE_FITTING_CATEGORY = 'Tube Fitting' as const;
+
+/**
+ * 대체품찾기 화면에서 팝업으로 여는 카탈로그 PDF.
+ * 원본: `public/catalogs/Swagelok-Tube-Fittings.pdf`, `S-LOK-Tube-Fittings.pdf`
+ * (.env 로 전체 URL 덮어쓰기 가능)
+ */
+export const SWAGELOK_CATALOG_URL =
+  process.env.NEXT_PUBLIC_SWAGELOK_CATALOG_URL?.trim() || '/catalogs/Swagelok-Tube-Fittings.pdf';
+
+export const SLOK_CATALOG_URL =
+  process.env.NEXT_PUBLIC_SLOK_CATALOG_URL?.trim() || '/catalogs/S-LOK-Tube-Fittings.pdf';

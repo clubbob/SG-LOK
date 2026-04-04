@@ -4,7 +4,7 @@ import React, { useState, useEffect, Suspense, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
-import { collection, query, orderBy, onSnapshot, Timestamp as FirestoreTimestamp } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp as FirestoreTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionRequest, ProductionRequestStatus } from '@/types';
 import { formatDateShort } from '@/lib/utils';
@@ -83,11 +83,14 @@ function ProductionCalendarContent() {
       router.push('/login');
       return;
     }
+    if (!userProfile?.id) {
+      return;
+    }
 
-    // 실시간 생산요청 목록 구독
+    // 실시간 생산요청 목록 구독 (본인 등록 건만)
     const q = query(
       collection(db, 'productionRequests'),
-      orderBy('createdAt', 'desc')
+      where('userId', '==', userProfile.id)
     );
 
     const unsubscribe = onSnapshot(
@@ -128,7 +131,7 @@ function ProductionCalendarContent() {
     );
 
     return () => unsubscribe();
-  }, [isAuthenticated, authLoading, router]);
+  }, [isAuthenticated, authLoading, router, userProfile?.id]);
 
   // 날짜를 한국 시간 기준으로 정규화
   const normalizeToKST = (date: Date): Date => {

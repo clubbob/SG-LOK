@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button, Input } from '@/components/ui';
-import { collection, addDoc, Timestamp, getDocs, query, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, Timestamp, getDocs, query, where, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionReason } from '@/types';
 
@@ -87,12 +87,17 @@ function ProductionRequestContent() {
     }
   }, [requestId, isAuthenticated, userProfile, router]);
 
-  // 이전에 등록된 제품명 및 고객사명 목록 불러오기
+  // 이전에 등록된 제품명 및 고객사명 목록 불러오기 (본인 생산요청에서만)
   useEffect(() => {
     const loadSuggestions = async () => {
+      if (!userProfile?.id) return;
       try {
         const productionRequestsRef = collection(db, 'productionRequests');
-        const q = query(productionRequestsRef, limit(500)); // 인덱스 없이 사용, 최대 500개
+        const q = query(
+          productionRequestsRef,
+          where('userId', '==', userProfile.id),
+          limit(500)
+        );
         const querySnapshot = await getDocs(q);
         
         const productNames = new Set<string>();
@@ -116,10 +121,10 @@ function ProductionRequestContent() {
       }
     };
 
-    if (isAuthenticated) {
+    if (isAuthenticated && userProfile?.id) {
       loadSuggestions();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userProfile?.id]);
 
   if (loading || loadingRequest) {
     return (

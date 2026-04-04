@@ -19,10 +19,7 @@ export default function SignupPage() {
     // 회사 정보
     name: '',
     company: '',
-    businessNumber: '',
-    phone: '',
   });
-  const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -31,47 +28,15 @@ export default function SignupPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     
-    // 사업자 등록번호 자동 포맷팅 (하이픈 추가)
-    if (name === 'businessNumber') {
-      const cleaned = value.replace(/[^0-9]/g, '');
-      let formatted = cleaned;
-      if (cleaned.length > 3) {
-        formatted = cleaned.slice(0, 3) + '-' + cleaned.slice(3);
-      }
-      if (cleaned.length > 5) {
-        formatted = cleaned.slice(0, 3) + '-' + cleaned.slice(3, 5) + '-' + cleaned.slice(5, 10);
-      }
-      setFormData({
-        ...formData,
-        [name]: formatted
-      });
-    }
-    // 핸드폰 번호 자동 포맷팅 (하이픈 추가)
-    else if (name === 'phone') {
-      const cleaned = value.replace(/[^0-9]/g, '');
-      let formatted = cleaned;
-      if (cleaned.length > 3) {
-        formatted = cleaned.slice(0, 3) + '-' + cleaned.slice(3);
-      }
-      if (cleaned.length > 7) {
-        formatted = cleaned.slice(0, 3) + '-' + cleaned.slice(3, 7) + '-' + cleaned.slice(7, 11);
-      }
-      setFormData({
-        ...formData,
-        [name]: formatted
-      });
-    }
     // 비밀번호 필드는 공백 제거
-    else if (name === 'password' || name === 'confirmPassword') {
+    if (name === 'password' || name === 'confirmPassword') {
       // 비밀번호 필드에서 공백 제거 (붙여넣기 시 공백이 포함될 수 있음)
       const cleanedValue = value.replace(/\s/g, '');
       setFormData({
         ...formData,
         [name]: cleanedValue
       });
-    }
-    // 일반 필드
-    else {
+    } else {
       setFormData({
         ...formData,
         [name]: value
@@ -171,26 +136,6 @@ export default function SignupPage() {
           delete errors.company;
         }
         break;
-      
-      case 'businessNumber':
-        if (!value.trim()) {
-          errors.businessNumber = '사업자 등록번호를 입력해주세요.';
-        } else if (!validateBusinessNumber(value)) {
-          errors.businessNumber = '사업자 등록번호는 10자리 숫자여야 합니다.';
-        } else {
-          delete errors.businessNumber;
-        }
-        break;
-      
-      case 'phone':
-        if (!value.trim()) {
-          errors.phone = '핸드폰 번호를 입력해주세요.';
-        } else if (!validatePhone(value)) {
-          errors.phone = '유효한 핸드폰 번호 형식을 입력해주세요.';
-        } else {
-          delete errors.phone;
-        }
-        break;
     }
 
     setFieldErrors(errors);
@@ -200,18 +145,6 @@ export default function SignupPage() {
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
-  };
-
-  // 사업자 등록번호 검증 (10자리 숫자)
-  const validateBusinessNumber = (businessNumber: string): boolean => {
-    const cleaned = businessNumber.replace(/-/g, '');
-    return /^\d{10}$/.test(cleaned);
-  };
-
-  // 핸드폰 번호 검증
-  const validatePhone = (phone: string): boolean => {
-    const cleaned = phone.replace(/[-\s]/g, '');
-    return /^01[0-9]\d{7,8}$|^0\d{1,2}\d{3,4}\d{4}$/.test(cleaned);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -257,18 +190,6 @@ export default function SignupPage() {
       errors.company = '회사명은 50자 이하여야 합니다.';
     }
 
-    if (!formData.businessNumber.trim()) {
-      errors.businessNumber = '사업자 등록번호를 입력해주세요.';
-    } else if (!validateBusinessNumber(formData.businessNumber)) {
-      errors.businessNumber = '사업자 등록번호는 10자리 숫자여야 합니다.';
-    }
-
-    if (!formData.phone.trim()) {
-      errors.phone = '핸드폰 번호를 입력해주세요.';
-    } else if (!validatePhone(formData.phone)) {
-      errors.phone = '유효한 핸드폰 번호 형식을 입력해주세요.';
-    }
-
     // 에러가 있으면 중단
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -296,8 +217,6 @@ export default function SignupPage() {
             name: formData.name.trim(),
             email: formData.email.trim(),
             company: formData.company.trim(),
-            businessNumber: formData.businessNumber.replace(/-/g, ''),
-            phone: formData.phone.trim(),
             userTypes: [],
             approved: false,
             createdAt: new Date(),
@@ -343,8 +262,6 @@ export default function SignupPage() {
             name: formData.name.trim(),
             email: formData.email.trim(),
             company: formData.company.trim(),
-            businessNumber: formData.businessNumber.replace(/-/g, ''),
-            phone: formData.phone.trim(),
             userTypes: [],
             approved: false,
             deleted: false,
@@ -555,30 +472,6 @@ export default function SignupPage() {
               onBlur={handleBlur}
               placeholder="회사명을 입력하세요"
               error={fieldErrors.company}
-            />
-            <Input
-              id="businessNumber"
-              name="businessNumber"
-              type="text"
-              label="사업자 등록번호"
-              required
-              value={formData.businessNumber}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              placeholder="사업자 등록번호를 입력하세요 (예: 111-11-11111)"
-              error={fieldErrors.businessNumber}
-            />
-            <Input
-              id="phone"
-              name="phone"
-              type="tel"
-              label="핸드폰 번호"
-              required
-              value={formData.phone}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              placeholder="핸드폰 번호를 입력하세요 (예: 010-1234-5678)"
-              error={fieldErrors.phone}
             />
           </div>
 

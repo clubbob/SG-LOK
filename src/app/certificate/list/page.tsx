@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
-import { collection, query, getDocs, Timestamp, doc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, doc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Certificate, CertificateStatus, CertificateType } from '@/types';
 import { formatDateShort } from '@/lib/utils';
@@ -62,10 +62,15 @@ function CertificateListPageContent() {
     }
   }, [loading, isAuthenticated, router]);
 
-  // 성적서 목록 불러오기 (실시간 업데이트) — 프로필 로딩 전에도 구독 시작
+  // 성적서 목록: 로그인 사용자 본인이 요청한 건만 조회
   useEffect(() => {
     if (!isAuthenticated) {
       setLoadingCertificates(false);
+      setCertificates([]);
+      return;
+    }
+    if (!userProfile?.id) {
+      setLoadingCertificates(true);
       return;
     }
 
@@ -73,7 +78,7 @@ function CertificateListPageContent() {
     setError('');
     
     const certificatesRef = collection(db, 'certificates');
-    const q = query(certificatesRef);
+    const q = query(certificatesRef, where('userId', '==', userProfile.id));
     
     const unsubscribeSnapshot = onSnapshot(
       q,
@@ -140,7 +145,7 @@ function CertificateListPageContent() {
     return () => {
       unsubscribeSnapshot();
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, userProfile?.id]);
 
   // 상태(URL) + 검색 필터링 (관리자 성적서 목록과 동일한 status 쿼리)
   useEffect(() => {
@@ -221,6 +226,9 @@ function CertificateListPageContent() {
   };
 
   const handleDelete = async (certificate: Certificate) => {
+    if (userProfile?.id && certificate.userId !== userProfile.id) {
+      return;
+    }
     if (!confirm(`정말로 "${certificate.productName || '제품명 없음'}" 성적서 요청을 삭제하시겠습니까?`)) {
       return;
     }

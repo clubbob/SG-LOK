@@ -69,9 +69,9 @@ export default function DashboardPage() {
     try {
       setLoadingStats(true);
       
-      // 생산요청 통계 (모든 생산요청 기준)
+      // 생산요청 통계 (본인 등록 건만)
       const requestsRef = collection(db, 'productionRequests');
-      const requestsQuery = query(requestsRef);
+      const requestsQuery = query(requestsRef, where('userId', '==', userProfile.id));
       const requestsSnapshot = await getDocs(requestsQuery);
       
       let pendingCount = 0;
@@ -130,9 +130,11 @@ export default function DashboardPage() {
         replied: repliedInquiryCount,
       });
 
-      // 성적서 통계 (성적서 목록과 동일하게 전체 성적서 기준 집계)
+      // 성적서 통계 (본인 요청 건만)
       const certificatesRef = collection(db, 'certificates');
-      const certificatesSnapshot = await getDocs(certificatesRef);
+      const certificatesSnapshot = await getDocs(
+        query(certificatesRef, where('userId', '==', userProfile.id))
+      );
       
       let pendingCertCount = 0;
       let inProgressCertCount = 0;

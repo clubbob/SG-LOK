@@ -136,11 +136,7 @@ const adminMenuItems: MenuItem[] = [
         />
       </svg>
     ),
-    subItems: [
-      { id: 'substitute-manage', label: '대체품관리', path: '/admin/substitute/manage' },
-      { id: 'substitute-code-db', label: '코드 DB', path: '/admin/substitute/code-db' },
-      { id: 'substitute-masters', label: '코드 마스터', path: '/admin/substitute/masters' },
-    ],
+    subItems: [{ id: 'substitute-manage', label: '대체품관리', path: '/admin/substitute/manage' }],
   },
 ];
 

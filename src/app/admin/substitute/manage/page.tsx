@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useCallback, useState } from 'react';
-import substituteMappingsSeed from '@/data/substituteMappingsSeed.json';
+import React, { useCallback, useEffect, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { normalizeInstrumentCode } from '@/lib/substitute/codeNormalize';
 import {
@@ -12,18 +11,19 @@ import {
   type MappingStatus,
   type ManufacturerId,
 } from '@/lib/substitute/constants';
-import { downloadMappingsAsXlsx } from '@/lib/substitute/exportXlsx';
+import { downloadSubstituteAdminTableXlsx } from '@/lib/substitute/exportXlsx';
 import {
   adminSearchByNormalizedFrom,
   createMapping,
+  deleteMapping,
   fetchAllMappings,
   updateMapping,
-  upsertSeedMapping,
   type MappingWritePayload,
 } from '@/lib/substitute/firestoreMapping';
 import type { SubstituteMappingDoc } from '@/lib/substitute/types';
 
 const ACTOR = 'admin';
+const SEARCH_STORAGE_KEY = 'sglok-admin-substitute-last-search';
 
 function formatMappingUpdatedAt(ts: SubstituteMappingDoc['updated_at']): string {
   if (!ts) return '—';
@@ -79,28 +79,82 @@ export default function AdminSubstituteManagePage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<MappingWritePayload>(emptyForm);
+  const [remarksPopup, setRemarksPopup] = useState<string | null>(null);
 
-  const runSearch = useCallback(async () => {
+  const executeSearch = useCallback(async (rawInput: string) => {
     setError(null);
     setMessage(null);
-    const norm = normalizeInstrumentCode(searchInput.trim());
+    const trimmed = rawInput.trim();
+    const norm = normalizeInstrumentCode(trimmed);
     if (!norm) {
       setError('검색할 Swagelok 코드를 입력하세요.');
       setRows([]);
+      try {
+        sessionStorage.removeItem(SEARCH_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
       return;
     }
+    const display = trimmed.toUpperCase();
+    setSearchInput(display);
     setLoading(true);
     try {
       const list = await adminSearchByNormalizedFrom(db, norm, 'all');
       setRows(list);
+      try {
+        sessionStorage.setItem(SEARCH_STORAGE_KEY, display);
+      } catch {
+        /* ignore */
+      }
     } catch (e) {
       console.error(e);
       setError('조회 실패. Firestore 인덱스·규칙을 확인하세요.');
       setRows([]);
+      try {
+        sessionStorage.removeItem(SEARCH_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
     } finally {
       setLoading(false);
     }
-  }, [searchInput]);
+  }, []);
+
+  const runSearch = useCallback(() => {
+    void executeSearch(searchInput);
+  }, [searchInput, executeSearch]);
+
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(SEARCH_STORAGE_KEY);
+      if (saved?.trim()) {
+        void executeSearch(saved);
+      }
+    } catch {
+      /* storage 사용 불가 */
+    }
+  }, [executeSearch]);
+
+  const handleRefresh = useCallback(() => {
+    setError(null);
+    setRemarksPopup(null);
+    const trimmed = searchInput.trim();
+    if (!trimmed) {
+      setRows([]);
+      setSearchInput('');
+      setModalOpen(false);
+      setEditingId(null);
+      try {
+        sessionStorage.removeItem(SEARCH_STORAGE_KEY);
+      } catch {
+        /* ignore */
+      }
+      setMessage('화면을 초기화했습니다.');
+      return;
+    }
+    void executeSearch(trimmed);
+  }, [searchInput, executeSearch]);
 
   const openCreate = () => {
     setEditingId(null);
@@ -133,6 +187,29 @@ export default function AdminSubstituteManagePage() {
     });
     setModalOpen(true);
     setError(null);
+  };
+
+  const handleDeleteRow = async (m: SubstituteMappingDoc) => {
+    if (
+      !window.confirm(
+        `이 매핑을 삭제할까요?\n${m.normalized_code_from} → ${m.normalized_code_to}`
+      )
+    ) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await deleteMapping(db, m.id, ACTOR);
+      setMessage('삭제되었습니다.');
+      await runSearch();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : '삭제 실패';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const saveModal = async () => {
@@ -169,32 +246,14 @@ export default function AdminSubstituteManagePage() {
     setError(null);
     try {
       const all = await fetchAllMappings(db);
-      downloadMappingsAsXlsx(all, `substitute-admin-all-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      downloadSubstituteAdminTableXlsx(
+        all,
+        `substitute-admin-all-${new Date().toISOString().slice(0, 10)}.xlsx`
+      );
       setMessage(`Excel 저장 (${all.length}건)`);
     } catch (e) {
       console.error(e);
       setError('보내기 실패');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const runSeed = async () => {
-    setLoading(true);
-    setError(null);
-    let ins = 0;
-    let skip = 0;
-    try {
-      for (const row of substituteMappingsSeed as Record<string, unknown>[]) {
-        const r = await upsertSeedMapping(db, row, ACTOR);
-        if (r === 'inserted') ins++;
-        else skip++;
-      }
-      setMessage(`시드 완료: 신규 ${ins}건, 스킵(기존) ${skip}건`);
-      if (searchInput.trim()) await runSearch();
-    } catch (e) {
-      console.error(e);
-      setError('시드 중 오류');
     } finally {
       setLoading(false);
     }
@@ -223,14 +282,6 @@ export default function AdminSubstituteManagePage() {
           >
             전체 Excel
           </button>
-          <button
-            type="button"
-            onClick={runSeed}
-            disabled={loading}
-            className="px-3 py-2 text-sm rounded-md border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 disabled:opacity-50"
-          >
-            번들 시드 넣기
-          </button>
         </div>
       </div>
 
@@ -246,14 +297,23 @@ export default function AdminSubstituteManagePage() {
               placeholder="예: SS-400-1-4"
             />
           </div>
-          <button
-            type="button"
-            onClick={runSearch}
-            disabled={loading}
-            className="px-4 py-2 text-sm rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {loading ? '처리 중…' : '검색'}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={runSearch}
+              disabled={loading}
+              className="px-4 py-2 text-sm rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50"
+            >
+              {loading ? '처리 중…' : '검색'}
+            </button>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="px-4 py-2 text-sm rounded-md border border-gray-300 bg-white text-gray-800 hover:bg-gray-50"
+            >
+              새로고침
+            </button>
+          </div>
         </div>
         {message && <p className="text-sm text-emerald-700">{message}</p>}
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -267,6 +327,7 @@ export default function AdminSubstituteManagePage() {
               <th className="px-3 py-2 font-medium">SWAGELOK 제품코드</th>
               <th className="px-3 py-2 font-medium">S-LOK 제품명</th>
               <th className="px-3 py-2 font-medium">S-LOK 제품코드</th>
+              <th className="px-3 py-2 font-medium">비고</th>
               <th className="px-3 py-2 font-medium whitespace-nowrap">최근 수정일</th>
               <th className="px-3 py-2 font-medium">작업</th>
             </tr>
@@ -274,7 +335,7 @@ export default function AdminSubstituteManagePage() {
           <tbody className="divide-y divide-gray-100">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-3 py-8 text-center text-gray-500">
                   검색 결과가 없습니다.
                 </td>
               </tr>
@@ -293,16 +354,37 @@ export default function AdminSubstituteManagePage() {
                     )}
                   </td>
                   <td className="px-3 py-2 font-mono text-sm">{m.normalized_code_to}</td>
+                  <td className="px-3 py-2 text-sm align-top">
+                    {m.remarks?.trim() ? (
+                      <button
+                        type="button"
+                        onClick={() => setRemarksPopup(m.remarks ?? '')}
+                        className="text-blue-600 hover:underline text-sm font-medium"
+                      >
+                        내용 보기
+                      </button>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-sm text-gray-700 whitespace-nowrap">
                     {formatMappingUpdatedAt(m.updated_at)}
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap">
+                  <td className="px-3 py-2 whitespace-nowrap space-x-2">
                     <button
                       type="button"
                       onClick={() => openEdit(m)}
                       className="text-blue-600 hover:underline text-sm"
                     >
                       수정
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteRow(m)}
+                      disabled={loading}
+                      className="text-red-600 hover:underline text-sm disabled:opacity-50"
+                    >
+                      삭제
                     </button>
                   </td>
                 </tr>
@@ -390,6 +472,33 @@ export default function AdminSubstituteManagePage() {
         </div>
       )}
 
+      {remarksPopup !== null && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/40">
+          <div
+            role="dialog"
+            aria-labelledby="remarks-popup-title"
+            className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[80vh] flex flex-col p-5"
+          >
+            <h3 id="remarks-popup-title" className="text-lg font-semibold text-gray-900">
+              비고
+            </h3>
+            <div className="mt-3 flex-1 min-h-0 overflow-y-auto rounded border border-gray-100 bg-gray-50 p-3 text-sm text-gray-800 whitespace-pre-wrap break-words">
+              {remarksPopup.trim() ? remarksPopup : (
+                <span className="text-gray-400">(내용 없음)</span>
+              )}
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setRemarksPopup(null)}
+                className="px-4 py-2 text-sm rounded-md bg-gray-900 text-white hover:bg-gray-800"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

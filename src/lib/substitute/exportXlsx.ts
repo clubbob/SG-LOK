@@ -1,36 +1,43 @@
 'use client';
 
 import * as XLSX from 'xlsx';
-import { MAPPING_STATUS_LABEL, MANUFACTURER_LABEL } from './constants';
 import type { SubstituteMappingDoc } from './types';
 
-function rowForSheet(m: SubstituteMappingDoc) {
-  return {
-    문서ID: m.id,
-    From제조사: MANUFACTURER_LABEL[m.manufacturer_from],
-    From코드_raw: m.code_from,
-    From코드_normalized: m.normalized_code_from,
-    From이미지URL: m.image_url_from ?? '',
-    From제품명: m.product_name_from,
-    To제조사: MANUFACTURER_LABEL[m.manufacturer_to],
-    To코드_raw: m.code_to,
-    To코드_normalized: m.normalized_code_to,
-    To제품명: m.product_name_to,
-    confidence: m.confidence,
-    source_type: m.source_type,
-    source_name: m.source_name,
-    source_url: m.source_url,
-    source_note: m.source_note,
-    remarks: m.remarks,
-    status: m.status,
-    status_label: MAPPING_STATUS_LABEL[m.status] ?? m.status,
-    updated_by: m.updated_by,
-    created_by: m.created_by,
-  };
+function formatUpdatedAtForXlsx(ts: SubstituteMappingDoc['updated_at']): string {
+  if (!ts) return '';
+  try {
+    const d =
+      typeof (ts as { toDate?: () => Date }).toDate === 'function'
+        ? (ts as { toDate: () => Date }).toDate()
+        : new Date(
+            ((ts as { seconds?: number }).seconds ?? 0) * 1000 +
+              Math.floor(((ts as { nanoseconds?: number }).nanoseconds ?? 0) / 1e6)
+          );
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('ko-KR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
 }
 
-export function downloadMappingsAsXlsx(rows: SubstituteMappingDoc[], filename: string) {
-  const data = rows.map(rowForSheet);
+/**
+ * 대체품관리 화면 테이블과 동일한 열만 Excel로 보냅니다 (작업 열 제외).
+ */
+export function downloadSubstituteAdminTableXlsx(rows: SubstituteMappingDoc[], filename: string) {
+  const data = rows.map((m) => ({
+    'SWAGELOK 제품명': m.product_name_from ?? '',
+    'SWAGELOK 제품코드': m.normalized_code_from ?? '',
+    'S-LOK 제품명': m.product_name_to ?? '',
+    'S-LOK 제품코드': m.normalized_code_to ?? '',
+    비고: m.remarks ?? '',
+    '최근 수정일': formatUpdatedAtForXlsx(m.updated_at),
+  }));
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'mappings');

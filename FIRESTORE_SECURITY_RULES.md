@@ -3,6 +3,10 @@
 ## 문제
 "Missing or insufficient permissions" 오류가 발생하는 경우, Firestore 보안 규칙이 설정되지 않았거나 잘못 설정된 것입니다.
 
+**자주 빠지는 컬렉션**: 규칙을 컬렉션별로만 열어두면, `match`가 없는 경로는 전부 거부됩니다. 이 프로젝트에서는 특히 **`inventory`**(문서 `microWeldProducts` 등)·**`notices`**가 없으면 대시보드·재고현황·공지 페이지에서 동일 오류가 납니다. 아래 **(참고) 기존(컬렉션별) 권장 규칙** 블록에 두 컬렉션이 포함되어 있는지 확인하세요.
+
+**대체품(mappings 등)**: 읽기/쓰기에 `request.auth != null`이 필요합니다. 일반 회원은 이메일 로그인, 관리자 화면은 **익명 로그인**을 쓰는 경우 Firebase Console에서 **Authentication → 익명** 사용이 켜져 있어야 합니다.
+
 ## 해결 방법
 
 ### 1. Firebase Console 접속
@@ -43,13 +47,14 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // users 컬렉션: 회원 관리
+    // - create: 본인 uid 문서만 (가입)
+    // - update/delete: 로그인 사용자 전체 허용 → 관리자 페이지(타인 문서 승인·삭제) 동작.
+    //   보안: 이론상 로그인한 다른 회원이 SDK로 타인 문서를 조작할 수 있음. 장기적으로 Custom Claim(admin) 권장.
     match /users/{userId} {
-      // 모든 사용자가 회원 정보를 읽을 수 있음 (관리자 페이지 접근을 위해)
-      // 프로덕션에서는 더 엄격한 규칙 적용 권장
       allow read: if true;
-      
-      // 인증된 사용자는 자신의 문서만 쓸 수 있음
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null;
     }
     
     // inquiries 컬렉션: 문의 관리
@@ -138,11 +143,76 @@ service cloud.firestore {
       // 인증된 사용자는 제품 소재/사이즈 정보를 삭제할 수 있음
       allow delete: if request.auth != null;
     }
+    
+    // inventory: UHP 재고 문서 (예: microWeldProducts) — 대시보드·재고현황·관리자 재고
+    // 규칙에 없으면 listen/get 시 "Missing or insufficient permissions" 발생
+    match /inventory/{docId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+    }
+    
+    // notices: 공지사항
+    match /notices/{noticeId} {
+      allow read: if true;
+      allow create, update, delete: if request.auth != null;
+    }
+    
+    // mappings: Swagelok ↔ S-LOK 대체품 매핑 (로그인 사용자 검색·수정)
+    match /mappings/{mappingId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+      allow delete: if request.auth != null;
+    }
+    
+    // swagelok_catalog_parts: Swagelok Tube Fitting 카탈로그(제품코드·제품명). 관리자 화면 시드·Admin import
+    match /swagelok_catalog_parts/{partId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null;
+      allow delete: if false;
+    }
+    
+    // mapping_history: 변경 이력 (append 전용 — 수정·삭제 불가)
+    match /mapping_history/{historyId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if false;
+      allow delete: if false;
+    }
+    
+    // Tube Fitting 코드 분해용 마스터 (읽기: 로그인, 관리자 화면에서 편집)
+    match /code_material_master/{id} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+    match /code_family_master/{id} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+    match /code_size_master/{id} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+    match /code_option_master/{id} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
   }
 }
 ```
 
 **참고**: 위 규칙은 개발 환경용입니다. 프로덕션에서는 관리자 권한을 더 엄격하게 체크해야 합니다.
+
+### 대체품찾기(mappings) 전용 규칙 요약
+
+Firebase Console > Firestore > **규칙**에 위 `mappings`, `mapping_history`, `swagelok_catalog_parts`, `code_*_master` 블록을 반드시 포함하세요.
+
+| 컬렉션 | 읽기 | 쓰기 | 비고 |
+|--------|------|------|------|
+| `mappings` | 로그인(`request.auth != null`) | 동일 | 검색·사용자/관리자 수정 |
+| `mapping_history` | 로그인 | **create만** | `update`/`delete` 금지 → append only |
+| `swagelok_catalog_parts` | 로그인 | 로그인(create/update), delete 불가 | 관리자 「코드 DB」시드 또는 `npm run import:swagelok-catalog` |
+| `code_*_master` | 로그인 | 로그인 | 마스터 데이터; 프로덕션에서는 관리자 전용으로 좁히는 것을 권장 |
 
 ### 3. 개발 환경용 간단한 규칙 (테스트용)
 

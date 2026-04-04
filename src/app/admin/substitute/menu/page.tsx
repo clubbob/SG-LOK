@@ -1,16 +1,17 @@
 "use client";
 
-export default function AdminSubstituteMenuPage() {
-  return (
-    <div className="p-6 sm:p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">대체품찾기</h1>
-        <p className="text-gray-600 mt-2">대체품찾기 기능은 준비 중입니다.</p>
-      </div>
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-gray-600">
-        관리자용 대체품찾기 화면을 이곳에 연결하면 됩니다.
-      </div>
+/** 예전 메뉴 경로 호환: 대체품관리로 이동 */
+export default function AdminSubstituteMenuRedirectPage() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace('/admin/substitute/manage');
+  }, [router]);
+  return (
+    <div className="p-8 text-center text-gray-500 text-sm">
+      대체품관리 화면으로 이동 중…
     </div>
   );
 }

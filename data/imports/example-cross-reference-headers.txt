@@ -1,0 +1,13 @@
+엑셀/CSV 첫 행(헤더) 예시 — Swagelok 열과 S-LOK 열 이름만 맞으면 됩니다.
+
+swagelok_code | slok_code
+SS-400-1-4    | (귀사 S-LOK 품번)
+
+또는
+
+code_from | code_to
+
+선택 열: product_name_from, product_name_to, remarks
+
+※ Swagelok 카탈로그만 있고 S-LOK 대응 열이 없으면 이 스크립트로는 mappings에 넣을 수 없습니다.
+  그 경우 표로 정리한 뒤 slok_code 열을 채워 주세요.

@@ -1,0 +1,28 @@
+{
+  "materials": [
+    { "id": "SS", "material_code": "SS", "material_name": "Stainless Steel", "is_active": true },
+    { "id": "BR", "material_code": "BR", "material_name": "Brass", "is_active": true },
+    { "id": "CS", "material_code": "CS", "material_name": "Carbon Steel", "is_active": true },
+    { "id": "M", "material_code": "M", "material_name": "Monel / Alloy (확인 필요)", "is_active": true }
+  ],
+  "families": [
+    { "id": "100", "category": "Tube Fitting", "family_code": "100", "family_name": "Union", "is_active": true },
+    { "id": "200", "category": "Tube Fitting", "family_code": "200", "family_name": "Male Connector", "is_active": true },
+    { "id": "300", "category": "Tube Fitting", "family_code": "300", "family_name": "Female Connector", "is_active": true },
+    { "id": "400", "category": "Tube Fitting", "family_code": "400", "family_name": "Male Connector", "is_active": true },
+    { "id": "500", "category": "Tube Fitting", "family_code": "500", "family_name": "Elbow", "is_active": true },
+    { "id": "600", "category": "Tube Fitting", "family_code": "600", "family_name": "Tee", "is_active": true }
+  ],
+  "sizes": [
+    { "id": "1", "size_code": "1", "size_name": "1/16 in", "sort_order": 1, "is_active": true },
+    { "id": "2", "size_code": "2", "size_name": "1/8 in", "sort_order": 2, "is_active": true },
+    { "id": "3", "size_code": "3", "size_name": "3/16 in", "sort_order": 3, "is_active": true },
+    { "id": "4", "size_code": "4", "size_name": "1/4 in", "sort_order": 4, "is_active": true },
+    { "id": "5", "size_code": "5", "size_name": "5/16 in", "sort_order": 5, "is_active": true },
+    { "id": "6", "size_code": "6", "size_name": "3/8 in", "sort_order": 6, "is_active": true },
+    { "id": "8", "size_code": "8", "size_name": "1/2 in", "sort_order": 8, "is_active": true },
+    { "id": "10", "size_code": "10", "size_name": "5/8 in", "sort_order": 10, "is_active": true },
+    { "id": "12", "size_code": "12", "size_name": "3/4 in", "sort_order": 12, "is_active": true }
+  ],
+  "options": []
+}

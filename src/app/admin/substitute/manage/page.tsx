@@ -17,14 +17,36 @@ import {
   adminSearchByNormalizedFrom,
   createMapping,
   fetchAllMappings,
-  fetchMappingHistory,
   updateMapping,
   upsertSeedMapping,
   type MappingWritePayload,
 } from '@/lib/substitute/firestoreMapping';
-import type { SubstituteMappingDoc, SubstituteMappingHistoryEntry } from '@/lib/substitute/types';
+import type { SubstituteMappingDoc } from '@/lib/substitute/types';
 
 const ACTOR = 'admin';
+
+function formatMappingUpdatedAt(ts: SubstituteMappingDoc['updated_at']): string {
+  if (!ts) return '—';
+  try {
+    const d =
+      typeof (ts as { toDate?: () => Date }).toDate === 'function'
+        ? (ts as { toDate: () => Date }).toDate()
+        : new Date(
+            ((ts as { seconds?: number }).seconds ?? 0) * 1000 +
+              Math.floor(((ts as { nanoseconds?: number }).nanoseconds ?? 0) / 1e6)
+          );
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('ko-KR', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch {
+    return '—';
+  }
+}
 
 const emptyForm: MappingWritePayload = {
   manufacturer_from: MANUFACTURER.SWAGELOK,
@@ -58,11 +80,6 @@ export default function AdminSubstituteManagePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<MappingWritePayload>(emptyForm);
 
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyForId, setHistoryForId] = useState<string | null>(null);
-  const [historyRows, setHistoryRows] = useState<SubstituteMappingHistoryEntry[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-
   const runSearch = useCallback(async () => {
     setError(null);
     setMessage(null);
@@ -76,7 +93,6 @@ export default function AdminSubstituteManagePage() {
     try {
       const list = await adminSearchByNormalizedFrom(db, norm, 'all');
       setRows(list);
-      setMessage(`${list.length}건 조회 (정규화 키: ${norm})`);
     } catch (e) {
       console.error(e);
       setError('조회 실패. Firestore 인덱스·규칙을 확인하세요.');
@@ -145,22 +161,6 @@ export default function AdminSubstituteManagePage() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '저장 실패';
       setError(msg);
-    }
-  };
-
-  const openHistory = async (id: string) => {
-    setHistoryForId(id);
-    setHistoryOpen(true);
-    setHistoryLoading(true);
-    setHistoryRows([]);
-    try {
-      const h = await fetchMappingHistory(db, id);
-      setHistoryRows(h);
-    } catch (e) {
-      console.error(e);
-      setHistoryRows([]);
-    } finally {
-      setHistoryLoading(false);
     }
   };
 
@@ -263,37 +263,46 @@ export default function AdminSubstituteManagePage() {
         <table className="min-w-full text-sm">
           <thead className="bg-gray-50 text-left text-gray-600">
             <tr>
-              <th className="px-3 py-2 font-medium">SWAGELOK</th>
-              <th className="px-3 py-2 font-medium">S-LOK</th>
+              <th className="px-3 py-2 font-medium">SWAGELOK 제품명</th>
+              <th className="px-3 py-2 font-medium">SWAGELOK 제품코드</th>
+              <th className="px-3 py-2 font-medium">S-LOK 제품명</th>
+              <th className="px-3 py-2 font-medium">S-LOK 제품코드</th>
+              <th className="px-3 py-2 font-medium whitespace-nowrap">최근 수정일</th>
               <th className="px-3 py-2 font-medium">작업</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-3 py-8 text-center text-gray-500">
+                <td colSpan={6} className="px-3 py-8 text-center text-gray-500">
                   검색 결과가 없습니다.
                 </td>
               </tr>
             ) : (
               rows.map((m) => (
                 <tr key={m.id} className="hover:bg-gray-50/80">
-                  <td className="px-3 py-2 font-mono text-xs">{m.normalized_code_from}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{m.normalized_code_to}</td>
-                  <td className="px-3 py-2 whitespace-nowrap space-x-2">
+                  <td className="px-3 py-2 text-sm text-gray-800 max-w-[200px]">
+                    {m.product_name_from?.trim() ? m.product_name_from : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-sm">{m.normalized_code_from}</td>
+                  <td className="px-3 py-2 text-sm text-gray-800 max-w-[200px]">
+                    {m.product_name_to?.trim() ? m.product_name_to : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-sm">{m.normalized_code_to}</td>
+                  <td className="px-3 py-2 text-sm text-gray-700 whitespace-nowrap">
+                    {formatMappingUpdatedAt(m.updated_at)}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap">
                     <button
                       type="button"
                       onClick={() => openEdit(m)}
-                      className="text-blue-600 hover:underline text-xs"
+                      className="text-blue-600 hover:underline text-sm"
                     >
                       수정
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openHistory(m.id)}
-                      className="text-gray-600 hover:underline text-xs"
-                    >
-                      이력
                     </button>
                   </td>
                 </tr>
@@ -309,75 +318,54 @@ export default function AdminSubstituteManagePage() {
             <h2 className="text-lg font-semibold text-gray-900">
               {editingId ? '매핑 수정' : '매핑 등록'}
             </h2>
-            <p className="text-xs text-gray-500">
-              Swagelok 측 정규화 품번은 문서 ID에 쓰입니다. 등록 후에는 From 정규화 코드 변경을 권장하지
-              않습니다.
-            </p>
-            <div className="grid grid-cols-1 gap-2 text-sm">
+            <div className="grid grid-cols-1 gap-3 text-sm">
               <label className="block">
-                <span className="text-gray-600 text-xs">Swagelok 코드 (raw)</span>
+                <span className="text-gray-600 text-xs font-medium">SWAGELOK 제품명</span>
+                <input
+                  value={form.product_name_from}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, product_name_from: e.target.value.toUpperCase() }))
+                  }
+                  className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="text-gray-600 text-xs font-medium">SWAGELOK 제품코드</span>
                 <input
                   value={form.code_from}
-                  onChange={(e) => setForm((f) => ({ ...f, code_from: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, code_from: e.target.value.toUpperCase() }))
+                  }
                   disabled={!!editingId}
+                  placeholder="예: SS-400-1-4"
                   className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 font-mono text-sm disabled:bg-gray-100"
                 />
               </label>
               <label className="block">
-                <span className="text-gray-600 text-xs">정규화 From</span>
+                <span className="text-gray-600 text-xs font-medium">S-LOK 제품명</span>
                 <input
-                  value={normalizeInstrumentCode(form.code_from)}
-                  readOnly
-                  className="mt-0.5 w-full rounded border border-gray-200 px-2 py-1.5 font-mono text-sm bg-gray-50"
+                  value={form.product_name_to}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, product_name_to: e.target.value.toUpperCase() }))
+                  }
+                  className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
                 />
               </label>
               <label className="block">
-                <span className="text-gray-600 text-xs">S-LOK 코드 (raw)</span>
+                <span className="text-gray-600 text-xs font-medium">S-LOK 제품코드</span>
                 <input
                   value={form.code_to}
-                  onChange={(e) => setForm((f) => ({ ...f, code_to: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({ ...f, code_to: e.target.value.toUpperCase() }))}
+                  placeholder="S-LOK 품번"
                   className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 font-mono text-sm"
                 />
               </label>
               <label className="block">
-                <span className="text-gray-600 text-xs">정규화 To</span>
-                <input
-                  value={normalizeInstrumentCode(form.code_to)}
-                  readOnly
-                  className="mt-0.5 w-full rounded border border-gray-200 px-2 py-1.5 font-mono text-sm bg-gray-50"
-                />
-              </label>
-              <label className="block">
-                <span className="text-gray-600 text-xs">Swagelok 참고 이미지 URL</span>
-                <input
-                  value={form.image_url_from}
-                  onChange={(e) => setForm((f) => ({ ...f, image_url_from: e.target.value }))}
-                  placeholder="https://... 또는 /swagelok-images/..."
-                  className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="text-gray-600 text-xs">제품명 From</span>
-                <input
-                  value={form.product_name_from}
-                  onChange={(e) => setForm((f) => ({ ...f, product_name_from: e.target.value }))}
-                  className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="text-gray-600 text-xs">제품명 To</span>
-                <input
-                  value={form.product_name_to}
-                  onChange={(e) => setForm((f) => ({ ...f, product_name_to: e.target.value }))}
-                  className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
-                />
-              </label>
-              <label className="block">
-                <span className="text-gray-600 text-xs">remarks</span>
+                <span className="text-gray-600 text-xs font-medium">비고</span>
                 <textarea
                   value={form.remarks}
                   onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
-                  rows={2}
+                  rows={3}
                   className="mt-0.5 w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
                 />
               </label>
@@ -402,40 +390,6 @@ export default function AdminSubstituteManagePage() {
         </div>
       )}
 
-      {historyOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-5">
-            <div className="flex justify-between items-center mb-3">
-              <h2 className="text-lg font-semibold">이력 — {historyForId}</h2>
-              <button
-                type="button"
-                onClick={() => setHistoryOpen(false)}
-                className="text-sm text-gray-500 hover:text-gray-800"
-              >
-                닫기
-              </button>
-            </div>
-            {historyLoading ? (
-              <p className="text-sm text-gray-500">불러오는 중…</p>
-            ) : historyRows.length === 0 ? (
-              <p className="text-sm text-gray-500">이력이 없습니다.</p>
-            ) : (
-              <ul className="space-y-3 text-xs">
-                {historyRows.map((h, i) => (
-                  <li key={i} className="border border-gray-100 rounded-md p-2 bg-gray-50/80">
-                    <div className="font-medium text-gray-800">
-                      {h.changed_fields?.join(', ')} · {h.changed_by}
-                    </div>
-                    <pre className="mt-1 whitespace-pre-wrap break-all text-[11px] text-gray-600">
-                      {JSON.stringify({ before: h.before, after: h.after }, null, 2)}
-                    </pre>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

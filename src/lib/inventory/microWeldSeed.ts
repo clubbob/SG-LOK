@@ -4,7 +4,7 @@
  */
 
 import { createEmptyInventoryItem } from './itemFactory';
-import type { InventoryItem, InventoryProduct } from './types';
+import type { InventoryItem, InventoryProduct, UhpInventoryState } from './types';
 import type { UhpInventorySlices } from './uhpInventoryHelpers';
 
 /** HME와 동일 규격(02·04·06·08·12) + 안전재고 */
@@ -30,7 +30,7 @@ function buildProductLine(
   };
 }
 
-export const INVENTORY_SEED_VERSION = 17;
+export const INVENTORY_SEED_VERSION = 18;
 
 /** HMVE — 도면 Part No. HMVE-04·06·08 계열 */
 const HMVE_PRODUCT: InventoryProduct = {
@@ -176,7 +176,7 @@ function isHmcProductLineName(name: string): boolean {
 /**
  * HMC 제품 라인에 HMC-04·06·08 품목을 채웁니다.
  * 제품명이 HMC·(HMC)로 끝나는 표기 등도 동일 라인으로 봅니다.
- * 해당 라인이 없으면 HMC 제품 라인을 새로 붙입니다.
+ * 라인이 없으면 추가하지 않습니다(관리자가 제품 라인을 삭제한 경우 유지).
  */
 export function mergeMissingHmcItemsFromSeed(products: InventoryProduct[]): {
   next: InventoryProduct[];
@@ -187,13 +187,7 @@ export function mergeMissingHmcItemsFromSeed(products: InventoryProduct[]): {
   );
 
   if (!products.some((p) => isHmcProductLineName(p.name))) {
-    const items = seedItems.map((item) => JSON.parse(JSON.stringify(item)) as InventoryItem);
-    const line: InventoryProduct = {
-      name: HMC_PRODUCT.name,
-      imageSrc: HMC_PRODUCT.imageSrc,
-      items,
-    };
-    return { next: [...products, line], changed: true };
+    return { next: products, changed: false };
   }
 
   let changed = false;
@@ -305,6 +299,133 @@ export function ensureSeedProductLinesInCategory(
     }
   }
   return { next, changed };
+}
+
+function mergeProductLinesSameName(a: InventoryProduct, b: InventoryProduct): InventoryProduct {
+  const codes = new Set(a.items.map((i) => i.code));
+  const extraItems = b.items
+    .filter((i) => !codes.has(i.code))
+    .map((i) => JSON.parse(JSON.stringify(i)) as InventoryItem);
+  if (extraItems.length === 0) return a;
+  return {
+    ...a,
+    items: [...a.items, ...extraItems],
+    imageSrc: a.imageSrc?.trim() ? a.imageSrc : b.imageSrc,
+  };
+}
+
+/** VCR 실험 등으로 붙은 잡 라인만 제거 (이름 기준). */
+export function isExperimentalInventoryLineName(name: string): boolean {
+  return /\bvcr\b/i.test(name) || /vcr\s+to\s+vcr/i.test(name);
+}
+
+type ReconcileSlot =
+  | { kind: 'seed'; name: string; merged: InventoryProduct }
+  | { kind: 'extra'; product: InventoryProduct };
+
+export type ReconcileCategoryOptions = {
+  /**
+   * true: 시드에만 있고 문서에 없는 제품 줄을 시드 복사로 다시 넣음(시드 버전 갱신·초기 복구용).
+   * false: 관리자가 삭제한 시드 제품이 다시 나타나지 않도록 누락 줄은 추가하지 않음(기본).
+   */
+  fillMissingSeedLines?: boolean;
+};
+
+/**
+ * 실험용(VCR) 라인 제거·기존 시드 이름 줄의 품목(code) 보강.
+ * 시드/추가 제품이 섞여 있어도 Firestore 배열 순서(관리자 드래그 순서)를 유지합니다.
+ * `fillMissingSeedLines`가 true일 때만 시드에만 있는 줄을 문서 끝에 채웁니다.
+ */
+export function reconcileCategoryWithSeedCatalog(
+  existing: InventoryProduct[],
+  seedCatalog: InventoryProduct[],
+  options?: ReconcileCategoryOptions
+): { next: InventoryProduct[]; changed: boolean } {
+  const fillMissingSeedLines = options?.fillMissingSeedLines === true;
+  const filtered = existing.filter((p) => !isExperimentalInventoryLineName(p.name));
+  const seedNames = new Set(seedCatalog.map((s) => s.name));
+  const seedByName = new Map(seedCatalog.map((s) => [s.name, s] as const));
+
+  let changed =
+    existing.length !== filtered.length ||
+    existing.some((p) => isExperimentalInventoryLineName(p.name));
+
+  const slots: ReconcileSlot[] = [];
+  const seedSlotIndexByName = new Map<string, number>();
+
+  for (const p of filtered) {
+    const cloneP = JSON.parse(JSON.stringify(p)) as InventoryProduct;
+    if (!seedNames.has(p.name)) {
+      slots.push({ kind: 'extra', product: cloneP });
+      continue;
+    }
+    const existingIdx = seedSlotIndexByName.get(p.name);
+    if (existingIdx === undefined) {
+      seedSlotIndexByName.set(p.name, slots.length);
+      slots.push({ kind: 'seed', name: p.name, merged: cloneP });
+    } else {
+      const slot = slots[existingIdx];
+      if (slot?.kind !== 'seed') continue;
+      slot.merged = mergeProductLinesSameName(slot.merged, cloneP);
+      changed = true;
+    }
+  }
+
+  if (fillMissingSeedLines) {
+    for (const seed of seedCatalog) {
+      if (seedSlotIndexByName.has(seed.name)) continue;
+      seedSlotIndexByName.set(seed.name, slots.length);
+      slots.push({
+        kind: 'seed',
+        name: seed.name,
+        merged: JSON.parse(JSON.stringify(seed)) as InventoryProduct,
+      });
+      changed = true;
+    }
+  }
+
+  const next: InventoryProduct[] = [];
+  for (const slot of slots) {
+    if (slot.kind === 'extra') {
+      next.push(slot.product);
+      continue;
+    }
+    const seed = seedByName.get(slot.name);
+    if (!seed) continue;
+    const ensured = ensureSeedProductLinesInCategory([slot.merged], [seed]);
+    next.push(ensured.next[0]!);
+    if (ensured.changed) changed = true;
+  }
+
+  return { next, changed };
+}
+
+export function reconcileUhpInventoryWithSeedCatalog(
+  state: UhpInventoryState,
+  options?: ReconcileCategoryOptions
+): {
+  next: UhpInventoryState;
+  changed: boolean;
+} {
+  const p = reconcileCategoryWithSeedCatalog(state.products, INITIAL_MICRO_WELD_PRODUCTS, options);
+  const t = reconcileCategoryWithSeedCatalog(
+    state.tubeButtWeldProducts,
+    INITIAL_TUBE_BUTT_WELD_PRODUCTS,
+    options
+  );
+  const m = reconcileCategoryWithSeedCatalog(
+    state.metalFaceSealProducts,
+    INITIAL_METAL_FACE_SEAL_PRODUCTS,
+    options
+  );
+  return {
+    next: {
+      products: p.next,
+      tubeButtWeldProducts: t.next,
+      metalFaceSealProducts: m.next,
+    },
+    changed: p.changed || t.changed || m.changed,
+  };
 }
 
 /**

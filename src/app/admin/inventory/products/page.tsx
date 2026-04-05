@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { db, storage } from "@/lib/firebase";
 import {
-  ensureSeedProductLinesInCategory,
   INITIAL_METAL_FACE_SEAL_PRODUCTS,
   INITIAL_MICRO_WELD_PRODUCTS,
   INITIAL_TUBE_BUTT_WELD_PRODUCTS,
@@ -13,6 +12,8 @@ import {
   mergeMissingHmcItemsFromSeed,
   mergeMissingHmtbItemsFromSeed,
   mergeMissingHmrtItemsFromSeed,
+  reconcileCategoryWithSeedCatalog,
+  reconcileUhpInventoryWithSeedCatalog,
   stripHle02ItemFromLongElbowLine,
 } from "@/lib/inventory/microWeldSeed";
 import { dropRemovedDefaultCategoryProducts, persistUhpInventoryState } from "@/lib/inventory/persistUhp";
@@ -68,6 +69,7 @@ export default function AdminInventoryProductsPage() {
       tubeButtWeldProducts: INITIAL_TUBE_BUTT_WELD_PRODUCTS,
       metalFaceSealProducts: INITIAL_METAL_FACE_SEAL_PRODUCTS,
       longElbowProducts: deleteField(),
+      vcrToVcrProducts: deleteField(),
       inventorySeedVersion: INVENTORY_SEED_VERSION,
       updatedAt: Timestamp.now(),
     };
@@ -110,18 +112,27 @@ export default function AdminInventoryProductsPage() {
         Array.isArray(data?.longElbowProducts) ? data.longElbowProducts : undefined
       );
       const tubeStrippedReseed = stripHle02ItemFromLongElbowLine(elbowForReseed.next);
-      const tubeForReseed = ensureSeedProductLinesInCategory(
+      const tubeForReseed = reconcileCategoryWithSeedCatalog(
         tubeStrippedReseed.next,
-        INITIAL_TUBE_BUTT_WELD_PRODUCTS
+        INITIAL_TUBE_BUTT_WELD_PRODUCTS,
+        { fillMissingSeedLines: true }
       );
-      const metalForReseed = ensureSeedProductLinesInCategory(
+      const metalForReseed = reconcileCategoryWithSeedCatalog(
         existingMetalReseed,
-        INITIAL_METAL_FACE_SEAL_PRODUCTS
+        INITIAL_METAL_FACE_SEAL_PRODUCTS,
+        { fillMissingSeedLines: true }
       );
-      const productsForReseed = ensureSeedProductLinesInCategory(
+      const productsForReseed = reconcileCategoryWithSeedCatalog(
         existingProducts,
-        INITIAL_MICRO_WELD_PRODUCTS
+        INITIAL_MICRO_WELD_PRODUCTS,
+        { fillMissingSeedLines: true }
       );
+      const reseedPreview: UhpInventoryState = {
+        products: productsForReseed.next,
+        tubeButtWeldProducts: tubeForReseed.next,
+        metalFaceSealProducts: metalForReseed.next,
+      };
+      setUhpInventory(reseedPreview);
       if (allowAutoPersist) {
         try {
           await setDoc(
@@ -131,6 +142,7 @@ export default function AdminInventoryProductsPage() {
               tubeButtWeldProducts: tubeForReseed.next,
               metalFaceSealProducts: metalForReseed.next,
               longElbowProducts: deleteField(),
+              vcrToVcrProducts: deleteField(),
               inventorySeedVersion: INVENTORY_SEED_VERSION,
               updatedAt: Timestamp.now(),
             },
@@ -170,7 +182,10 @@ export default function AdminInventoryProductsPage() {
     catalogProducts = hmcResult.next;
     const catalogItemsMerged = hmrtResult.changed || hmtbResult.changed || hmcResult.changed;
     const mergedWithCatalog: UhpInventoryState = { ...merged, products: catalogProducts };
-    const { next, shouldPersistSlice } = dropRemovedDefaultCategoryProducts(mergedWithCatalog);
+    const { next: afterDrop, shouldPersistSlice } =
+      dropRemovedDefaultCategoryProducts(mergedWithCatalog);
+    const reconciled = reconcileUhpInventoryWithSeedCatalog(afterDrop);
+    const next = reconciled.changed ? reconciled.next : afterDrop;
     const shouldPersistLegacyLongElbowMerge =
       elbowMerge.changed ||
       Boolean(hasLegacyLongElbowField) ||
@@ -219,6 +234,23 @@ export default function AdminInventoryProductsPage() {
         console.error("레거시 TBW/MFS 제품 라인 정리 저장 오류:", error);
       }
     }
+    if (allowAutoPersist && reconciled.changed) {
+      try {
+        await setDoc(
+          inventoryRef,
+          {
+            products: next.products,
+            tubeButtWeldProducts: next.tubeButtWeldProducts,
+            metalFaceSealProducts: next.metalFaceSealProducts,
+            vcrToVcrProducts: deleteField(),
+            updatedAt: Timestamp.now(),
+          },
+          { merge: true }
+        );
+      } catch (error) {
+        console.error("UHP 카탈로그 정규화 저장 오류:", error);
+      }
+    }
     setUhpInventory(next);
     setListenError("");
   }, []);
@@ -228,7 +260,7 @@ export default function AdminInventoryProductsPage() {
     const unsubscribe = onSnapshot(
       inventoryRef,
       (snapshot) => {
-        void applyInventoryDocument(snapshot, false);
+        void applyInventoryDocument(snapshot, true);
       },
       (error) => {
         console.error("재고 데이터 동기화 오류:", error);

@@ -9,6 +9,7 @@ import {
   INITIAL_MICRO_WELD_PRODUCTS,
   INITIAL_TUBE_BUTT_WELD_PRODUCTS,
   mergeLegacyLongElbowIntoTubeButtWeld,
+  reconcileUhpInventoryWithSeedCatalog,
   stripHle02ItemFromLongElbowLine,
 } from '@/lib/inventory/microWeldSeed';
 import {
@@ -107,14 +108,21 @@ function InventoryStatusPageContent() {
             : undefined
         );
         const { next: tubeMerged } = stripHle02ItemFromLongElbowLine(tubeAfterLegacy);
-        setUhpInventory({
+        const rawSlices: UhpInventoryState = {
           products: Array.isArray(data?.products)
-            ? data!.products!
-            : FALLBACK_UHP.products,
-          tubeButtWeldProducts: tubeMerged as InventoryProduct[],
+            ? (data!.products! as CatalogInventoryProduct[])
+            : (FALLBACK_UHP.products as CatalogInventoryProduct[]),
+          tubeButtWeldProducts: tubeMerged as CatalogInventoryProduct[],
           metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
-            ? data!.metalFaceSealProducts!
-            : FALLBACK_UHP.metalFaceSealProducts,
+            ? (data!.metalFaceSealProducts! as CatalogInventoryProduct[])
+            : (FALLBACK_UHP.metalFaceSealProducts as CatalogInventoryProduct[]),
+        };
+        const reconciled = reconcileUhpInventoryWithSeedCatalog(rawSlices);
+        const display = reconciled.changed ? reconciled.next : rawSlices;
+        setUhpInventory({
+          products: display.products as InventoryProduct[],
+          tubeButtWeldProducts: display.tubeButtWeldProducts as InventoryProduct[],
+          metalFaceSealProducts: display.metalFaceSealProducts as InventoryProduct[],
         });
       },
       () => {

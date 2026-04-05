@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   trailingSlash: true,
+  /** @dnd-kit ESM 번들 안정화 (일부 환경에서 webpack factory 오류 방지) */
+  transpilePackages: ["@dnd-kit/core", "@dnd-kit/sortable", "@dnd-kit/utilities"],
   images: {
     unoptimized: true,
   },

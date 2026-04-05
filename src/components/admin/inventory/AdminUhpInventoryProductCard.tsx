@@ -1,0 +1,284 @@
+'use client';
+
+import type { InventoryItem, ProductionPlanHistory } from '@/lib/inventory/types';
+import type { ReactNode } from 'react';
+
+export type AdminUhpProductListRow = {
+  name: string;
+  imageSrc: string;
+  items: InventoryItem[];
+  filteredItems: InventoryItem[];
+  isProductNameMatched: boolean;
+  listKey: string;
+  categoryLabel?: string;
+};
+
+type VariantPlanInfo = {
+  totalPlanned: number;
+  nearestDueDate: string | undefined;
+};
+
+type Props = {
+  product: AdminUhpProductListRow;
+  dragHandle: ReactNode | null;
+  brokenImageKeys: Set<string>;
+  setBrokenImageKeys: React.Dispatch<React.SetStateAction<Set<string>>>;
+  getCurrentStock: (item: InventoryItem) => number;
+  getVariantProductionPlanInfo: (item: InventoryItem, variantCode: string) => VariantPlanInfo | null;
+  openAddStructureItem: (productName: string) => void;
+  handleRenameProductLine: (productName: string) => void;
+  handleDeleteProductLine: (productName: string) => void;
+  handleRenameItem: (productName: string, itemCode: string) => void;
+  handleDeleteItem: (productName: string, itemCode: string) => void;
+  openInboundCreateModal: (productName: string, itemCode: string) => void;
+  openOutboundCreateModal: (productName: string, itemCode: string) => void;
+  openProductionPlanCreateModal: (productName: string, itemCode: string) => void;
+  openAdjustmentModal: (productName: string, itemCode: string) => void;
+  openHistoryModal: (productName: string, itemCode: string) => void;
+  openHistoryViewModal: (productName: string, itemCode: string) => void;
+  openProductionPlanEditModal: (
+    productName: string,
+    itemCode: string,
+    history: ProductionPlanHistory
+  ) => void;
+};
+
+export type AdminUhpProductCardHandlers = Omit<Props, 'product' | 'dragHandle'>;
+
+export function AdminUhpInventoryProductCard({
+  product,
+  dragHandle,
+  brokenImageKeys,
+  setBrokenImageKeys,
+  getCurrentStock,
+  getVariantProductionPlanInfo,
+  openAddStructureItem,
+  handleRenameProductLine,
+  handleDeleteProductLine,
+  handleRenameItem,
+  handleDeleteItem,
+  openInboundCreateModal,
+  openOutboundCreateModal,
+  openProductionPlanCreateModal,
+  openAdjustmentModal,
+  openHistoryModal,
+  openHistoryViewModal,
+  openProductionPlanEditModal,
+}: Props) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-5">
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          {dragHandle}
+          <h3 className="text-lg font-semibold text-gray-900">
+            {product.name}
+            {product.categoryLabel != null && (
+              <span className="ml-2 align-middle text-sm font-normal text-blue-700">
+                ({product.categoryLabel})
+              </span>
+            )}
+          </h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => handleRenameProductLine(product.name)}
+            className="inline-flex items-center justify-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+          >
+            제품 수정
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDeleteProductLine(product.name)}
+            className="inline-flex items-center justify-center rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
+          >
+            제품 삭제
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+          <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
+            {product.imageSrc?.trim() && !brokenImageKeys.has(product.listKey) ? (
+              <img
+                src={product.imageSrc}
+                alt={product.name}
+                className="h-full w-full object-contain"
+                onError={() =>
+                  setBrokenImageKeys((prev) => {
+                    const next = new Set(prev);
+                    next.add(product.listKey);
+                    return next;
+                  })
+                }
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-sm font-medium text-gray-400">
+                제품 이미지 없음
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-gray-600">새 품목 코드는 「품목 추가」로 등록합니다.</p>
+            <button
+              type="button"
+              onClick={() => openAddStructureItem(product.name)}
+              className="inline-flex shrink-0 items-center justify-center rounded-md border border-dashed border-blue-300 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+            >
+              + 품목 추가
+            </button>
+          </div>
+          {product.filteredItems.length === 0 ? (
+            <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-6 text-center text-sm text-gray-500">
+              등록된 품목이 없습니다. 「품목 추가」로 품목 코드를 등록하면 SL-BA 등 6종 세부코드가 자동
+              생성됩니다.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {product.filteredItems.map((item) => (
+                <div
+                  key={item.code}
+                  className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3"
+                >
+                  {(() => {
+                    const currentStock = getCurrentStock(item);
+                    return (
+                      <>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-gray-800">{item.code}</p>
+                          <div className="flex items-center gap-2">
+                            <span className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+                              총 현재고 {currentStock} {item.unit}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRenameItem(product.name, item.code)}
+                              className="rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                            >
+                              품목 수정
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteItem(product.name, item.code)}
+                              className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
+                            >
+                              품목 삭제
+                            </button>
+                          </div>
+                        </div>
+                        {item.variants && item.variants.length > 0 && (
+                          <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                            {item.variants.map((variant) =>
+                              (() => {
+                                const variantPlanInfo = getVariantProductionPlanInfo(item, variant.code);
+                                const variantExpectedStock =
+                                  variant.currentStock + (variantPlanInfo?.totalPlanned ?? 0);
+                                return (
+                                  <div
+                                    key={variant.code}
+                                    className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
+                                  >
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="font-medium text-gray-700">{variant.code}</span>
+                                      <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
+                                        {variant.currentStock} {variant.unit}
+                                      </span>
+                                    </div>
+                                    {variantPlanInfo && (
+                                      <div className="mt-1 flex items-center justify-between gap-1">
+                                        <span className="text-[10px] text-gray-500">
+                                          {variantPlanInfo.nearestDueDate ?? '-'}
+                                        </span>
+                                        <div className="flex shrink-0 items-center gap-1">
+                                          <span className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700">
+                                            예상 {variantExpectedStock} {variant.unit}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            title="생산계획 수정"
+                                            onClick={() => {
+                                              const plansForVariant = (item.productionPlanHistory ?? []).filter(
+                                                (p) => p.variantCode === variant.code
+                                              );
+                                              if (plansForVariant.length === 1) {
+                                                openProductionPlanEditModal(
+                                                  product.name,
+                                                  item.code,
+                                                  plansForVariant[0]!
+                                                );
+                                              } else if (plansForVariant.length > 1) {
+                                                openHistoryModal(product.name, item.code);
+                                              }
+                                            }}
+                                            className="rounded px-1 py-0.5 text-[10px] font-semibold text-purple-700 underline decoration-purple-300 underline-offset-2 hover:text-purple-900"
+                                          >
+                                            수정
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()
+                            )}
+                          </div>
+                        )}
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openInboundCreateModal(product.name, item.code)}
+                            className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          >
+                            입고
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openOutboundCreateModal(product.name, item.code)}
+                            className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                          >
+                            출고
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openProductionPlanCreateModal(product.name, item.code)}
+                            className="rounded border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100"
+                          >
+                            생산계획
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openAdjustmentModal(product.name, item.code)}
+                            className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                          >
+                            재고조정
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openHistoryModal(product.name, item.code)}
+                            className="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                          >
+                            이력수정
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openHistoryViewModal(product.name, item.code)}
+                            className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            전체 이력
+                          </button>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

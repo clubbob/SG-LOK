@@ -1,9 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
+import {
+  AdminUhpInventoryProductCard,
+  type AdminUhpProductCardHandlers,
+} from '@/components/admin/inventory/AdminUhpInventoryProductCard';
 import { db } from '@/lib/firebase';
 import {
-  ensureSeedProductLinesInCategory,
   INITIAL_METAL_FACE_SEAL_PRODUCTS,
   INITIAL_MICRO_WELD_PRODUCTS,
   INITIAL_TUBE_BUTT_WELD_PRODUCTS,
@@ -12,6 +16,8 @@ import {
   mergeMissingHmcItemsFromSeed,
   mergeMissingHmtbItemsFromSeed,
   mergeMissingHmrtItemsFromSeed,
+  reconcileCategoryWithSeedCatalog,
+  reconcileUhpInventoryWithSeedCatalog,
   stripHle02ItemFromLongElbowLine,
 } from '@/lib/inventory/microWeldSeed';
 import Link from 'next/link';
@@ -45,6 +51,19 @@ import {
   type DocumentSnapshot,
 } from 'firebase/firestore';
 import { useSearchParams } from 'next/navigation';
+
+const InventoryProductDndList = dynamic(
+  () =>
+    import('@/components/admin/inventory/InventoryProductDndList').then((m) => m.InventoryProductDndList),
+  {
+    ssr: false,
+    loading: () => (
+      <p className="rounded-md border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+        순서 변경(드래그) UI를 불러오는 중입니다…
+      </p>
+    ),
+  }
+);
 
 type InboundModalState = {
   isOpen: boolean;
@@ -290,7 +309,8 @@ export default function AdminInventoryStatusPage() {
 
   const applyInventoryDocument = useCallback(async (
     snapshot: DocumentSnapshot,
-    allowAutoPersist: boolean = false
+    allowAutoPersist: boolean = false,
+    forceApplyUi: boolean = false
   ) => {
     const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
     const isPendingLocalWrite = snapshot.metadata.hasPendingWrites;
@@ -299,6 +319,7 @@ export default function AdminInventoryStatusPage() {
       tubeButtWeldProducts: INITIAL_TUBE_BUTT_WELD_PRODUCTS,
       metalFaceSealProducts: INITIAL_METAL_FACE_SEAL_PRODUCTS,
       longElbowProducts: deleteField(),
+      vcrToVcrProducts: deleteField(),
       inventorySeedVersion: INVENTORY_SEED_VERSION,
       updatedAt: Timestamp.now(),
     };
@@ -315,6 +336,11 @@ export default function AdminInventoryStatusPage() {
         console.error('재고 초기 데이터 저장 오류:', error);
         setSyncError('재고 초기 데이터 저장에 실패했습니다.');
       }
+      return;
+    }
+
+    // 로컬 저장 중 서버 스냅샷(아직 삭제·순서 반영 전)이 오면 UI가 되돌아감 — pending 로컬 반영분만 적용
+    if (!forceApplyUi && isPersistingRef.current && !isPendingLocalWrite) {
       return;
     }
 
@@ -347,18 +373,21 @@ export default function AdminInventoryStatusPage() {
         Array.isArray(data?.longElbowProducts) ? data.longElbowProducts : undefined
       );
       const tubeStrippedReseed = stripHle02ItemFromLongElbowLine(elbowForReseed.next);
-      const tubeForReseed = ensureSeedProductLinesInCategory(
+      const tubeForReseed = reconcileCategoryWithSeedCatalog(
         tubeStrippedReseed.next,
-        INITIAL_TUBE_BUTT_WELD_PRODUCTS
+        INITIAL_TUBE_BUTT_WELD_PRODUCTS,
+        { fillMissingSeedLines: true }
       );
       const tubeDedupedForReseed = dedupeProductLinesByName(tubeForReseed.next);
-      const metalForReseed = ensureSeedProductLinesInCategory(
+      const metalForReseed = reconcileCategoryWithSeedCatalog(
         existingMetalReseed,
-        INITIAL_METAL_FACE_SEAL_PRODUCTS
+        INITIAL_METAL_FACE_SEAL_PRODUCTS,
+        { fillMissingSeedLines: true }
       );
-      const productsForReseed = ensureSeedProductLinesInCategory(
+      const productsForReseed = reconcileCategoryWithSeedCatalog(
         existingProducts,
-        INITIAL_MICRO_WELD_PRODUCTS
+        INITIAL_MICRO_WELD_PRODUCTS,
+        { fillMissingSeedLines: true }
       );
       const productsDedupedForReseed = dedupeProductLinesByName(productsForReseed.next);
       const metalDedupedForReseed = dedupeProductLinesByName(metalForReseed.next);
@@ -374,6 +403,12 @@ export default function AdminInventoryStatusPage() {
       const reseedMetalByStructure = dedupeProductLinesByStructure(
         strippedHmgsForReseed.next.metalFaceSealProducts
       );
+      const reseedPreviewState: UhpInventoryState = {
+        products: reseedProductsByStructure.next,
+        tubeButtWeldProducts: reseedTubeByStructure.next,
+        metalFaceSealProducts: reseedMetalByStructure.next,
+      };
+      setUhpInventory(reseedPreviewState);
       if (allowAutoPersist && !isPendingLocalWrite && !isAutoPersistingRef.current) {
         try {
           isAutoPersistingRef.current = true;
@@ -384,6 +419,7 @@ export default function AdminInventoryStatusPage() {
               tubeButtWeldProducts: reseedTubeByStructure.next,
               metalFaceSealProducts: reseedMetalByStructure.next,
               longElbowProducts: deleteField(),
+              vcrToVcrProducts: deleteField(),
               inventorySeedVersion: INVENTORY_SEED_VERSION,
               updatedAt: Timestamp.now(),
             },
@@ -458,7 +494,11 @@ export default function AdminInventoryStatusPage() {
       dedupedProductsByStructure.changed ||
       dedupedTubeByStructure.changed ||
       dedupedMetalByStructure.changed;
-    const { next, shouldPersistSlice } = dropRemovedDefaultCategoryProducts(structureDedupedState);
+    const { next: afterDrop, shouldPersistSlice } =
+      dropRemovedDefaultCategoryProducts(structureDedupedState);
+    const reconciled = reconcileUhpInventoryWithSeedCatalog(afterDrop);
+    const next = reconciled.changed ? reconciled.next : afterDrop;
+    const shouldPersistReconciled = reconciled.changed;
     const hmgsRenamedInMetal = normalizedMetalFaceSealProducts.some(
       (line) => line.name === HMGS_LINE_NAME
     ) && (Array.isArray(data?.metalFaceSealProducts)
@@ -480,6 +520,12 @@ export default function AdminInventoryStatusPage() {
     if (shouldPersistSlice || hmgsRenamedInMetal || dedupedAnyChanged) {
       autoPersistPayload.tubeButtWeldProducts = next.tubeButtWeldProducts;
       autoPersistPayload.metalFaceSealProducts = next.metalFaceSealProducts;
+    }
+    if (shouldPersistReconciled) {
+      autoPersistPayload.products = next.products;
+      autoPersistPayload.tubeButtWeldProducts = next.tubeButtWeldProducts;
+      autoPersistPayload.metalFaceSealProducts = next.metalFaceSealProducts;
+      autoPersistPayload.vcrToVcrProducts = deleteField();
     }
     const shouldAutoPersist = Object.keys(autoPersistPayload).length > 0;
     if (allowAutoPersist && shouldAutoPersist && !isPendingLocalWrite) {
@@ -516,7 +562,7 @@ export default function AdminInventoryStatusPage() {
     const unsubscribe = onSnapshot(
       inventoryRef,
       (snapshot) => {
-        void applyInventoryDocument(snapshot, false);
+        void applyInventoryDocument(snapshot, true);
       },
       (error) => {
         console.error('재고 데이터 동기화 오류:', error);
@@ -533,7 +579,7 @@ export default function AdminInventoryStatusPage() {
     try {
       const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
       const snapshot = await getDocFromServer(inventoryRef);
-      await applyInventoryDocument(snapshot, true);
+      await applyInventoryDocument(snapshot, true, true);
     } catch (error) {
       console.error('재고 새로고침 오류:', error);
       setSyncError('재고 데이터를 불러오지 못했습니다.');
@@ -589,6 +635,22 @@ export default function AdminInventoryStatusPage() {
     } finally {
       isPersistingRef.current = false;
     }
+  };
+
+  const uhpInventoryRef = useRef(uhpInventory);
+  uhpInventoryRef.current = uhpInventory;
+
+  const handleProductOrderReorder = (oldIndex: number, newIndex: number) => {
+    const inv = uhpInventoryRef.current;
+    const key = UHP_STATE_KEYS[activeCategoryId];
+    const next = JSON.parse(JSON.stringify(inv)) as UhpInventoryState;
+    const slice = [...next[key]];
+    const [moved] = slice.splice(oldIndex, 1);
+    if (!moved) return;
+    slice.splice(newIndex, 0, moved);
+    next[key] = slice;
+    setUhpInventory(next);
+    void persistUhpInventory(next);
   };
 
   const closeStructureItemModal = () => {
@@ -1586,6 +1648,17 @@ export default function AdminInventoryStatusPage() {
     productListEffectivePage * PRODUCT_LIST_PAGE_SIZE
   );
 
+  const canDragReorderProducts =
+    !isSearching && stockFilter === null && !hasPlanFilter;
+  const reorderCategoryKey = UHP_STATE_KEYS[activeCategoryId];
+  const dragSortableRows: ProductListRow[] = canDragReorderProducts
+    ? filterProductsBySearchQuery(uhpInventory[reorderCategoryKey], '', 'admin').map((p) => ({
+        ...p,
+        listKey: `${activeCategoryId}::${p.name}`,
+      }))
+    : [];
+  const dragSortableIds = dragSortableRows.map((r) => r.listKey);
+
   const getCurrentStock = (item: InventoryItem): number => getItemCurrentStock(item);
 
   const getVariantProductionPlanInfo = (item: InventoryItem, variantCode: string) => {
@@ -1603,6 +1676,25 @@ export default function AdminInventoryStatusPage() {
       totalPlanned,
       nearestDueDate,
     };
+  };
+
+  const productCardHandlers: AdminUhpProductCardHandlers = {
+    brokenImageKeys,
+    setBrokenImageKeys,
+    getCurrentStock,
+    getVariantProductionPlanInfo,
+    openAddStructureItem,
+    handleRenameProductLine,
+    handleDeleteProductLine,
+    handleRenameItem,
+    handleDeleteItem,
+    openInboundCreateModal,
+    openOutboundCreateModal,
+    openProductionPlanCreateModal,
+    openAdjustmentModal,
+    openHistoryModal,
+    openHistoryViewModal,
+    openProductionPlanEditModal,
   };
 
   return (
@@ -1728,225 +1820,32 @@ export default function AdminInventoryStatusPage() {
           ))}
         </div>
         <div className="mt-6 space-y-4">
-            {pagedCategoryProducts.map((product) => (
-              <div key={product.listKey} className="rounded-lg border border-gray-200 bg-white p-5">
-                <div className="mb-4 flex items-center justify-between gap-2">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {product.name}
-                    {product.categoryLabel != null && (
-                      <span className="ml-2 align-middle text-sm font-normal text-blue-700">
-                        ({product.categoryLabel})
-                      </span>
-                    )}
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleRenameProductLine(product.name)}
-                      className="inline-flex items-center justify-center rounded-md border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-                    >
-                      제품 수정
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteProductLine(product.name)}
-                      className="inline-flex items-center justify-center rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100"
-                    >
-                      제품 삭제
-                    </button>
+            {canDragReorderProducts && (
+              <p className="-mt-1 mb-1 text-xs text-gray-500">
+                왼쪽 핸들을 드래그하면 이 탭의 제품 순서가 저장됩니다. 검색·재고/생산계획 필터 사용 시에는 페이지
+                단위로만 표시됩니다.
+              </p>
+            )}
+            {canDragReorderProducts ? (
+              <InventoryProductDndList
+                items={dragSortableRows}
+                sortableIds={dragSortableIds}
+                productCardHandlers={productCardHandlers}
+                onReorder={handleProductOrderReorder}
+              />
+            ) : (
+              <>
+                {pagedCategoryProducts.map((product) => (
+                  <div key={product.listKey}>
+                    <AdminUhpInventoryProductCard
+                      product={product}
+                      dragHandle={null}
+                      {...productCardHandlers}
+                    />
                   </div>
-                </div>
-                <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                    <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
-                      {product.imageSrc?.trim() && !brokenImageKeys.has(product.listKey) ? (
-                        <img
-                          src={product.imageSrc}
-                          alt={product.name}
-                          className="h-full w-full object-contain"
-                          onError={() =>
-                            setBrokenImageKeys((prev) => {
-                              const next = new Set(prev);
-                              next.add(product.listKey);
-                              return next;
-                            })
-                          }
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-sm font-medium text-gray-400">
-                          제품 이미지 없음
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                    <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <p className="text-xs text-gray-600">
-                        새 품목 코드는 「품목 추가」로 등록합니다.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => openAddStructureItem(product.name)}
-                        className="inline-flex shrink-0 items-center justify-center rounded-md border border-dashed border-blue-300 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
-                      >
-                        + 품목 추가
-                      </button>
-                    </div>
-                    {product.filteredItems.length === 0 ? (
-                      <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-6 text-center text-sm text-gray-500">
-                        등록된 품목이 없습니다. 「품목 추가」로 품목 코드를 등록하면 SL-BA 등 6종 세부코드가
-                        자동 생성됩니다.
-                      </p>
-                    ) : (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {product.filteredItems.map((item) => (
-                        <div
-                          key={item.code}
-                          className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3"
-                        >
-                          {(() => {
-                            const currentStock = getCurrentStock(item);
-                            return (
-                              <>
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-gray-800">{item.code}</p>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700"
-                              >
-                                총 현재고 {currentStock} {item.unit}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleRenameItem(product.name, item.code)}
-                                className="rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
-                              >
-                                품목 수정
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteItem(product.name, item.code)}
-                                className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100"
-                              >
-                                품목 삭제
-                              </button>
-                            </div>
-                          </div>
-                          {item.variants && item.variants.length > 0 && (
-                            <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                              {item.variants.map((variant) => (
-                                (() => {
-                                  const variantPlanInfo = getVariantProductionPlanInfo(
-                                    item,
-                                    variant.code
-                                  );
-                                  const variantExpectedStock = variant.currentStock + (variantPlanInfo?.totalPlanned ?? 0);
-                                  return (
-                                    <div
-                                      key={variant.code}
-                                      className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
-                                    >
-                                      <div className="flex items-center justify-between gap-1">
-                                        <span className="font-medium text-gray-700">{variant.code}</span>
-                                        <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
-                                          {variant.currentStock} {variant.unit}
-                                        </span>
-                                      </div>
-                                      {variantPlanInfo && (
-                                        <div className="mt-1 flex items-center justify-between gap-1">
-                                          <span className="text-[10px] text-gray-500">
-                                            {variantPlanInfo.nearestDueDate ?? '-'}
-                                          </span>
-                                          <div className="flex shrink-0 items-center gap-1">
-                                            <span className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700">
-                                              예상 {variantExpectedStock} {variant.unit}
-                                            </span>
-                                            <button
-                                              type="button"
-                                              title="생산계획 수정"
-                                              onClick={() => {
-                                                const plansForVariant = (
-                                                  item.productionPlanHistory ?? []
-                                                ).filter((p) => p.variantCode === variant.code);
-                                                if (plansForVariant.length === 1) {
-                                                  openProductionPlanEditModal(
-                                                    product.name,
-                                                    item.code,
-                                                    plansForVariant[0]!
-                                                  );
-                                                } else if (plansForVariant.length > 1) {
-                                                  openHistoryModal(product.name, item.code);
-                                                }
-                                              }}
-                                              className="rounded px-1 py-0.5 text-[10px] font-semibold text-purple-700 underline decoration-purple-300 underline-offset-2 hover:text-purple-900"
-                                            >
-                                              수정
-                                            </button>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })()
-                              ))}
-                            </div>
-                          )}
-                          <div className="mt-3 flex flex-wrap gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => openInboundCreateModal(product.name, item.code)}
-                              className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
-                            >
-                              입고
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openOutboundCreateModal(product.name, item.code)}
-                              className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
-                            >
-                              출고
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openProductionPlanCreateModal(product.name, item.code)}
-                              className="rounded border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100"
-                            >
-                              생산계획
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openAdjustmentModal(product.name, item.code)}
-                              className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
-                            >
-                              재고조정
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openHistoryModal(product.name, item.code)}
-                              className="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-                            >
-                              이력수정
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openHistoryViewModal(product.name, item.code)}
-                              className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-                            >
-                              전체 이력
-                            </button>
-                          </div>
-                              </>
-                            );
-                          })()}
-                        </div>
-                      ))}
-                    </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
+                ))}
+              </>
+            )}
             {filteredCategoryProducts.length === 0 && (
               <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-4 text-sm text-gray-500">
                 검색 결과가 없습니다.
@@ -1955,16 +1854,24 @@ export default function AdminInventoryStatusPage() {
             {filteredCategoryProducts.length > 0 && (
               <div className="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-gray-600">
-                  제품 라인 {productListRangeStart}–{productListRangeEnd} / 전체{' '}
-                  {filteredCategoryProducts.length}건 (페이지당 {PRODUCT_LIST_PAGE_SIZE}건)
-                  {productListTotalPages > 1 && (
-                    <span className="text-gray-500">
-                      {' '}
-                      · {productListEffectivePage}/{productListTotalPages} 페이지
-                    </span>
+                  {canDragReorderProducts ? (
+                    <>
+                      제품 라인 전체 {dragSortableRows.length}건 (핸들을 드래그해 순서를 바꿀 수 있습니다)
+                    </>
+                  ) : (
+                    <>
+                      제품 라인 {productListRangeStart}–{productListRangeEnd} / 전체{' '}
+                      {filteredCategoryProducts.length}건 (페이지당 {PRODUCT_LIST_PAGE_SIZE}건)
+                      {productListTotalPages > 1 && (
+                        <span className="text-gray-500">
+                          {' '}
+                          · {productListEffectivePage}/{productListTotalPages} 페이지
+                        </span>
+                      )}
+                    </>
                   )}
                 </p>
-                {productListTotalPages > 1 && (
+                {!canDragReorderProducts && productListTotalPages > 1 && (
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"

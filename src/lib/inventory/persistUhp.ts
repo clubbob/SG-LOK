@@ -1,5 +1,6 @@
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { tabDefToFirestoreRow } from './uhpInventoryHelpers';
 import type { UhpInventoryState } from './types';
 
 /** 예전 시드에만 있던 기본 제품 라인 — 앱에서 제거했으나 Firestore에 남은 경우 정리 */
@@ -48,6 +49,8 @@ export async function persistUhpInventoryState(state: UhpInventoryState): Promis
       products: sanitizeForFirestore(state.products),
       tubeButtWeldProducts: sanitizeForFirestore(state.tubeButtWeldProducts),
       metalFaceSealProducts: sanitizeForFirestore(state.metalFaceSealProducts),
+      uhpCategoryTabs: sanitizeForFirestore(state.categoryTabs.map(tabDefToFirestoreRow)),
+      customCategoryProducts: sanitizeForFirestore(state.customCategoryProducts),
       updatedAt: Timestamp.now(),
     },
     { merge: true }

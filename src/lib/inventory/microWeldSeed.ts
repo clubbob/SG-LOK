@@ -4,8 +4,8 @@
  */
 
 import { createEmptyInventoryItem } from './itemFactory';
-import type { InventoryItem, InventoryProduct, UhpInventoryState } from './types';
-import type { UhpInventorySlices } from './uhpInventoryHelpers';
+import type { InventoryItem, InventoryProduct, UhpCategoryTabDef, UhpInventoryState } from './types';
+import { DEFAULT_UHP_CATEGORY_TABS } from './uhpInventoryHelpers';
 
 /** HME와 동일 규격(02·04·06·08·12) + 안전재고 */
 const DEFAULT_SIZE_ROWS: { size: string; safetyStock: number }[] = [
@@ -329,12 +329,18 @@ export type ReconcileCategoryOptions = {
    * false: 관리자가 삭제한 시드 제품이 다시 나타나지 않도록 누락 줄은 추가하지 않음(기본).
    */
   fillMissingSeedLines?: boolean;
+  /**
+   * true: 시드와 이름이 같은 줄에 대해 시드에만 있는 품목(code)을 줄에 다시 채움(시드 재적용용).
+   * false(기본): 관리자가 삭제한 품목이 스냅샷 처리마다 복구되지 않도록 보강하지 않음.
+   */
+  fillMissingSeedItemCodes?: boolean;
 };
 
 /**
- * 실험용(VCR) 라인 제거·기존 시드 이름 줄의 품목(code) 보강.
+ * 실험용(VCR) 라인 제거·선택 시 기존 시드 이름 줄의 품목(code) 보강.
  * 시드/추가 제품이 섞여 있어도 Firestore 배열 순서(관리자 드래그 순서)를 유지합니다.
  * `fillMissingSeedLines`가 true일 때만 시드에만 있는 줄을 문서 끝에 채웁니다.
+ * `fillMissingSeedItemCodes`가 true일 때만 시드에만 있는 품목 코드를 기존 줄에 붙입니다.
  */
 export function reconcileCategoryWithSeedCatalog(
   existing: InventoryProduct[],
@@ -342,6 +348,7 @@ export function reconcileCategoryWithSeedCatalog(
   options?: ReconcileCategoryOptions
 ): { next: InventoryProduct[]; changed: boolean } {
   const fillMissingSeedLines = options?.fillMissingSeedLines === true;
+  const fillMissingSeedItemCodes = options?.fillMissingSeedItemCodes === true;
   const filtered = existing.filter((p) => !isExperimentalInventoryLineName(p.name));
   const seedNames = new Set(seedCatalog.map((s) => s.name));
   const seedByName = new Map(seedCatalog.map((s) => [s.name, s] as const));
@@ -392,9 +399,13 @@ export function reconcileCategoryWithSeedCatalog(
     }
     const seed = seedByName.get(slot.name);
     if (!seed) continue;
-    const ensured = ensureSeedProductLinesInCategory([slot.merged], [seed]);
-    next.push(ensured.next[0]!);
-    if (ensured.changed) changed = true;
+    if (fillMissingSeedItemCodes) {
+      const ensured = ensureSeedProductLinesInCategory([slot.merged], [seed]);
+      next.push(ensured.next[0]!);
+      if (ensured.changed) changed = true;
+    } else {
+      next.push(slot.merged);
+    }
   }
 
   return { next, changed };
@@ -420,6 +431,7 @@ export function reconcileUhpInventoryWithSeedCatalog(
   );
   return {
     next: {
+      ...state,
       products: p.next,
       tubeButtWeldProducts: t.next,
       metalFaceSealProducts: m.next,
@@ -462,9 +474,13 @@ export function mergeLegacyLongElbowIntoTubeButtWeld(
   return { next, changed };
 }
 
-export const INITIAL_UHP_INVENTORY_STATE: UhpInventorySlices<InventoryProduct> = {
+export const INITIAL_UHP_INVENTORY_STATE: UhpInventoryState = {
   products: [...INITIAL_MICRO_WELD_PRODUCTS],
   tubeButtWeldProducts: [...INITIAL_TUBE_BUTT_WELD_PRODUCTS],
   metalFaceSealProducts: [...INITIAL_METAL_FACE_SEAL_PRODUCTS],
+  categoryTabs: DEFAULT_UHP_CATEGORY_TABS.map(
+    (t) => JSON.parse(JSON.stringify(t)) as UhpCategoryTabDef
+  ),
+  customCategoryProducts: {},
 };
 

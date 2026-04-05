@@ -7,6 +7,7 @@ import {
   INITIAL_METAL_FACE_SEAL_PRODUCTS,
   INITIAL_MICRO_WELD_PRODUCTS,
   INITIAL_TUBE_BUTT_WELD_PRODUCTS,
+  INITIAL_UHP_INVENTORY_STATE,
   INVENTORY_SEED_VERSION,
   mergeLegacyLongElbowIntoTubeButtWeld,
   mergeMissingHmcItemsFromSeed,
@@ -19,9 +20,12 @@ import {
 import { dropRemovedDefaultCategoryProducts, persistUhpInventoryState } from "@/lib/inventory/persistUhp";
 import type { InventoryProduct, UhpInventoryState } from "@/lib/inventory/types";
 import {
-  UHP_CATEGORY_TABS,
-  UHP_STATE_KEYS,
-  type UhpCategoryId,
+  attachTabsToUhpState,
+  findTabById,
+  getTabSliceProducts,
+  isCustomTab,
+  newCustomCategoryId,
+  setTabSliceProducts,
 } from "@/lib/inventory/uhpInventoryHelpers";
 import {
   deleteField,
@@ -38,13 +42,11 @@ function cloneUhp(state: UhpInventoryState): UhpInventoryState {
 }
 
 export default function AdminInventoryProductsPage() {
-  const [activeCategoryId, setActiveCategoryId] = useState<UhpCategoryId>("microWeld");
+  const [activeTabId, setActiveTabId] = useState("microWeld");
   const [searchQuery, setSearchQuery] = useState("");
-  const [uhpInventory, setUhpInventory] = useState<UhpInventoryState>(() => ({
-    products: [...INITIAL_MICRO_WELD_PRODUCTS],
-    tubeButtWeldProducts: [...INITIAL_TUBE_BUTT_WELD_PRODUCTS],
-    metalFaceSealProducts: [...INITIAL_METAL_FACE_SEAL_PRODUCTS],
-  }));
+  const [uhpInventory, setUhpInventory] = useState<UhpInventoryState>(
+    () => JSON.parse(JSON.stringify(INITIAL_UHP_INVENTORY_STATE)) as UhpInventoryState
+  );
   const [listenError, setListenError] = useState("");
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -93,6 +95,8 @@ export default function AdminInventoryProductsPage() {
           metalFaceSealProducts?: InventoryProduct[];
           longElbowProducts?: InventoryProduct[];
           inventorySeedVersion?: number;
+          uhpCategoryTabs?: unknown;
+          customCategoryProducts?: unknown;
         }
       | undefined;
     const raw = snapshot.data() as Record<string, unknown> | undefined;
@@ -115,23 +119,26 @@ export default function AdminInventoryProductsPage() {
       const tubeForReseed = reconcileCategoryWithSeedCatalog(
         tubeStrippedReseed.next,
         INITIAL_TUBE_BUTT_WELD_PRODUCTS,
-        { fillMissingSeedLines: true }
+        { fillMissingSeedLines: true, fillMissingSeedItemCodes: true }
       );
       const metalForReseed = reconcileCategoryWithSeedCatalog(
         existingMetalReseed,
         INITIAL_METAL_FACE_SEAL_PRODUCTS,
-        { fillMissingSeedLines: true }
+        { fillMissingSeedLines: true, fillMissingSeedItemCodes: true }
       );
       const productsForReseed = reconcileCategoryWithSeedCatalog(
         existingProducts,
         INITIAL_MICRO_WELD_PRODUCTS,
-        { fillMissingSeedLines: true }
+        { fillMissingSeedLines: true, fillMissingSeedItemCodes: true }
       );
-      const reseedPreview: UhpInventoryState = {
-        products: productsForReseed.next,
-        tubeButtWeldProducts: tubeForReseed.next,
-        metalFaceSealProducts: metalForReseed.next,
-      };
+      const reseedPreview: UhpInventoryState = attachTabsToUhpState(
+        {
+          products: productsForReseed.next,
+          tubeButtWeldProducts: tubeForReseed.next,
+          metalFaceSealProducts: metalForReseed.next,
+        },
+        data
+      );
       setUhpInventory(reseedPreview);
       if (allowAutoPersist) {
         try {
@@ -164,15 +171,18 @@ export default function AdminInventoryProductsPage() {
       Array.isArray(data?.longElbowProducts) ? data.longElbowProducts : undefined
     );
     const hle02Strip = stripHle02ItemFromLongElbowLine(elbowMerge.next);
-    const merged: UhpInventoryState = {
-      products: Array.isArray(data?.products)
-        ? data.products
-        : [...INITIAL_MICRO_WELD_PRODUCTS],
-      tubeButtWeldProducts: hle02Strip.next,
-      metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
-        ? data.metalFaceSealProducts
-        : [...INITIAL_METAL_FACE_SEAL_PRODUCTS],
-    };
+    const merged: UhpInventoryState = attachTabsToUhpState(
+      {
+        products: Array.isArray(data?.products)
+          ? data.products
+          : [...INITIAL_MICRO_WELD_PRODUCTS],
+        tubeButtWeldProducts: hle02Strip.next,
+        metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
+          ? data.metalFaceSealProducts
+          : [...INITIAL_METAL_FACE_SEAL_PRODUCTS],
+      },
+      data
+    );
     let catalogProducts = merged.products;
     const hmrtResult = mergeMissingHmrtItemsFromSeed(catalogProducts);
     catalogProducts = hmrtResult.next;
@@ -270,9 +280,15 @@ export default function AdminInventoryProductsPage() {
     return () => unsubscribe();
   }, [applyInventoryDocument]);
 
-  const categoryKey = UHP_STATE_KEYS[activeCategoryId];
+  useEffect(() => {
+    if (!uhpInventory.categoryTabs.some((t) => t.id === activeTabId)) {
+      setActiveTabId(uhpInventory.categoryTabs[0]?.id ?? "microWeld");
+    }
+  }, [uhpInventory.categoryTabs, activeTabId]);
+
+  const activeTab = findTabById(uhpInventory, activeTabId);
   /** Firestore 배열 순서 = 제품등록·재고현황 표시 순서 (위/아래 버튼으로 변경) */
-  const categoryProducts = uhpInventory[categoryKey];
+  const categoryProducts = activeTab ? getTabSliceProducts(uhpInventory, activeTab) : [];
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const filteredCategoryProducts = normalizedSearchQuery
     ? categoryProducts.filter((product) => product.name.toLowerCase().includes(normalizedSearchQuery))
@@ -358,8 +374,10 @@ export default function AdminInventoryProductsPage() {
       return;
     }
 
+    const tab = findTabById(uhpInventory, activeTabId);
+    if (!tab) return;
     const next = cloneUhp(uhpInventory);
-    const slice = [...next[categoryKey]];
+    const slice = [...getTabSliceProducts(next, tab)];
 
     if (productModalMode === "add") {
       slice.push({ name, imageSrc, items: [] });
@@ -368,31 +386,108 @@ export default function AdminInventoryProductsPage() {
       if (!prev) return;
       slice[productModalIndex] = { ...prev, name, imageSrc };
     }
-    next[categoryKey] = slice;
+    const updated = setTabSliceProducts(next, tab, slice);
     setProductModalOpen(false);
     setSaveError("");
-    await persistState(next);
+    await persistState(updated);
   };
 
   const moveProductLine = async (index: number, delta: -1 | 1) => {
-    const slice = [...uhpInventory[categoryKey]];
+    const tab = findTabById(uhpInventory, activeTabId);
+    if (!tab) return;
+    const slice = [...getTabSliceProducts(uhpInventory, tab)];
     const j = index + delta;
     if (j < 0 || j >= slice.length) return;
     const next = cloneUhp(uhpInventory);
     const reordered = [...slice];
     [reordered[index], reordered[j]] = [reordered[j], reordered[index]];
-    next[categoryKey] = reordered;
-    await persistState(next);
+    const updated = setTabSliceProducts(next, tab, reordered);
+    await persistState(updated);
   };
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
+    const tab = findTabById(uhpInventory, activeTabId);
+    if (!tab) return;
     const next = cloneUhp(uhpInventory);
-    const slice = [...next[categoryKey]];
-    next[categoryKey] = slice.filter((p) => p.name !== deleteTarget.productName);
+    const slice = [...getTabSliceProducts(next, tab)].filter((p) => p.name !== deleteTarget.productName);
+    const updated = setTabSliceProducts(next, tab, slice);
     setDeleteTarget(null);
     setSaveError("");
-    await persistState(next);
+    await persistState(updated);
+  };
+
+  const handleAddCategoryProducts = () => {
+    const label = prompt("새 카테고리 이름을 입력해 주세요.")?.trim();
+    if (!label) return;
+    if (uhpInventory.categoryTabs.some((t) => t.label.trim().toLowerCase() === label.toLowerCase())) {
+      setSaveError("같은 이름의 카테고리가 이미 있습니다.");
+      return;
+    }
+    const customId = newCustomCategoryId();
+    const newTab = { id: `tab_${customId}`, label, slice: { kind: "custom" as const, customId } };
+    const next = cloneUhp(uhpInventory);
+    next.categoryTabs = [...next.categoryTabs, newTab];
+    next.customCategoryProducts = { ...next.customCategoryProducts, [customId]: [] };
+    setSaveError("");
+    void persistState(next);
+    setActiveTabId(newTab.id);
+  };
+
+  const handleRenameCategoryProducts = (tabId: string) => {
+    const tab = findTabById(uhpInventory, tabId);
+    if (!tab) return;
+    const nextLabel = prompt("카테고리 이름을 입력해 주세요.", tab.label)?.trim();
+    if (!nextLabel || nextLabel === tab.label) return;
+    if (
+      uhpInventory.categoryTabs.some(
+        (t) => t.id !== tabId && t.label.trim().toLowerCase() === nextLabel.toLowerCase()
+      )
+    ) {
+      setSaveError("같은 이름의 카테고리가 이미 있습니다.");
+      return;
+    }
+    const next = cloneUhp(uhpInventory);
+    next.categoryTabs = next.categoryTabs.map((t) => (t.id === tabId ? { ...t, label: nextLabel } : t));
+    setSaveError("");
+    void persistState(next);
+  };
+
+  const handleDeleteCategoryProducts = (tabId: string) => {
+    const tab = findTabById(uhpInventory, tabId);
+    if (!tab || !isCustomTab(tab)) return;
+    const lines = getTabSliceProducts(uhpInventory, tab);
+    if (
+      lines.length > 0 &&
+      !confirm(
+        `이 카테고리에 제품 라인이 ${lines.length}개 있습니다. 데이터가 함께 삭제됩니다. 계속할까요?`
+      )
+    ) {
+      return;
+    }
+    if (!confirm("이 카테고리 탭을 삭제할까요?")) return;
+    const next = cloneUhp(uhpInventory);
+    next.categoryTabs = next.categoryTabs.filter((t) => t.id !== tabId);
+    if (tab.slice.kind === "custom") {
+      const { [tab.slice.customId]: _r, ...rest } = next.customCategoryProducts;
+      next.customCategoryProducts = rest;
+    }
+    setSaveError("");
+    void persistState(next);
+    if (activeTabId === tabId) {
+      setActiveTabId(next.categoryTabs[0]?.id ?? "microWeld");
+    }
+  };
+
+  const moveCategoryTabProducts = (tabId: string, delta: number) => {
+    const idx = uhpInventory.categoryTabs.findIndex((t) => t.id === tabId);
+    const j = idx + delta;
+    if (idx < 0 || j < 0 || j >= uhpInventory.categoryTabs.length) return;
+    const next = cloneUhp(uhpInventory);
+    const tabs = [...next.categoryTabs];
+    [tabs[idx], tabs[j]] = [tabs[j]!, tabs[idx]!];
+    next.categoryTabs = tabs;
+    void persistState(next);
   };
 
   return (
@@ -453,22 +548,82 @@ export default function AdminInventoryProductsPage() {
 
       <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
 
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">제품 카테고리</h2>
-        <div className="flex flex-wrap gap-2 mb-6">
-          {UHP_CATEGORY_TABS.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setActiveCategoryId(id)}
-              className={`rounded-md border px-4 py-2 text-sm font-medium transition-colors ${
-                activeCategoryId === id
-                  ? "border-blue-600 bg-blue-600 text-white"
-                  : "border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-gray-900">제품 카테고리</h2>
+          <button
+            type="button"
+            onClick={() => handleAddCategoryProducts()}
+            disabled={saving}
+            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-800 hover:bg-gray-50 disabled:opacity-50"
+          >
+            + 카테고리 추가
+          </button>
+        </div>
+        <div className="mb-4 flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            {uhpInventory.categoryTabs.map((tab, tabIndex) => (
+              <div
+                key={tab.id}
+                className={`inline-flex flex-wrap items-center gap-1 rounded-md border p-1 ${
+                  activeTabId === tab.id ? "border-blue-600 bg-blue-50" : "border-gray-200 bg-gray-50"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setActiveTabId(tab.id)}
+                  disabled={saving}
+                  className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
+                    activeTabId === tab.id ? "text-blue-800" : "text-gray-800 hover:bg-gray-100"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+                <div className="flex items-center gap-0.5 border-l border-gray-200 pl-1">
+                  <button
+                    type="button"
+                    title="순서 앞으로"
+                    disabled={saving || tabIndex === 0}
+                    onClick={() => moveCategoryTabProducts(tab.id, -1)}
+                    className="rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-30"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    type="button"
+                    title="순서 뒤로"
+                    disabled={saving || tabIndex >= uhpInventory.categoryTabs.length - 1}
+                    onClick={() => moveCategoryTabProducts(tab.id, 1)}
+                    className="rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-30"
+                  >
+                    ▶
+                  </button>
+                  <button
+                    type="button"
+                    title="이름 수정"
+                    disabled={saving}
+                    onClick={() => handleRenameCategoryProducts(tab.id)}
+                    className="rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200"
+                  >
+                    ✎
+                  </button>
+                  {isCustomTab(tab) && (
+                    <button
+                      type="button"
+                      title="카테고리 삭제"
+                      disabled={saving}
+                      onClick={() => handleDeleteCategoryProducts(tab.id)}
+                      className="rounded px-1.5 py-1 text-xs text-red-600 hover:bg-red-50"
+                    >
+                      삭제
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-500">
+            기본 카테고리는 삭제할 수 없습니다. 상세 재고 작업은 UHP 제품재고 메뉴와 동일한 데이터를 사용합니다.
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">

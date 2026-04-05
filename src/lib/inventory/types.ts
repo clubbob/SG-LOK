@@ -1,5 +1,3 @@
-import type { UhpInventorySlices } from './uhpInventoryHelpers';
-
 export type InboundHistory = {
   id: string;
   quantity: number;
@@ -58,7 +56,29 @@ export type InventoryProduct = {
   items: InventoryItem[];
 };
 
-export type UhpInventoryState = UhpInventorySlices<InventoryProduct>;
+export type UhpInventorySlices<T> = {
+  products: T[];
+  tubeButtWeldProducts: T[];
+  metalFaceSealProducts: T[];
+};
+
+/** 기존 Firestore 필드 3종에 대응 */
+export type UhpLegacySliceKey = 'products' | 'tubeButtWeldProducts' | 'metalFaceSealProducts';
+
+export type UhpTabSlice =
+  | { kind: 'legacy'; key: UhpLegacySliceKey }
+  | { kind: 'custom'; customId: string };
+
+export type UhpCategoryTabDef = {
+  id: string;
+  label: string;
+  slice: UhpTabSlice;
+};
+
+export type UhpInventoryState = UhpInventorySlices<InventoryProduct> & {
+  categoryTabs: UhpCategoryTabDef[];
+  customCategoryProducts: Record<string, InventoryProduct[]>;
+};
 
 export type CombinedHistoryRow = {
   kind: 'inbound' | 'outbound' | 'adjustment' | 'production';

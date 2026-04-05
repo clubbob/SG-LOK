@@ -112,7 +112,7 @@ const adminMenuItems: MenuItem[] = [
   {
     id: 'inventory',
     label: '재고관리',
-    path: '/admin/inventory',
+    path: '/admin/inventory/status',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0v10l-8 4m8-14l-8 4m0 10L4 17V7m8 4L4 7m8 4l8-4" />

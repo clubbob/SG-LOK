@@ -1,9 +1,5 @@
-import type { InventoryItem, InventoryProduct } from './types';
-import {
-  UHP_CATEGORY_TABS,
-  UHP_STATE_KEYS,
-  type UhpCategoryId,
-} from './uhpInventoryHelpers';
+import type { InventoryItem, InventoryProduct, UhpInventoryState } from './types';
+import { getTabSliceProducts } from './uhpInventoryHelpers';
 
 export type SearchFilteredProduct = InventoryProduct & {
   filteredItems: InventoryItem[];
@@ -42,27 +38,21 @@ export function filterProductsBySearchQuery(
 }
 
 /**
- * 검색 결과가 있는 카테고리 중에서 탭을 고릅니다.
- * 품목/variant 코드 일치를 제품명만 일치하는 경우보다 강하게 반영해 `HLE` → Tube(HLE-04…) 쪽이 우선되도록 합니다.
+ * 검색 결과가 있는 카테고리 중에서 탭 id를 고릅니다.
  */
 export function pickCategoryIdForSearch(
-  state: {
-    products: InventoryProduct[];
-    tubeButtWeldProducts: InventoryProduct[];
-    metalFaceSealProducts: InventoryProduct[];
-  },
+  state: UhpInventoryState,
   normalizedQuery: string,
   mode: 'strict' | 'admin'
-): UhpCategoryId | null {
+): string | null {
   const q = normalizedQuery.trim().toLowerCase();
   if (!q) return null;
 
-  type Scored = { id: UhpCategoryId; score: number; codeRows: number; order: number };
+  type Scored = { tabId: string; score: number; codeRows: number; order: number };
   const scored: Scored[] = [];
 
-  UHP_CATEGORY_TABS.forEach(({ id }, order) => {
-    const key = UHP_STATE_KEYS[id];
-    const slice = state[key];
+  state.categoryTabs.forEach((tab, order) => {
+    const slice = getTabSliceProducts(state, tab);
     const filtered = filterProductsBySearchQuery(slice, q, mode);
     if (filtered.length === 0) return;
 
@@ -84,10 +74,10 @@ export function pickCategoryIdForSearch(
       }
       score += productBest;
     }
-    scored.push({ id, score, codeRows, order });
+    scored.push({ tabId: tab.id, score, codeRows, order });
   });
 
   if (scored.length === 0) return null;
   scored.sort((a, b) => b.score - a.score || b.codeRows - a.codeRows || a.order - b.order);
-  return scored[0]!.id;
+  return scored[0]!.tabId;
 }

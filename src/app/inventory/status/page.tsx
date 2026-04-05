@@ -17,9 +17,9 @@ import {
   pickCategoryIdForSearch,
 } from '@/lib/inventory/searchFilter';
 import {
-  UHP_CATEGORY_TABS,
-  UHP_STATE_KEYS,
-  type UhpCategoryId,
+  attachTabsToUhpState,
+  findTabById,
+  getTabSliceProducts,
 } from '@/lib/inventory/uhpInventoryHelpers';
 import type {
   InventoryProduct as CatalogInventoryProduct,
@@ -52,16 +52,24 @@ type InventoryProduct = {
   items: InventoryItem[];
 };
 
-type UhpUserInventoryState = {
-  products: InventoryProduct[];
-  tubeButtWeldProducts: InventoryProduct[];
-  metalFaceSealProducts: InventoryProduct[];
-};
-
-const FALLBACK_UHP: UhpUserInventoryState = {
-  products: INITIAL_MICRO_WELD_PRODUCTS as InventoryProduct[],
-  tubeButtWeldProducts: INITIAL_TUBE_BUTT_WELD_PRODUCTS as InventoryProduct[],
-  metalFaceSealProducts: INITIAL_METAL_FACE_SEAL_PRODUCTS as InventoryProduct[],
+const FALLBACK_UHP: UhpInventoryState = {
+  products: INITIAL_MICRO_WELD_PRODUCTS as CatalogInventoryProduct[],
+  tubeButtWeldProducts: INITIAL_TUBE_BUTT_WELD_PRODUCTS as CatalogInventoryProduct[],
+  metalFaceSealProducts: INITIAL_METAL_FACE_SEAL_PRODUCTS as CatalogInventoryProduct[],
+  categoryTabs: [
+    { id: 'microWeld', label: 'Micro Weld Fittings', slice: { kind: 'legacy', key: 'products' } },
+    {
+      id: 'tubeButtWeld',
+      label: 'Tube Butt Weld Fittings',
+      slice: { kind: 'legacy', key: 'tubeButtWeldProducts' },
+    },
+    {
+      id: 'metalFaceSeal',
+      label: 'Metal Face Seal Fittings',
+      slice: { kind: 'legacy', key: 'metalFaceSealProducts' },
+    },
+  ],
+  customCategoryProducts: {},
 };
 
 const PRODUCT_LIST_PAGE_SIZE = 10;
@@ -74,12 +82,12 @@ function InventoryStatusPageContent() {
   const planFilterParam = searchParams.get('plan');
   const hasPlanFilter = planFilterParam === 'exists';
 
-  const [activeCategoryId, setActiveCategoryId] = useState<UhpCategoryId>('microWeld');
+  const [activeTabId, setActiveTabId] = useState('microWeld');
   const [searchQuery, setSearchQuery] = useState('');
   const [tabSelectionLockedByUser, setTabSelectionLockedByUser] = useState(false);
   const [productListPage, setProductListPage] = useState(1);
   const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(new Set());
-  const [uhpInventory, setUhpInventory] = useState<UhpUserInventoryState>(FALLBACK_UHP);
+  const [uhpInventory, setUhpInventory] = useState<UhpInventoryState>(FALLBACK_UHP);
 
   useEffect(() => {
     const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
@@ -96,6 +104,8 @@ function InventoryStatusPageContent() {
               tubeButtWeldProducts?: InventoryProduct[];
               metalFaceSealProducts?: InventoryProduct[];
               longElbowProducts?: InventoryProduct[];
+              uhpCategoryTabs?: unknown;
+              customCategoryProducts?: unknown;
             }
           | undefined;
         const tubeBase = Array.isArray(data?.tubeButtWeldProducts)
@@ -108,22 +118,21 @@ function InventoryStatusPageContent() {
             : undefined
         );
         const { next: tubeMerged } = stripHle02ItemFromLongElbowLine(tubeAfterLegacy);
-        const rawSlices: UhpInventoryState = {
-          products: Array.isArray(data?.products)
-            ? (data!.products! as CatalogInventoryProduct[])
-            : (FALLBACK_UHP.products as CatalogInventoryProduct[]),
-          tubeButtWeldProducts: tubeMerged as CatalogInventoryProduct[],
-          metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
-            ? (data!.metalFaceSealProducts! as CatalogInventoryProduct[])
-            : (FALLBACK_UHP.metalFaceSealProducts as CatalogInventoryProduct[]),
-        };
+        const rawSlices: UhpInventoryState = attachTabsToUhpState(
+          {
+            products: Array.isArray(data?.products)
+              ? (data!.products! as CatalogInventoryProduct[])
+              : (FALLBACK_UHP.products as CatalogInventoryProduct[]),
+            tubeButtWeldProducts: tubeMerged as CatalogInventoryProduct[],
+            metalFaceSealProducts: Array.isArray(data?.metalFaceSealProducts)
+              ? (data!.metalFaceSealProducts! as CatalogInventoryProduct[])
+              : (FALLBACK_UHP.metalFaceSealProducts as CatalogInventoryProduct[]),
+          },
+          data
+        );
         const reconciled = reconcileUhpInventoryWithSeedCatalog(rawSlices);
         const display = reconciled.changed ? reconciled.next : rawSlices;
-        setUhpInventory({
-          products: display.products as InventoryProduct[],
-          tubeButtWeldProducts: display.tubeButtWeldProducts as InventoryProduct[],
-          metalFaceSealProducts: display.metalFaceSealProducts as InventoryProduct[],
-        });
+        setUhpInventory(display);
       },
       () => {
         setUhpInventory(FALLBACK_UHP);
@@ -135,17 +144,23 @@ function InventoryStatusPageContent() {
 
   useEffect(() => {
     setProductListPage(1);
-  }, [activeCategoryId, searchQuery, stockFilterParam, planFilterParam]);
+  }, [activeTabId, searchQuery, stockFilterParam, planFilterParam]);
+
+  useEffect(() => {
+    if (!uhpInventory.categoryTabs.some((t) => t.id === activeTabId)) {
+      setActiveTabId(uhpInventory.categoryTabs[0]?.id ?? 'microWeld');
+    }
+  }, [uhpInventory.categoryTabs, activeTabId]);
 
   useEffect(() => {
     const q = searchQuery.trim().toLowerCase();
     if (q.length === 0) return;
     if (tabSelectionLockedByUser) return;
-    const nextTab = pickCategoryIdForSearch(uhpInventory as UhpInventoryState, q, 'admin');
-    if (nextTab != null && nextTab !== activeCategoryId) {
-      setActiveCategoryId(nextTab);
+    const nextTab = pickCategoryIdForSearch(uhpInventory, q, 'admin');
+    if (nextTab != null && nextTab !== activeTabId) {
+      setActiveTabId(nextTab);
     }
-  }, [searchQuery, uhpInventory, activeCategoryId, tabSelectionLockedByUser]);
+  }, [searchQuery, uhpInventory, activeTabId, tabSelectionLockedByUser]);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
@@ -197,26 +212,30 @@ function InventoryStatusPageContent() {
   };
 
   const baseFilteredCategoryProducts: ProductListRow[] = isSearching
-    ? UHP_CATEGORY_TABS.flatMap(({ id, label }) =>
+    ? uhpInventory.categoryTabs.flatMap((tab) =>
         filterProductsBySearchQuery(
-          uhpInventory[UHP_STATE_KEYS[id]] as CatalogInventoryProduct[],
+          getTabSliceProducts(uhpInventory, tab) as CatalogInventoryProduct[],
           normalizedQuery,
           'admin'
         ).map((p) => ({
           ...p,
-          categoryLabel: label,
-          listKey: `${id}::${p.name}`,
+          categoryLabel: tab.label,
+          listKey: `${tab.id}::${p.name}`,
         }))
       )
-    : filterProductsBySearchQuery(
-        uhpInventory[UHP_STATE_KEYS[activeCategoryId]] as CatalogInventoryProduct[],
-        normalizedQuery,
-        'strict'
-      ).map((p) => ({
-        ...p,
-        categoryLabel: undefined,
-        listKey: `${activeCategoryId}::${p.name}`,
-      }));
+    : (() => {
+        const tab = findTabById(uhpInventory, activeTabId);
+        if (!tab) return [];
+        return filterProductsBySearchQuery(
+          getTabSliceProducts(uhpInventory, tab) as CatalogInventoryProduct[],
+          normalizedQuery,
+          'strict'
+        ).map((p) => ({
+          ...p,
+          categoryLabel: undefined,
+          listKey: `${activeTabId}::${p.name}`,
+        }));
+      })();
 
   const filteredCategoryProducts = applyPlanFilter(applyStockFilter(baseFilteredCategoryProducts));
 
@@ -298,9 +317,7 @@ function InventoryStatusPageContent() {
               )}
             </div>
             {isSearching && (
-              <p className="mt-1.5 text-xs text-gray-500">
-                Micro / Tube Butt Weld / Metal Face Seal 전체에서 검색합니다.
-              </p>
+              <p className="mt-1.5 text-xs text-gray-500">등록된 모든 제품 카테고리에서 검색합니다.</p>
             )}
           </div>
 
@@ -308,23 +325,23 @@ function InventoryStatusPageContent() {
 
             <h2 className="text-lg font-semibold text-gray-900 mb-4">제품 카테고리</h2>
             <div className="flex flex-wrap gap-2">
-              {UHP_CATEGORY_TABS.map(({ id, label }) => (
+              {uhpInventory.categoryTabs.map((tab) => (
                 <button
-                  key={id}
+                  key={tab.id}
                   type="button"
                   onClick={() => {
-                    setActiveCategoryId(id);
+                    setActiveTabId(tab.id);
                     if (searchQuery.trim().length > 0) {
                       setTabSelectionLockedByUser(true);
                     }
                   }}
                   className={`rounded-md border px-4 py-2.5 text-sm font-medium transition-colors ${
-                    activeCategoryId === id
+                    activeTabId === tab.id
                       ? 'border-blue-600 bg-blue-600 text-white'
                       : 'border-gray-200 bg-gray-50 text-gray-800 hover:bg-gray-100'
                   }`}
                 >
-                  {label}
+                  {tab.label}
                 </button>
               ))}
             </div>

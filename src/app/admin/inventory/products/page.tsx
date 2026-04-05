@@ -60,6 +60,8 @@ export default function AdminInventoryProductsPage() {
   const [productImageInput, setProductImageInput] = useState("");
 
   const [deleteTarget, setDeleteTarget] = useState<{ productName: string } | null>(null);
+  const PRODUCT_LIST_PAGE_SIZE = 10;
+  const [productListPage, setProductListPage] = useState(1);
 
   const applyInventoryDocument = useCallback(async (
     snapshot: DocumentSnapshot,
@@ -286,6 +288,10 @@ export default function AdminInventoryProductsPage() {
     }
   }, [uhpInventory.categoryTabs, activeTabId]);
 
+  useEffect(() => {
+    setProductListPage(1);
+  }, [activeTabId, searchQuery]);
+
   const activeTab = findTabById(uhpInventory, activeTabId);
   /** Firestore 배열 순서 = 제품등록·재고현황 표시 순서 (위/아래 버튼으로 변경) */
   const categoryProducts = activeTab ? getTabSliceProducts(uhpInventory, activeTab) : [];
@@ -293,6 +299,24 @@ export default function AdminInventoryProductsPage() {
   const filteredCategoryProducts = normalizedSearchQuery
     ? categoryProducts.filter((product) => product.name.toLowerCase().includes(normalizedSearchQuery))
     : categoryProducts;
+
+  const productListTotalPages = Math.max(
+    1,
+    Math.ceil(filteredCategoryProducts.length / PRODUCT_LIST_PAGE_SIZE)
+  );
+  const productListEffectivePage = Math.min(productListPage, productListTotalPages);
+  const pagedCategoryProducts = filteredCategoryProducts.slice(
+    (productListEffectivePage - 1) * PRODUCT_LIST_PAGE_SIZE,
+    productListEffectivePage * PRODUCT_LIST_PAGE_SIZE
+  );
+  const productListRangeStart =
+    filteredCategoryProducts.length === 0
+      ? 0
+      : (productListEffectivePage - 1) * PRODUCT_LIST_PAGE_SIZE + 1;
+  const productListRangeEnd = Math.min(
+    filteredCategoryProducts.length,
+    productListEffectivePage * PRODUCT_LIST_PAGE_SIZE
+  );
 
   const persistState = async (next: UhpInventoryState) => {
     setSaving(true);
@@ -381,6 +405,9 @@ export default function AdminInventoryProductsPage() {
 
     if (productModalMode === "add") {
       slice.push({ name, imageSrc, items: [] });
+      const nextPage = Math.max(1, Math.ceil(slice.length / PRODUCT_LIST_PAGE_SIZE));
+      setSearchQuery("");
+      setProductListPage(nextPage);
     } else if (productModalIndex !== null) {
       const prev = slice[productModalIndex];
       if (!prev) return;
@@ -497,16 +524,6 @@ export default function AdminInventoryProductsPage() {
           <h1 className="text-2xl font-bold text-gray-900">제품 이미지 등록</h1>
           <p className="text-gray-600 mt-2">
             <strong>제품 라인(시리즈)</strong>의 이름과 이미지(파일 업로드 또는 URL·경로)만 이 메뉴에서 등록·수정·삭제합니다.
-            저장 시 Firestore에 반영되며 <strong>UHP 제품재고</strong>와 같은 목록을 공유합니다.
-          </p>
-          <p className="mt-2 text-sm text-gray-600">
-            <span className="font-medium text-gray-800">품목 코드·재고 수량·입출고·생산계획·이력</span> →{" "}
-            <Link
-              href="/admin/inventory/status"
-              className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900"
-            >
-              UHP 제품재고
-            </Link>
           </p>
           {listenError && (
             <p className="mt-2 text-sm font-medium text-red-600">{listenError}</p>
@@ -559,80 +576,72 @@ export default function AdminInventoryProductsPage() {
             + 카테고리 추가
           </button>
         </div>
-        <div className="mb-4 flex flex-col gap-2">
-          <div className="flex flex-wrap gap-2">
-            {uhpInventory.categoryTabs.map((tab, tabIndex) => (
-              <div
-                key={tab.id}
-                className={`inline-flex flex-wrap items-center gap-1 rounded-md border p-1 ${
-                  activeTabId === tab.id ? "border-blue-600 bg-blue-50" : "border-gray-200 bg-gray-50"
+        <div className="mb-4 flex flex-wrap gap-2">
+          {uhpInventory.categoryTabs.map((tab, tabIndex) => (
+            <div
+              key={tab.id}
+              className={`inline-flex flex-wrap items-center gap-1 rounded-md border p-1 ${
+                activeTabId === tab.id ? "border-blue-600 bg-blue-50" : "border-gray-200 bg-gray-50"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => setActiveTabId(tab.id)}
+                disabled={saving}
+                className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
+                  activeTabId === tab.id ? "text-blue-800" : "text-gray-800 hover:bg-gray-100"
                 }`}
               >
+                {tab.label}
+              </button>
+              <div className="flex items-center gap-0.5 border-l border-gray-200 pl-1">
                 <button
                   type="button"
-                  onClick={() => setActiveTabId(tab.id)}
-                  disabled={saving}
-                  className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-                    activeTabId === tab.id ? "text-blue-800" : "text-gray-800 hover:bg-gray-100"
-                  }`}
+                  title="순서 앞으로"
+                  disabled={saving || tabIndex === 0}
+                  onClick={() => moveCategoryTabProducts(tab.id, -1)}
+                  className="rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-30"
                 >
-                  {tab.label}
+                  ◀
                 </button>
-                <div className="flex items-center gap-0.5 border-l border-gray-200 pl-1">
+                <button
+                  type="button"
+                  title="순서 뒤로"
+                  disabled={saving || tabIndex >= uhpInventory.categoryTabs.length - 1}
+                  onClick={() => moveCategoryTabProducts(tab.id, 1)}
+                  className="rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-30"
+                >
+                  ▶
+                </button>
+                <button
+                  type="button"
+                  title="이름 수정"
+                  disabled={saving}
+                  onClick={() => handleRenameCategoryProducts(tab.id)}
+                  className="rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200"
+                >
+                  ✎
+                </button>
+                {isCustomTab(tab) && (
                   <button
                     type="button"
-                    title="순서 앞으로"
-                    disabled={saving || tabIndex === 0}
-                    onClick={() => moveCategoryTabProducts(tab.id, -1)}
-                    className="rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-30"
-                  >
-                    ◀
-                  </button>
-                  <button
-                    type="button"
-                    title="순서 뒤로"
-                    disabled={saving || tabIndex >= uhpInventory.categoryTabs.length - 1}
-                    onClick={() => moveCategoryTabProducts(tab.id, 1)}
-                    className="rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200 disabled:opacity-30"
-                  >
-                    ▶
-                  </button>
-                  <button
-                    type="button"
-                    title="이름 수정"
+                    title="카테고리 삭제"
                     disabled={saving}
-                    onClick={() => handleRenameCategoryProducts(tab.id)}
-                    className="rounded px-1.5 py-1 text-xs text-gray-600 hover:bg-gray-200"
+                    onClick={() => handleDeleteCategoryProducts(tab.id)}
+                    className="rounded px-1.5 py-1 text-xs text-red-600 hover:bg-red-50"
                   >
-                    ✎
+                    삭제
                   </button>
-                  {isCustomTab(tab) && (
-                    <button
-                      type="button"
-                      title="카테고리 삭제"
-                      disabled={saving}
-                      onClick={() => handleDeleteCategoryProducts(tab.id)}
-                      className="rounded px-1.5 py-1 text-xs text-red-600 hover:bg-red-50"
-                    >
-                      삭제
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
-            ))}
-          </div>
-          <p className="text-xs text-gray-500">
-            기본 카테고리는 삭제할 수 없습니다. 상세 재고 작업은 UHP 제품재고 메뉴와 동일한 데이터를 사용합니다.
-          </p>
+            </div>
+          ))}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div className="text-sm text-gray-600">
             <p>
               등록된 제품 라인 <span className="font-semibold text-gray-900">{filteredCategoryProducts.length}</span>개
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              표시 순서는 「위로」「아래로」로 바꿀 수 있으며 재고현황과 동일하게 저장됩니다.
             </p>
           </div>
           <button
@@ -646,7 +655,7 @@ export default function AdminInventoryProductsPage() {
         </div>
 
         <div className="space-y-6">
-          {filteredCategoryProducts.map((product) => {
+          {pagedCategoryProducts.map((product) => {
             const pi = categoryProducts.findIndex((line) => line.name === product.name);
             if (pi < 0) return null;
             return (
@@ -712,25 +721,100 @@ export default function AdminInventoryProductsPage() {
                   </button>
                 </div>
               </div>
-
-              <p className="mt-4 rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-600">
-                품목 코드·세부 variant(6종)는{" "}
-                <Link
-                  href="/admin/inventory/status"
-                  className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900"
-                >
-                  UHP 제품재고
-                </Link>
-                에서 이 제품 카드의 「품목 추가」로 등록합니다. (현재 연결된 품목{" "}
-                <span className="font-semibold text-gray-800">{product.items.length}</span>개)
-              </p>
             </div>
-          )})}
+            );
+          })}
 
           {filteredCategoryProducts.length === 0 && (
             <p className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
               검색 결과가 없습니다.
             </p>
+          )}
+          {filteredCategoryProducts.length > 0 && (
+            <div className="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-gray-600">
+                제품 라인 {productListRangeStart}–{productListRangeEnd} / 전체{" "}
+                {filteredCategoryProducts.length}건 (페이지당 {PRODUCT_LIST_PAGE_SIZE}건)
+                {productListTotalPages > 1 && (
+                  <span className="text-gray-500">
+                    {" "}
+                    · {productListEffectivePage}/{productListTotalPages} 페이지
+                  </span>
+                )}
+              </p>
+              {productListTotalPages > 1 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setProductListPage((p) => Math.max(1, p - 1))}
+                    disabled={productListEffectivePage <= 1}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    이전
+                  </button>
+
+                  {(() => {
+                    const total = productListTotalPages;
+                    const current = productListEffectivePage;
+                    const maxButtons = 10;
+
+                    const parts: Array<number | "ellipsis"> =
+                      total <= maxButtons
+                        ? Array.from({ length: total }, (_, i) => i + 1)
+                        : (() => {
+                            const left = Math.max(2, current - 2);
+                            const right = Math.min(total - 1, current + 2);
+                            const out: Array<number | "ellipsis"> = [];
+                            out.push(1);
+                            if (left > 2) out.push("ellipsis");
+                            for (let p = left; p <= right; p++) out.push(p);
+                            if (right < total - 1) out.push("ellipsis");
+                            out.push(total);
+                            return out;
+                          })();
+
+                    return parts.map((part, idx) => {
+                      if (part === "ellipsis") {
+                        return (
+                          <span key={`ellipsis-${idx}`} className="select-none px-1 text-gray-400">
+                            …
+                          </span>
+                        );
+                      }
+
+                      const pageNum = part;
+                      const isActive = pageNum === current;
+                      return (
+                        <button
+                          key={pageNum}
+                          type="button"
+                          onClick={() => setProductListPage(pageNum)}
+                          className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+                            isActive
+                              ? "border-blue-500 bg-blue-500 text-white"
+                              : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                          }`}
+                          aria-current={isActive ? "page" : undefined}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    });
+                  })()}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setProductListPage((p) => Math.min(productListTotalPages, p + 1))
+                    }
+                    disabled={productListEffectivePage >= productListTotalPages}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    다음
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

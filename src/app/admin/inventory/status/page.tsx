@@ -21,7 +21,6 @@ import {
   reconcileUhpInventoryWithSeedCatalog,
   stripHle02ItemFromLongElbowLine,
 } from '@/lib/inventory/microWeldSeed';
-import Link from 'next/link';
 import { buildCombinedHistoryRows, combinedHistoryRowMemo } from '@/lib/inventory/historyRows';
 import {
   allUhpProductLines,
@@ -230,6 +229,8 @@ export default function AdminInventoryStatusPage() {
   const [tabSelectionLockedByUser, setTabSelectionLockedByUser] = useState(false);
   const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(new Set());
   const [productListPage, setProductListPage] = useState(1);
+  /** 제품 줄 DnD 시 현재 페이지 내 인덱스를 전체 슬라이스 인덱스로 바꿀 때 사용 */
+  const productListSliceOffsetRef = useRef(0);
   const [uhpInventory, setUhpInventory] = useState<UhpInventoryState>(
     () => JSON.parse(JSON.stringify(INITIAL_UHP_INVENTORY_STATE)) as UhpInventoryState
   );
@@ -666,11 +667,22 @@ export default function AdminInventoryStatusPage() {
     const inv = uhpInventoryRef.current;
     const tab = findTabById(inv, activeTabIdRef.current);
     if (!tab) return;
+    const offset = productListSliceOffsetRef.current;
+    const globalOld = offset + oldIndex;
+    const globalNew = offset + newIndex;
     const next = JSON.parse(JSON.stringify(inv)) as UhpInventoryState;
     const slice = [...getTabSliceProducts(next, tab)];
-    const [moved] = slice.splice(oldIndex, 1);
+    if (
+      globalOld < 0 ||
+      globalOld >= slice.length ||
+      globalNew < 0 ||
+      globalNew >= slice.length
+    ) {
+      return;
+    }
+    const [moved] = slice.splice(globalOld, 1);
     if (!moved) return;
-    slice.splice(newIndex, 0, moved);
+    slice.splice(globalNew, 0, moved);
     const updated = setTabSliceProducts(next, tab, slice);
     setUhpInventory(updated);
     void persistUhpInventory(updated);
@@ -1775,6 +1787,7 @@ export default function AdminInventoryStatusPage() {
     (productListEffectivePage - 1) * PRODUCT_LIST_PAGE_SIZE,
     productListEffectivePage * PRODUCT_LIST_PAGE_SIZE
   );
+  productListSliceOffsetRef.current = (productListEffectivePage - 1) * PRODUCT_LIST_PAGE_SIZE;
   const productListRangeStart =
     filteredCategoryProducts.length === 0
       ? 0
@@ -1786,17 +1799,6 @@ export default function AdminInventoryStatusPage() {
 
   const canDragReorderProducts =
     !isSearching && stockFilter === null && !hasPlanFilter;
-  const activeTabForList = findTabById(uhpInventory, activeTabId);
-  const dragSortableRows: ProductListRow[] =
-    canDragReorderProducts && activeTabForList
-      ? filterProductsBySearchQuery(getTabSliceProducts(uhpInventory, activeTabForList), '', 'admin').map(
-          (p) => ({
-            ...p,
-            listKey: `${activeTabId}::${p.name}`,
-          })
-        )
-      : [];
-  const dragSortableIds = dragSortableRows.map((r) => r.listKey);
 
   const getCurrentStock = (item: InventoryItem): number => getItemCurrentStock(item);
 
@@ -1846,15 +1848,6 @@ export default function AdminInventoryStatusPage() {
           <p className="text-gray-600 mt-2">
             입고·출고·재고조정·생산계획·이력과 함께, 각 제품 카드에서{' '}
             <span className="font-medium text-gray-800">품목 코드</span>는 「품목 추가」로 등록할 수 있습니다.
-          </p>
-          <p className="mt-2 text-sm text-gray-600">
-            <span className="font-medium text-gray-800">제품 라인(시리즈명·이미지)</span>만 →{' '}
-            <Link
-              href="/admin/inventory/products"
-              className="font-medium text-blue-700 underline decoration-blue-300 underline-offset-2 hover:text-blue-900"
-            >
-              제품 이미지 등록
-            </Link>
           </p>
           {syncError && (
             <p className="mt-2 text-sm font-medium text-red-600">{syncError}</p>
@@ -2024,8 +2017,8 @@ export default function AdminInventoryStatusPage() {
         <div className="mt-6 space-y-4">
             {canDragReorderProducts ? (
               <InventoryProductDndList
-                items={dragSortableRows}
-                sortableIds={dragSortableIds}
+                items={pagedCategoryProducts}
+                sortableIds={pagedCategoryProducts.map((r) => r.listKey)}
                 productCardHandlers={productCardHandlers}
                 onReorder={handleProductOrderReorder}
               />
@@ -2050,24 +2043,18 @@ export default function AdminInventoryStatusPage() {
             {filteredCategoryProducts.length > 0 && (
               <div className="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-gray-600">
-                  {canDragReorderProducts ? (
-                    <>
-                      제품 라인 전체 {dragSortableRows.length}건 (핸들을 드래그해 순서를 바꿀 수 있습니다)
-                    </>
-                  ) : (
-                    <>
-                      제품 라인 {productListRangeStart}–{productListRangeEnd} / 전체{' '}
-                      {filteredCategoryProducts.length}건 (페이지당 {PRODUCT_LIST_PAGE_SIZE}건)
-                      {productListTotalPages > 1 && (
-                        <span className="text-gray-500">
-                          {' '}
-                          · {productListEffectivePage}/{productListTotalPages} 페이지
-                        </span>
-                      )}
-                    </>
-                  )}
+                  <>
+                    제품 라인 {productListRangeStart}–{productListRangeEnd} / 전체{' '}
+                    {filteredCategoryProducts.length}건 (페이지당 {PRODUCT_LIST_PAGE_SIZE}건)
+                    {productListTotalPages > 1 && (
+                      <span className="text-gray-500">
+                        {' '}
+                        · {productListEffectivePage}/{productListTotalPages} 페이지
+                      </span>
+                    )}
+                  </>
                 </p>
-                {!canDragReorderProducts && productListTotalPages > 1 && (
+                {productListTotalPages > 1 && (
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"

@@ -276,8 +276,7 @@ export function AdminUhpInventoryProductCard({
         </div>
 
         <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-gray-600">새 품목 코드는 「품목 추가」로 등록합니다.</p>
+          <div className="mb-3 flex justify-end">
             <button
               type="button"
               onClick={() => openAddStructureItem(product.name)}

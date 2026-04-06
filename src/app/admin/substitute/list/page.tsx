@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { SubstituteCodeListView } from "@/components/substitute/SubstituteCodeListView";
 
 export default function AdminSubstituteListPage() {
-  redirect('/admin/substitute');
+  return <SubstituteCodeListView embedded />;
 }

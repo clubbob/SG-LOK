@@ -43,3 +43,23 @@ export function downloadSubstituteAdminTableXlsx(rows: SubstituteMappingDoc[], f
   XLSX.utils.book_append_sheet(wb, ws, 'mappings');
   XLSX.writeFile(wb, filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`);
 }
+
+export function downloadSubstituteListXlsx(
+  rows: SubstituteMappingDoc[],
+  userNameById: Record<string, string>,
+  filename: string
+) {
+  const data = rows.map((m, idx) => ({
+    번호: rows.length - idx,
+    'Swagelok 제품명': m.product_name_from ?? '',
+    'Swagelok 제품코드': m.code_from ?? '',
+    'S-LOK 제품명': m.product_name_to ?? '',
+    'S-LOK 제품코드': m.code_to ?? '',
+    등록일: formatUpdatedAtForXlsx(m.created_at),
+    등록자: m.created_by ? userNameById[m.created_by] ?? m.created_by : '',
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'list');
+  XLSX.writeFile(wb, filename.endsWith('.xlsx') ? filename : `${filename}.xlsx`);
+}

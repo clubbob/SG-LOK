@@ -287,7 +287,7 @@ export default function Header() {
                       : 'text-white hover:bg-blue-600 hover:text-white'
                   }`}
                 >
-                  Code Find
+                  대체품코드
                   <svg
                     className={`w-4 h-4 transition-transform ${isSubstituteMenuOpen ? 'rotate-180' : ''}`}
                     fill="none"
@@ -316,14 +316,21 @@ export default function Header() {
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
                           onClick={() => setIsSubstituteMenuOpen(false)}
                         >
-                          Code Find 메인
+                          대체품코드 메인
                         </Link>
                         <Link
                           href="/substitute/menu"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
                           onClick={() => setIsSubstituteMenuOpen(false)}
                         >
-                          코드 검색
+                          코드 등록
+                        </Link>
+                        <Link
+                          href="/substitute/list"
+                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
+                          onClick={() => setIsSubstituteMenuOpen(false)}
+                        >
+                          코드 목록
                         </Link>
                       </div>
                     </div>
@@ -595,17 +602,19 @@ export default function Header() {
                 UHP 재고현황
               </Link>
 
-              <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-blue-100/90">Code Find</p>
+              <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-blue-100/90">대체품코드</p>
               <Link
                 href="/substitute"
                 className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
-                  isActivePath('/substitute') && !isActivePath('/substitute/menu')
+                  isActivePath('/substitute') &&
+                  !isActivePath('/substitute/menu') &&
+                  !isActivePath('/substitute/list')
                     ? 'bg-blue-700 text-white'
                     : 'text-white/95 hover:bg-blue-600'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                Code Find 메인
+                대체품코드 메인
               </Link>
               <Link
                 href="/substitute/menu"
@@ -616,7 +625,18 @@ export default function Header() {
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                코드 검색
+                코드 등록
+              </Link>
+              <Link
+                href="/substitute/list"
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
+                  isActivePath('/substitute/list')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white/95 hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                코드 목록
               </Link>
 
               <Link

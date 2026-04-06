@@ -484,26 +484,10 @@ export default function SubstituteMenuPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Code Find</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">코드 등록</h1>
               <p className="text-gray-600 mt-2 text-sm sm:text-base">
-                Swagelok 품번을 정확히 입력하면 <strong>S-LOK 대체 품번</strong>을 표시합니다.
+                Swagelok 품번을 정확히 입력하면 S-LOK 대체 품번을 표시합니다.
               </p>
-            </div>
-            <div className="flex flex-wrap gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => openCatalogPopup(SWAGELOK_CATALOG_URL, 'swagelok_catalog')}
-                className="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-800 text-sm font-medium hover:bg-gray-50"
-              >
-                SWAGELOK 카탈로그
-              </button>
-              <button
-                type="button"
-                onClick={() => openCatalogPopup(SLOK_CATALOG_URL, 'slok_catalog')}
-                className="px-3 py-2 rounded-md border border-gray-300 bg-white text-gray-800 text-sm font-medium hover:bg-gray-50"
-              >
-                S-LOK 카탈로그
-              </button>
             </div>
           </div>
 
@@ -517,7 +501,7 @@ export default function SubstituteMenuPage() {
           <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
               <div className="flex-1">
-                <label htmlFor="sw-code" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="sw-code" className="block text-base font-medium text-gray-700 mb-1">
                   Swagelok 코드
                 </label>
                 <input
@@ -527,7 +511,7 @@ export default function SubstituteMenuPage() {
                   onChange={(e) => setQueryInput(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === 'Enter' && runSearch()}
                   placeholder="예: SS-400-1-4"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
               <div className="flex flex-wrap gap-2">
@@ -616,7 +600,7 @@ export default function SubstituteMenuPage() {
 
           {lastNormalized && (
             <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 sm:p-5 shadow-sm space-y-5">
-              <h2 className="text-sm font-semibold text-gray-900">매핑 입력</h2>
+              <h2 className="text-base font-semibold text-gray-900">매핑 입력</h2>
               <p className="text-xs text-gray-500">
                 검색 후 표시되는 정규화 Swagelok 코드를 기준으로 저장·수정·삭제합니다. 먼저 위에서 검색하세요.
               </p>

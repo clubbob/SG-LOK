@@ -7,6 +7,14 @@ import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { MANUFACTURER } from '@/lib/substitute/constants';
+import { fetchAllMappings } from '@/lib/substitute/firestoreMapping';
+
+function isPermissionDeniedError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const maybe = error as { code?: string };
+  return maybe.code === 'permission-denied';
+}
 
 export default function DashboardPage() {
   const { isAuthenticated, loading, userProfile } = useAuth();
@@ -34,6 +42,9 @@ export default function DashboardPage() {
     inStock: 0,
     outOfStock: 0,
     planExists: 0,
+  });
+  const [substituteStats, setSubstituteStats] = useState({
+    total: 0,
   });
   const [loadingStats, setLoadingStats] = useState(true);
   const [showLoginPopup, setShowLoginPopup] = useState(false);
@@ -251,6 +262,26 @@ export default function DashboardPage() {
           inStock: inStockCount,
           outOfStock: outOfStockCount,
           planExists: planExistsCount,
+        });
+      }
+
+      // 대체품코드 통계 (권한이 없으면 0으로 안전 처리)
+      try {
+        const mappings = await fetchAllMappings(db);
+        const totalMappings = mappings.filter(
+          (m) =>
+            m.manufacturer_from === MANUFACTURER.SWAGELOK &&
+            m.manufacturer_to === MANUFACTURER.SLOK
+        ).length;
+        setSubstituteStats({
+          total: totalMappings,
+        });
+      } catch (e) {
+        if (!isPermissionDeniedError(e)) {
+          console.error('대체품코드 통계 로드 오류:', e);
+        }
+        setSubstituteStats({
+          total: 0,
         });
       }
     } catch (error) {
@@ -609,6 +640,28 @@ export default function DashboardPage() {
                           strokeWidth={2}
                           d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* 대체품코드 바로가기 */}
+          <div className="mb-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h2 className="text-base font-semibold text-gray-900 mb-3">대체품코드</h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              <Link href="/substitute/list" className="block h-full">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 mb-0.5">전체 목록</p>
+                      <p className="text-2xl font-bold text-gray-900">{substituteStats.total}</p>
+                    </div>
+                    <div className="bg-blue-500 rounded-lg p-2">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2" />
                       </svg>
                     </div>
                   </div>

@@ -134,83 +134,67 @@ export default function NoticesPage() {
       <Header />
       <main className="flex-1 bg-gray-50">
         <div className="w-full max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-10 sm:py-14">
-          <div className="flex gap-6">
-            <aside className="hidden md:block w-52 shrink-0">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sticky top-4">
-                <p className="text-sm font-semibold text-gray-900 px-2 py-1">메뉴</p>
-                <nav className="mt-2 space-y-1">
-                  <Link href="/dashboard" className="block rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                    대시보드
-                  </Link>
-                  <Link href="/notices" className="block rounded-lg px-3 py-2 text-sm font-semibold bg-blue-50 text-blue-700">
-                    공지사항
-                  </Link>
-                </nav>
-              </div>
-            </aside>
-
-            <div className="flex-1 min-w-0">
-              <div className="mb-6">
-                <h1 className="text-3xl font-bold text-gray-900">공지사항</h1>
-                <p className="text-gray-600 mt-2 text-sm sm:text-base">중요 공지 및 안내사항을 확인하세요.</p>
-              </div>
-
-              <div className="mb-4">
-                <input
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="공지 검색 (제목/내용)"
-                  className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                />
-              </div>
-
-              {filteredNotices.length === 0 ? (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500">
-                  {searchQuery.trim() ? '검색 결과가 없습니다.' : '등록된 공지사항이 없습니다.'}
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">번호</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록자</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제목</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">첨부</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {filteredNotices.map((n) => (
-                          <tr key={n.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{noticeNumberMap[n.id] ?? '-'}</td>
-                            <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{n.createdBy}</td>
-                            <td className="px-4 py-4">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {n.pinned && (
-                                  <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[11px] font-semibold">
-                                    고정
-                                  </span>
-                                )}
-                                <Link
-                                  href={`/notices/${n.id}`}
-                                  className="font-medium text-blue-700 hover:text-blue-800 truncate max-w-[260px] inline-block"
-                                >
-                                  {n.title}
-                                </Link>
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{n.createdAt.toISOString().slice(0, 10)}</td>
-                            <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{n.attachments.length}/{MAX_ATTACHMENTS}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+          <div className="min-w-0">
+            <div className="mb-6">
+              <h1 className="text-3xl font-bold text-gray-900">공지사항</h1>
+              <p className="text-gray-600 mt-2 text-sm sm:text-base">중요 공지 및 안내사항을 확인하세요.</p>
             </div>
+
+            <div className="mb-4">
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="공지 검색 (제목/내용)"
+                className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              />
+            </div>
+
+            {filteredNotices.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500">
+                {searchQuery.trim() ? '검색 결과가 없습니다.' : '등록된 공지사항이 없습니다.'}
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">번호</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록자</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제목</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">첨부</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {filteredNotices.map((n) => (
+                        <tr key={n.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{noticeNumberMap[n.id] ?? '-'}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{n.createdBy}</td>
+                          <td className="px-4 py-4">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {n.pinned && (
+                                <span className="inline-flex items-center rounded-full bg-blue-50 text-blue-700 px-2 py-0.5 text-[11px] font-semibold">
+                                  고정
+                                </span>
+                              )}
+                              <Link
+                                href={`/notices/${n.id}`}
+                                className="font-medium text-blue-700 hover:text-blue-800 truncate max-w-[260px] inline-block"
+                              >
+                                {n.title}
+                              </Link>
+                            </div>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{n.createdAt.toISOString().slice(0, 10)}</td>
+                          <td className="px-4 py-4 text-sm text-gray-700 whitespace-nowrap">{n.attachments.length}/{MAX_ATTACHMENTS}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </main>

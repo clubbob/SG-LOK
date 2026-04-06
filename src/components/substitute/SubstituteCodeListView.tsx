@@ -109,6 +109,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const effectivePage = Math.min(page, totalPages);
+  const displayPage = totalPages - effectivePage + 1;
   const pagedRows = filteredRows.slice((effectivePage - 1) * PAGE_SIZE, effectivePage * PAGE_SIZE);
   const rangeStart = filteredRows.length === 0 ? 0 : (effectivePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(filteredRows.length, effectivePage * PAGE_SIZE);
@@ -249,19 +250,19 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={effectivePage <= 1}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={displayPage <= 1}
                     className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                   >
                     이전
                   </button>
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => {
-                    const isActive = n === effectivePage;
+                    const isActive = n === displayPage;
                     return (
                       <button
                         key={n}
                         type="button"
-                        onClick={() => setPage(n)}
+                        onClick={() => setPage(totalPages - n + 1)}
                         className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
                           isActive
                             ? "border-blue-500 bg-blue-500 text-white"
@@ -275,8 +276,8 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                   })}
                   <button
                     type="button"
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={effectivePage >= totalPages}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={displayPage >= totalPages}
                     className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                   >
                     다음

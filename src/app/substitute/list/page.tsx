@@ -9,6 +9,7 @@ import { db } from "@/lib/firebase";
 import { fetchAllMappings } from "@/lib/substitute/firestoreMapping";
 import { MANUFACTURER } from "@/lib/substitute/constants";
 import { downloadSubstituteListXlsx } from "@/lib/substitute/exportXlsx";
+import { resolveSubstituteRegistrantLabel } from "@/lib/substitute/registrantDisplay";
 import type { SubstituteMappingDoc } from "@/lib/substitute/types";
 
 function toMillis(ts: unknown): number {
@@ -225,7 +226,9 @@ export default function SubstituteListPage() {
                         {formatDateTime(row.created_at)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
-                        {row.created_by ? userNameById[row.created_by] ?? row.created_by : "-"}
+                        {row.created_by
+                          ? resolveSubstituteRegistrantLabel(row.created_by, userNameById)
+                          : "-"}
                       </td>
                     </tr>
                   ))}

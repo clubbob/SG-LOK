@@ -125,7 +125,8 @@ const adminMenuItems: MenuItem[] = [
   },
   {
     id: 'substitute',
-    label: 'Code Find',
+    label: '대체품코드',
+    path: '/admin/substitute',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -136,7 +137,10 @@ const adminMenuItems: MenuItem[] = [
         />
       </svg>
     ),
-    subItems: [{ id: 'substitute-manage', label: '대체품관리', path: '/admin/substitute/manage' }],
+    subItems: [
+      { id: 'substitute-manage', label: '코드 등록', path: '/admin/substitute/manage' },
+      { id: 'substitute-list', label: '코드 목록', path: '/admin/substitute/list' },
+    ],
   },
 ];
 
@@ -357,16 +361,14 @@ export default function AdminLayout({
                     className={`mb-1 ${
                       item.id === 'production'
                         ? 'border-t border-gray-200 pt-3 mt-3'
-                        : item.id === 'substitute'
-                          ? 'border-t border-gray-200 pt-3 mt-2'
-                          : ''
+                        : ''
                     }`}
                   >
                   {hasSubItems ? (
                     <>
                       {item.path ? (
                         <Link
-                          href={item.path}
+                          href={item.id === 'substitute' ? '#' : item.path}
                           className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition-colors ${
                             isMainActive
                               ? 'bg-blue-50 text-blue-600 font-semibold'
@@ -383,7 +385,9 @@ export default function AdminLayout({
                               }
                               return newSet;
                             });
-                            router.push(item.path || '#');
+                            if (item.id !== 'substitute' && item.path) {
+                              router.push(item.path);
+                            }
                           }}
                         >
                           <div className="flex items-center gap-2">

@@ -2,6 +2,7 @@
 
 import * as XLSX from 'xlsx';
 import type { SubstituteMappingDoc } from './types';
+import { resolveSubstituteRegistrantLabel } from './registrantDisplay';
 
 function formatUpdatedAtForXlsx(ts: SubstituteMappingDoc['updated_at']): string {
   if (!ts) return '';
@@ -56,7 +57,7 @@ export function downloadSubstituteListXlsx(
     'S-LOK 제품명': m.product_name_to ?? '',
     'S-LOK 제품코드': m.code_to ?? '',
     등록일: formatUpdatedAtForXlsx(m.created_at),
-    등록자: m.created_by ? userNameById[m.created_by] ?? m.created_by : '',
+    등록자: resolveSubstituteRegistrantLabel(m.created_by, userNameById),
   }));
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();

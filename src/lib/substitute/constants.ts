@@ -64,5 +64,11 @@ export const TUBE_FITTING_CATEGORY = 'Tube Fitting' as const;
 export const SWAGELOK_CATALOG_URL =
   process.env.NEXT_PUBLIC_SWAGELOK_CATALOG_URL?.trim() || '/catalogs/Swagelok-Tube-Fittings.pdf';
 
+export const SWAGELOK_UHP_CATALOG_URL =
+  process.env.NEXT_PUBLIC_SWAGELOK_UHP_CATALOG_URL?.trim() || '/catalogs/Swagelok-UHP-Fittings.pdf';
+
 export const SLOK_CATALOG_URL =
   process.env.NEXT_PUBLIC_SLOK_CATALOG_URL?.trim() || '/catalogs/S-LOK-Tube-Fittings.pdf';
+
+export const SLOK_UHP_CATALOG_URL =
+  process.env.NEXT_PUBLIC_SLOK_UHP_CATALOG_URL?.trim() || '/catalogs/S-LOK_UHP_Fittings.pdf';

@@ -15,8 +15,10 @@ import {
   MAPPING_STATUS,
   MAPPING_STATUS_LABEL,
   SLOK_CATALOG_URL,
+  SLOK_UHP_CATALOG_URL,
   SOURCE_TYPE,
   SWAGELOK_CATALOG_URL,
+  SWAGELOK_UHP_CATALOG_URL,
 } from '@/lib/substitute/constants';
 import {
   createMapping,
@@ -561,19 +563,28 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
           </div>
 
           {lastNormalized && (
-            <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:relative">
+              <div className="flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-gray-900">Swagelok 제품 참고</h2>
-                <button
-                  type="button"
-                  onClick={() => openCatalogPopup(SWAGELOK_CATALOG_URL, 'swagelok_catalog')}
-                  className="self-start px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
-                >
-                  SWAGELOK 카탈로그
-                </button>
+              </div>
+              <div className="mt-2 flex flex-col gap-2 items-start sm:mt-0 sm:absolute sm:right-4 sm:top-4 sm:items-end">
+                  <button
+                    type="button"
+                    onClick={() => openCatalogPopup(SWAGELOK_CATALOG_URL, 'swagelok_catalog')}
+                    className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Swagelok Tube Fitting Catalogue
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openCatalogPopup(SWAGELOK_UHP_CATALOG_URL, 'swagelok_uhp_catalog')}
+                    className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    Swagelok UHP Fitting Catalogue
+                  </button>
               </div>
               {officialRef.productPageUrl ? (
-                <p className="mt-2 text-sm">
+                <p className="mt-2 text-sm sm:pr-[340px]">
                   <a
                     href={officialRef.productPageUrl}
                     target="_blank"
@@ -655,13 +666,22 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
                     <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
                       S-LOK
                     </h3>
-                    <button
-                      type="button"
-                      onClick={() => openCatalogPopup(SLOK_CATALOG_URL, 'slok_catalog')}
-                      className="self-start px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
-                    >
-                      S-LOK 카탈로그
-                    </button>
+                    <div className="self-start flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <button
+                        type="button"
+                        onClick={() => openCatalogPopup(SLOK_CATALOG_URL, 'slok_catalog')}
+                        className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                      >
+                        S-LOK Tube Fitting Catalogue
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openCatalogPopup(SLOK_UHP_CATALOG_URL, 'slok_uhp_catalog')}
+                        className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                      >
+                        S-LOK UHP Fitting Catalogue
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:space-y-0">
                     <label className="block text-sm">

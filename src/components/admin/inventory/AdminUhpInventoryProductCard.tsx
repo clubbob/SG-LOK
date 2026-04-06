@@ -31,6 +31,7 @@ type Props = {
   handleDeleteProductLine: (productName: string) => void;
   handleRenameItem: (productName: string, itemCode: string) => void;
   handleDeleteItem: (productName: string, itemCode: string) => void;
+  handleRenameVariant: (productName: string, itemCode: string, variantCode: string) => void;
   handleDeleteVariant: (productName: string, itemCode: string, variantCode: string) => void;
   openInboundCreateModal: (productName: string, itemCode: string) => void;
   openOutboundCreateModal: (productName: string, itemCode: string) => void;
@@ -62,6 +63,7 @@ export function AdminUhpInventoryProductCard({
   handleDeleteProductLine,
   handleRenameItem,
   handleDeleteItem,
+  handleRenameVariant,
   handleDeleteVariant,
   openInboundCreateModal,
   openOutboundCreateModal,
@@ -131,6 +133,16 @@ export function AdminUhpInventoryProductCard({
                                 <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
                                   {variant.currentStock} {variant.unit}
                                 </span>
+                                <button
+                                  type="button"
+                                  title="서브 품목 수정"
+                                  onClick={() =>
+                                    handleRenameVariant(product.name, item.code, variant.code)
+                                  }
+                                  className="rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100"
+                                >
+                                  수정
+                                </button>
                                 <button
                                   type="button"
                                   title="서브 품목 삭제"

@@ -989,6 +989,72 @@ export default function AdminInventoryStatusPage() {
     void persistUhpInventory(updated);
   };
 
+  const handleRenameVariant = (productName: string, itemCode: string, variantCode: string) => {
+    const inv = uhpInventoryRef.current;
+    const tab = findUhpTabDefByProductName(inv, productName);
+    if (!tab) {
+      setSyncError('품목을 찾을 수 없습니다.');
+      return;
+    }
+
+    const nextCodeInput = prompt('변경할 서브 품목 코드를 입력해 주세요.', variantCode);
+    const nextCode = nextCodeInput?.trim() ?? '';
+    if (!nextCode || nextCode === variantCode) return;
+
+    const targetProduct = getTabSliceProducts(inv, tab).find((line) => line.name === productName);
+    const targetItem = targetProduct?.items.find((item) => item.code === itemCode);
+    if (!targetItem) {
+      setSyncError('품목을 찾을 수 없습니다.');
+      return;
+    }
+    if ((targetItem.variants ?? []).some((v) => v.code === nextCode)) {
+      setSyncError('이미 같은 서브 품목 코드가 있습니다.');
+      return;
+    }
+
+    const nextState: UhpInventoryState = JSON.parse(JSON.stringify(inv)) as UhpInventoryState;
+    let renamed = false;
+    const nextSlice = getTabSliceProducts(nextState, tab).map((line) => {
+      if (line.name !== productName) return line;
+      return {
+        ...line,
+        items: line.items.map((item) => {
+          if (item.code !== itemCode) return item;
+          return {
+            ...item,
+            variants: (item.variants ?? []).map((v) => {
+              if (v.code !== variantCode) return v;
+              renamed = true;
+              return { ...v, code: nextCode };
+            }),
+            inboundHistory: (item.inboundHistory ?? []).map((h) =>
+              h.variantCode === variantCode ? { ...h, variantCode: nextCode } : h
+            ),
+            outboundHistory: (item.outboundHistory ?? []).map((h) =>
+              h.variantCode === variantCode ? { ...h, variantCode: nextCode } : h
+            ),
+            adjustmentHistory: (item.adjustmentHistory ?? []).map((h) =>
+              h.variantCode === variantCode ? { ...h, variantCode: nextCode } : h
+            ),
+            productionPlanHistory: (item.productionPlanHistory ?? []).map((h) =>
+              h.variantCode === variantCode ? { ...h, variantCode: nextCode } : h
+            ),
+          };
+        }),
+      };
+    });
+
+    if (!renamed) {
+      setSyncError('수정할 서브 품목을 찾을 수 없습니다.');
+      return;
+    }
+
+    const updated = setTabSliceProducts(nextState, tab, nextSlice);
+    setSyncError('');
+    setUhpInventory(updated);
+    void persistUhpInventory(updated);
+  };
+
   const handleRenameItem = (productName: string, itemCode: string) => {
     const tab = findUhpTabDefByProductName(uhpInventory, productName);
     if (!tab) {
@@ -1916,6 +1982,7 @@ export default function AdminInventoryStatusPage() {
     handleDeleteProductLine,
     handleRenameItem,
     handleDeleteItem,
+    handleRenameVariant,
     handleDeleteVariant,
     openInboundCreateModal,
     openOutboundCreateModal,

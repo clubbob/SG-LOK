@@ -296,6 +296,8 @@ export default function AdminInventoryStatusPage() {
   const lastAutoPersistSignatureRef = useRef('');
   const isPersistingRef = useRef(false);
   const pendingPersistStateRef = useRef<UhpInventoryState | null>(null);
+  const lastPersistAtRef = useRef(0);
+  const persistScheduleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setProductListPage(1);
@@ -427,7 +429,12 @@ export default function AdminInventoryStatusPage() {
         metalFaceSealProducts: reseedMetalByStructure.next,
       };
       setUhpInventory(reseedPreviewState);
-      if (allowAutoPersist && !isPendingLocalWrite && !isAutoPersistingRef.current) {
+      if (
+        allowAutoPersist &&
+        !isPendingLocalWrite &&
+        !isAutoPersistingRef.current &&
+        !isPersistingRef.current
+      ) {
         try {
           isAutoPersistingRef.current = true;
           await setDoc(
@@ -549,7 +556,7 @@ export default function AdminInventoryStatusPage() {
       autoPersistPayload.vcrToVcrProducts = deleteField();
     }
     const shouldAutoPersist = Object.keys(autoPersistPayload).length > 0;
-    if (allowAutoPersist && shouldAutoPersist && !isPendingLocalWrite) {
+    if (allowAutoPersist && shouldAutoPersist && !isPendingLocalWrite && !isPersistingRef.current) {
       const signature = JSON.stringify({
         products: autoPersistPayload.products ?? null,
         tubeButtWeldProducts: autoPersistPayload.tubeButtWeldProducts ?? null,
@@ -594,6 +601,15 @@ export default function AdminInventoryStatusPage() {
     return () => unsubscribe();
   }, [applyInventoryDocument]);
 
+  useEffect(() => {
+    return () => {
+      if (persistScheduleTimerRef.current != null) {
+        clearTimeout(persistScheduleTimerRef.current);
+        persistScheduleTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const refreshInventoryFromServer = async () => {
     setIsRefreshingInventory(true);
     setSyncError('');
@@ -609,13 +625,8 @@ export default function AdminInventoryStatusPage() {
     }
   };
 
-  const persistUhpInventory = async (nextState: UhpInventoryState) => {
-    // 연속 저장 요청을 1건으로 병합해 Firestore write queue 포화를 방지
-    pendingPersistStateRef.current = nextState;
-    if (isPersistingRef.current) {
-      return;
-    }
-
+  const flushPersistUhpInventory = async () => {
+    if (isPersistingRef.current) return;
     isPersistingRef.current = true;
     try {
       while (pendingPersistStateRef.current) {
@@ -626,7 +637,14 @@ export default function AdminInventoryStatusPage() {
         while (!saved && attempt < 5) {
           attempt += 1;
           try {
+            const now = Date.now();
+            const elapsed = now - lastPersistAtRef.current;
+            const minIntervalMs = 350;
+            if (elapsed < minIntervalMs) {
+              await new Promise((resolve) => setTimeout(resolve, minIntervalMs - elapsed));
+            }
             await persistUhpInventoryState(stateToSave);
+            lastPersistAtRef.current = Date.now();
             saved = true;
           } catch (error) {
             const code =
@@ -644,7 +662,7 @@ export default function AdminInventoryStatusPage() {
             if (!retryable || attempt >= 5) {
               throw error;
             }
-            const delayMs = Math.min(3000, 300 * 2 ** (attempt - 1));
+            const delayMs = Math.min(4000, 500 * 2 ** (attempt - 1));
             await new Promise((resolve) => setTimeout(resolve, delayMs));
           }
         }
@@ -655,7 +673,25 @@ export default function AdminInventoryStatusPage() {
       setSyncError('재고 데이터 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
       isPersistingRef.current = false;
+      if (pendingPersistStateRef.current && persistScheduleTimerRef.current == null) {
+        persistScheduleTimerRef.current = setTimeout(() => {
+          persistScheduleTimerRef.current = null;
+          void flushPersistUhpInventory();
+        }, 500);
+      }
     }
+  };
+
+  const persistUhpInventory = async (nextState: UhpInventoryState) => {
+    // 저장 요청을 디바운스/병합해 write queue 포화를 방지
+    pendingPersistStateRef.current = nextState;
+    if (persistScheduleTimerRef.current != null || isPersistingRef.current) {
+      return;
+    }
+    persistScheduleTimerRef.current = setTimeout(() => {
+      persistScheduleTimerRef.current = null;
+      void flushPersistUhpInventory();
+    }, 500);
   };
 
   const uhpInventoryRef = useRef(uhpInventory);
@@ -894,6 +930,57 @@ export default function AdminInventoryStatusPage() {
 
     if (!removed) {
       setSyncError('삭제할 품목을 찾을 수 없습니다.');
+      return;
+    }
+
+    const updated = setTabSliceProducts(nextState, tab, nextSlice);
+    setUhpInventory(updated);
+    void persistUhpInventory(updated);
+  };
+
+  const handleDeleteVariant = (productName: string, itemCode: string, variantCode: string) => {
+    const inv = uhpInventoryRef.current;
+    const tab = findUhpTabDefByProductName(inv, productName);
+    if (!tab) {
+      setSyncError('품목을 찾을 수 없습니다.');
+      return;
+    }
+
+    if (!confirm(`"${variantCode}" 서브 품목을 삭제하시겠습니까?`)) {
+      return;
+    }
+    if (!confirm(`최종 확인: "${variantCode}"를 정말 삭제할까요?\n삭제 후에는 복구할 수 없습니다.`)) {
+      return;
+    }
+
+    const nextState: UhpInventoryState = JSON.parse(JSON.stringify(uhpInventoryRef.current)) as UhpInventoryState;
+    let removed = false;
+    const nextSlice = getTabSliceProducts(nextState, tab).map((line) => {
+      if (line.name !== productName) return line;
+      return {
+        ...line,
+        items: line.items.map((item) => {
+          if (item.code !== itemCode) return item;
+          const nextVariants = (item.variants ?? []).filter((v) => v.code !== variantCode);
+          if (nextVariants.length !== (item.variants ?? []).length) {
+            removed = true;
+          }
+          return {
+            ...item,
+            variants: nextVariants,
+            inboundHistory: (item.inboundHistory ?? []).filter((h) => h.variantCode !== variantCode),
+            outboundHistory: (item.outboundHistory ?? []).filter((h) => h.variantCode !== variantCode),
+            adjustmentHistory: (item.adjustmentHistory ?? []).filter((h) => h.variantCode !== variantCode),
+            productionPlanHistory: (item.productionPlanHistory ?? []).filter(
+              (h) => h.variantCode !== variantCode
+            ),
+          };
+        }),
+      };
+    });
+
+    if (!removed) {
+      setSyncError('삭제할 서브 품목을 찾을 수 없습니다.');
       return;
     }
 
@@ -1829,6 +1916,7 @@ export default function AdminInventoryStatusPage() {
     handleDeleteProductLine,
     handleRenameItem,
     handleDeleteItem,
+    handleDeleteVariant,
     openInboundCreateModal,
     openOutboundCreateModal,
     openProductionPlanCreateModal,

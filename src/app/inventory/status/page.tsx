@@ -52,6 +52,8 @@ type InventoryProduct = {
   items: InventoryItem[];
 };
 
+const isVisibleVariantCode = (code: string): boolean => !code.toUpperCase().includes('-SL-');
+
 const FALLBACK_UHP: UhpInventoryState = {
   products: INITIAL_MICRO_WELD_PRODUCTS as CatalogInventoryProduct[],
   tubeButtWeldProducts: INITIAL_TUBE_BUTT_WELD_PRODUCTS as CatalogInventoryProduct[],
@@ -175,10 +177,15 @@ function InventoryStatusPageContent() {
     categoryLabel?: string;
   };
 
-  const getItemCurrentStock = (item: InventoryItem): number =>
-    item.variants && item.variants.length > 0
-      ? item.variants.reduce((sum, variant) => sum + variant.currentStock, 0)
+  const getVisibleVariants = (item: InventoryItem): InventoryVariant[] =>
+    (item.variants ?? []).filter((variant) => isVisibleVariantCode(variant.code));
+
+  const getItemCurrentStock = (item: InventoryItem): number => {
+    const visibleVariants = getVisibleVariants(item);
+    return visibleVariants.length > 0
+      ? visibleVariants.reduce((sum, variant) => sum + variant.currentStock, 0)
       : item.currentStock;
+  };
 
   const applyStockFilter = <T extends { filteredItems: InventoryItem[] }>(products: T[]): T[] => {
     if (!stockFilter) return products;
@@ -402,9 +409,9 @@ function InventoryStatusPageContent() {
                                 {item.unit}
                               </span>
                             </div>
-                            {item.variants && item.variants.length > 0 && (
+                            {item.variants && getVisibleVariants(item).length > 0 && (
                               <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                                {item.variants.map((variant) => (
+                                {getVisibleVariants(item).map((variant) => (
                                   (() => {
                                     const variantPlanInfo = getVariantProductionPlanInfo(
                                       item,

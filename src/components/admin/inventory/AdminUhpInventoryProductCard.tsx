@@ -31,6 +31,7 @@ type Props = {
   handleDeleteProductLine: (productName: string) => void;
   handleRenameItem: (productName: string, itemCode: string) => void;
   handleDeleteItem: (productName: string, itemCode: string) => void;
+  handleDeleteVariant: (productName: string, itemCode: string, variantCode: string) => void;
   openInboundCreateModal: (productName: string, itemCode: string) => void;
   openOutboundCreateModal: (productName: string, itemCode: string) => void;
   openProductionPlanCreateModal: (productName: string, itemCode: string) => void;
@@ -61,6 +62,7 @@ export function AdminUhpInventoryProductCard({
   handleDeleteProductLine,
   handleRenameItem,
   handleDeleteItem,
+  handleDeleteVariant,
   openInboundCreateModal,
   openOutboundCreateModal,
   openProductionPlanCreateModal,
@@ -125,9 +127,21 @@ export function AdminUhpInventoryProductCard({
                           >
                             <div className="flex items-center justify-between gap-1">
                               <span className="font-medium text-gray-700">{variant.code}</span>
-                              <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
-                                {variant.currentStock} {variant.unit}
-                              </span>
+                              <div className="flex items-center gap-1">
+                                <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
+                                  {variant.currentStock} {variant.unit}
+                                </span>
+                                <button
+                                  type="button"
+                                  title="서브 품목 삭제"
+                                  onClick={() =>
+                                    handleDeleteVariant(product.name, item.code, variant.code)
+                                  }
+                                  className="rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 hover:bg-red-100"
+                                >
+                                  삭제
+                                </button>
+                              </div>
                             </div>
                             {variantPlanInfo && (
                               <div className="mt-1 flex items-center justify-between gap-1">

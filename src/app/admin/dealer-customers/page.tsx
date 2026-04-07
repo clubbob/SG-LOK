@@ -50,17 +50,18 @@ export default function AdminDealerCustomersPage() {
           const statusUpdatedAt = (data.statusUpdatedAt ?? data.status_updated_at) as { toDate?: () => Date } | undefined;
           const createdAtDate = createdAt?.toDate ? createdAt.toDate() : null;
           const statusChangedAtDate = statusUpdatedAt?.toDate ? statusUpdatedAt.toDate() : null;
+          const statusValue: DealerCustomerRow["status"] =
+            String(data.status ?? "업체등록중") === "판매중"
+              ? "판매중"
+              : String(data.status ?? "업체등록중") === "거래중단중"
+                ? "거래중단중"
+                : "업체등록중";
           return {
             id: docSnap.id,
             dealerName: String(data.dealerName ?? data.dealer_name ?? "-"),
             customerName: String(data.customerName ?? data.customer_name ?? "-"),
             managerName: String(data.managerName ?? data.manager_name ?? data.manager ?? data.contactName ?? "-"),
-            status:
-              String(data.status ?? "업체등록중") === "판매중"
-                ? "판매중"
-                : String(data.status ?? "업체등록중") === "거래중단중"
-                  ? "거래중단중"
-                  : "업체등록중",
+            status: statusValue,
             createdBy: String(data.createdByName ?? data.created_by_name ?? data.createdBy ?? data.created_by ?? "관리자"),
             createdAtText: createdAtDate ? formatDateTimeLocal(createdAtDate) : "-",
             statusChangedAtText: statusChangedAtDate ? formatDateTimeLocal(statusChangedAtDate) : "-",

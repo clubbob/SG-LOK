@@ -16,6 +16,12 @@ export function useAuth() {
       setUser(user);
       
       if (user) {
+        // 관리자 영역에서 사용하는 익명 인증은 사용자 로그인으로 취급하지 않음
+        if (user.isAnonymous) {
+          setUserProfile(null);
+          setLoading(false);
+          return;
+        }
         try {
           // Firestore에서 사용자 프로필 정보 가져오기 (재시도 로직 포함)
           let userDoc = null;
@@ -105,7 +111,7 @@ export function useAuth() {
     }
   };
 
-  const isAuthenticated = !!user && userProfile !== null && userProfile.approved !== false;
+  const isAuthenticated = !!user && !user.isAnonymous && userProfile !== null && userProfile.approved !== false;
 
   return {
     user,

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { signInAnonymously } from 'firebase/auth';
 
@@ -119,8 +119,21 @@ const adminMenuItems: MenuItem[] = [
       </svg>
     ),
     subItems: [
-      { id: 'inventory-status', label: 'UHP 제품재고', path: '/admin/inventory/status' },
+      { id: 'inventory-status', label: 'UHP 재고 관리', path: '/admin/inventory/status' },
       { id: 'inventory-products', label: '제품 이미지 등록', path: '/admin/inventory/products' },
+    ],
+  },
+  {
+    id: 'dealer-customers',
+    label: '대리점관리',
+    path: '/admin/dealer-customers',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5V4H2v16h5m10 0v-2a4 4 0 00-8 0v2m8 0H9m0 0H7m2 0v-2a4 4 0 018 0v2M7 8h.01M7 12h.01M11 8h6M11 12h6" />
+      </svg>
+    ),
+    subItems: [
+      { id: 'dealer-customer-manage', label: '대리점 담당고객 관리', path: '/admin/dealer-customers' },
     ],
   },
   {
@@ -195,6 +208,9 @@ export default function AdminLayout({
     if (pathname?.startsWith('/admin/substitute')) {
       setExpandedMenus(prev => new Set(prev).add('substitute'));
     }
+    if (pathname?.startsWith('/admin/dealer-customers')) {
+      setExpandedMenus(prev => new Set(prev).add('dealer-customers'));
+    }
   }, [router, pathname]);
 
   // admin_session은 localStorage 기반이므로, Firebase 인증이 만료/실패된 경우
@@ -203,12 +219,36 @@ export default function AdminLayout({
   useEffect(() => {
     if (!isAdminAuthenticated) return;
 
-    // 이미 인증된 경우 중복 로그인 방지
-    if (auth.currentUser) return;
+    const ensureAdminIdentity = async () => {
+      try {
+        // Firebase 인증이 없으면 익명 인증으로 관리자 세션을 연결
+        if (!auth.currentUser) {
+          await signInAnonymously(auth);
+        }
+        const currentUser = auth.currentUser;
+        const uid = currentUser?.uid;
+        if (!uid) return;
 
-    signInAnonymously(auth).catch((e) => {
-      console.warn('Firebase 익명 인증(관리자) 실패:', e);
-    });
+        // 일반 사용자 프로필(users/{uid})은 절대 덮어쓰지 않음.
+        // 관리자(익명 인증) 세션에서만 관리자 플래그를 보장한다.
+        if (!currentUser?.isAnonymous) return;
+
+        // Firestore 규칙의 isAdmin() 판별용 관리자 플래그 보장
+        await setDoc(
+          doc(db, 'users', uid),
+          {
+            isAdmin: true,
+            role: 'admin',
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        console.warn('Firebase 익명 인증/관리자 플래그 설정 실패:', e);
+      }
+    };
+
+    ensureAdminIdentity();
   }, [isAdminAuthenticated]);
 
   // 승인 대기 회원 수 실시간 구독
@@ -239,6 +279,15 @@ export default function AdminLayout({
   const handleLogout = () => {
     localStorage.removeItem(ADMIN_SESSION_KEY);
     router.push('/admin/login');
+  };
+
+  const handleGoUserLogin = () => {
+    // 관리자 탭과 사용자 탭의 Firebase Auth 세션 충돌을 막기 위해
+    // 다른 host(origin)로 사용자 로그인 탭을 연다. (localhost <-> 127.0.0.1)
+    const { protocol, port, hostname } = window.location;
+    const altHost = hostname === 'localhost' ? '127.0.0.1' : 'localhost';
+    const userLoginUrl = `${protocol}//${altHost}${port ? `:${port}` : ''}/login`;
+    window.open(userLoginUrl, '_blank', 'noopener,noreferrer');
   };
 
   // 로그인 페이지는 레이아웃 없이 그대로 표시 (pathname이 null이거나 로그인 페이지인 경우)
@@ -517,17 +566,16 @@ export default function AdminLayout({
             })}
           </nav>
           <div className="p-3 border-t border-gray-200 flex-shrink-0 space-y-2">
-            <a
-              href="/"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={handleGoUserLogin}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
               <span className="text-sm">홈페이지</span>
-            </a>
+            </button>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors"

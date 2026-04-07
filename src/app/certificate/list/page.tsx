@@ -38,6 +38,11 @@ const truncateText = (text: string, maxLength: number = 15): string => {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 };
 
+const toDisplayUppercase = (text: string | undefined | null): string => {
+  if (!text) return '-';
+  return text.toUpperCase();
+};
+
 function CertificateListPageContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
@@ -400,7 +405,12 @@ function CertificateListPageContent() {
                               <div className="text-xs text-gray-900 whitespace-nowrap" title={certificate.orderNumber || '-'}>{truncateText(certificate.orderNumber || '-')}</div>
                             </td>
                             <td className="px-1 py-3 min-w-[100px]">
-                              <div className="text-xs font-medium text-gray-900 whitespace-nowrap" title={certificate.productName || '-'}>{truncateText(certificate.productName || '-')}</div>
+                              <div
+                                className="text-xs font-medium text-gray-900 whitespace-nowrap"
+                                title={toDisplayUppercase(certificate.productName)}
+                              >
+                                {truncateText(toDisplayUppercase(certificate.productName))}
+                              </div>
                             </td>
                             <td className="px-1 py-3 min-w-[100px]">
                               <div className="text-xs text-gray-900 whitespace-nowrap" title={certificate.productCode || '-'}>{truncateText(certificate.productCode || '-')}</div>
@@ -642,7 +652,7 @@ function CertificateListPageContent() {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">제품명</label>
-                        <p className="text-sm text-gray-900">{selectedCertificateForView.productName || '-'}</p>
+                        <p className="text-sm text-gray-900">{toDisplayUppercase(selectedCertificateForView.productName)}</p>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">제품코드</label>

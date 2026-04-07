@@ -1999,7 +1999,7 @@ export default function AdminInventoryStatusPage() {
     <div className="p-6 sm:p-8">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">UHP 제품재고</h1>
+          <h1 className="text-2xl font-bold text-gray-900">UHP 재고 관리</h1>
           <p className="text-gray-600 mt-2">
             입고·출고·재고조정·생산계획·이력과 함께, 각 제품 카드에서{' '}
             <span className="font-medium text-gray-800">품목 코드</span>는 「품목 추가」로 등록할 수 있습니다.

@@ -74,6 +74,7 @@ export default function AdminUsersPage() {
             currentRole: data.currentRole,
             createdAt: data.createdAt?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || new Date(),
+            lastLoginAt: data.lastLoginAt?.toDate(),
             approved: data.approved,
             deleted: data.deleted || false,
             deletedAt: data.deletedAt?.toDate(),
@@ -129,6 +130,7 @@ export default function AdminUsersPage() {
           currentRole: data.currentRole,
           createdAt: data.createdAt?.toDate() || new Date(),
           updatedAt: data.updatedAt?.toDate() || new Date(),
+          lastLoginAt: data.lastLoginAt?.toDate(),
           approved: data.approved,
           deleted: data.deleted || false,
           deletedAt: data.deletedAt?.toDate(),
@@ -292,6 +294,9 @@ export default function AdminUsersPage() {
                           <p className="text-xs text-gray-500">
                             가입일: {formatDateTime(user.createdAt)}
                           </p>
+                          <p className="text-xs text-gray-500">
+                            최근 로그인: {user.lastLoginAt ? formatDateTime(user.lastLoginAt) : '-'}
+                          </p>
                         </button>
                       ))
                     )}
@@ -412,6 +417,12 @@ export default function AdminUsersPage() {
                         <div className="flex">
                           <span className="font-medium text-gray-700 w-32 flex-shrink-0">수정일:</span>
                           <span className="text-gray-900">{formatDateTime(selectedUser.updatedAt)}</span>
+                        </div>
+                        <div className="flex">
+                          <span className="font-medium text-gray-700 w-32 flex-shrink-0">최근 로그인:</span>
+                          <span className="text-gray-900">
+                            {selectedUser.lastLoginAt ? formatDateTime(selectedUser.lastLoginAt) : '-'}
+                          </span>
                         </div>
                         {selectedUser.deletedAt && (
                           <div className="flex">

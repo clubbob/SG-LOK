@@ -287,8 +287,19 @@ function InventoryStatusPageContent() {
       <main className="flex-1 bg-gray-50">
         <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
           <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">UHP 재고현황</h1>
-            <p className="text-gray-600 mt-2">현재 UHP 재고 현황을 검색하는 페이지입니다.</p>
+            <div className="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">UHP 재고현황</h1>
+                <p className="text-gray-600 mt-2">현재 UHP 재고 현황을 검색하는 페이지입니다.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                새로고침
+              </button>
+            </div>
           </div>
 
           <div className="mb-4">

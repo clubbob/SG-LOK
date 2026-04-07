@@ -60,17 +60,18 @@ export default function DealerCustomersPage() {
       (snapshot) => {
         const next = snapshot.docs.map((docSnap) => {
           const data = docSnap.data() as Record<string, unknown>;
+          const statusValue: DealerCustomerRow["status"] =
+            String(data.status ?? "업체등록중") === "판매중"
+              ? "판매중"
+              : String(data.status ?? "업체등록중") === "거래중단중"
+                ? "거래중단중"
+                : "업체등록중";
           return {
             id: docSnap.id,
             dealerName: String(data.dealerName ?? data.dealer_name ?? "-"),
             customerName: String(data.customerName ?? data.customer_name ?? "-"),
             managerName: String(data.managerName ?? data.manager_name ?? data.manager ?? data.contactName ?? "-"),
-            status:
-              String(data.status ?? "업체등록중") === "판매중"
-                ? "판매중"
-                : String(data.status ?? "업체등록중") === "거래중단중"
-                  ? "거래중단중"
-                  : "업체등록중",
+            status: statusValue,
             createdAt: toDateOrNull(data.createdAt ?? data.created_at),
             statusUpdatedAt: toDateOrNull(data.statusUpdatedAt ?? data.status_updated_at),
             createdBy: String(data.createdByName ?? data.created_by_name ?? data.createdBy ?? data.created_by ?? "-"),

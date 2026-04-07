@@ -28,7 +28,11 @@ function insertLetterDigitHyphens(s: string): string {
 export function normalizeInstrumentCode(raw: string): string {
   let s = raw.trim().toUpperCase().replace(/\s+/g, '');
   s = s.replace(/-+/g, '-').replace(/^-|-$/g, '');
-  s = insertLetterDigitHyphens(s);
+  // 하이픈이 이미 포함된 품번(예: 6LV-4MW-3)은 원형을 우선 보존하고,
+  // 하이픈 없는 입력(예: SS40014)에만 경계 보정 규칙을 적용한다.
+  if (!s.includes('-')) {
+    s = insertLetterDigitHyphens(s);
+  }
   const parts = s.split('-').filter(Boolean);
   return parts.map((p) => normalizeSegment(p)).join('-');
 }

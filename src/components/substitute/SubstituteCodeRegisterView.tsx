@@ -23,6 +23,7 @@ import {
 import {
   createMapping,
   deleteMapping,
+  fetchAllMappings,
   fetchMappingHistory,
   searchMappingsBySwagelokCode,
   updateMapping,
@@ -90,6 +91,15 @@ type EditFormState = {
   source_name: string;
   source_url: string;
   confidence: number;
+};
+
+const canonicalizeCode = (raw: string): string =>
+  raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+const isSwagelokManufacturer = (value: unknown): boolean => {
+  if (typeof value !== 'string') return false;
+  const c = canonicalizeCode(value);
+  return c === canonicalizeCode(MANUFACTURER.SWAGELOK) || c.includes('SWAGELOK');
 };
 
 export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: boolean }) {
@@ -266,7 +276,41 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
     setResults([]);
     try {
       const rows = await searchMappingsBySwagelokCode(db, norm, false);
-      setResults(rows);
+      if (rows.length > 0) {
+        setResults(rows);
+      } else {
+        // 2차 fallback: 표기 흔들림(하이픈/구분자 차이)까지 흡수해 로컬 매칭
+        const all = await fetchAllMappings(db);
+        const normKey = canonicalizeCode(norm);
+        const exactRows = all.filter((m) => {
+          if (!isSwagelokManufacturer(m.manufacturer_from)) return false;
+          const normalizedFrom = canonicalizeCode(m.normalized_code_from ?? '');
+          const rawFrom = canonicalizeCode(m.code_from ?? '');
+          return normalizedFrom === normKey || rawFrom === normKey;
+        });
+        if (exactRows.length > 0) {
+          setResults(exactRows);
+        } else {
+          // 3차 fallback: 부분·근접 매칭 (예: 접두/접미/포함)
+          const fuzzyRows = all.filter((m) => {
+            if (!isSwagelokManufacturer(m.manufacturer_from)) return false;
+            const normalizedFrom = canonicalizeCode(m.normalized_code_from ?? '');
+            const rawFrom = canonicalizeCode(m.code_from ?? '');
+            const candidates = [normalizedFrom, rawFrom].filter(Boolean);
+            return candidates.some(
+              (c) =>
+                c.includes(normKey) ||
+                normKey.includes(c) ||
+                c.startsWith(normKey) ||
+                normKey.startsWith(c)
+            );
+          });
+          setResults(fuzzyRows);
+          if (fuzzyRows.length > 0) {
+            setInfo('유사 코드로 검색 결과를 표시했습니다. 정확한 품번인지 확인해 주세요.');
+          }
+        }
+      }
     } catch (e: unknown) {
       console.error(e);
       setError('검색 중 오류가 발생했습니다. Firestore 규칙·인덱스를 확인하세요.');

@@ -139,7 +139,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
     <div className={embedded ? "min-h-full bg-gray-50 p-4 sm:p-8" : "min-h-screen flex flex-col"}>
       {!embedded && <Header />}
       <main className={embedded ? "" : "flex-1 bg-gray-50"}>
-        <div className={embedded ? "max-w-6xl mx-auto" : "max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8"}>
+        <div className={embedded ? "max-w-[1400px] mx-auto" : "max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8"}>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">코드 목록</h1>
           <p className="text-gray-600 mt-2 text-sm sm:text-base">
             Swagelok / S-LOK 매핑 목록을 확인할 수 있습니다.
@@ -199,14 +199,14 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
             </div>
 
             <div className="mt-4 overflow-x-auto rounded-md border border-gray-200">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-[1100px] divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">번호</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Swagelok 제품명</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Swagelok 제품코드</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">S-LOK 제품명</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">S-LOK 제품코드</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">번호</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Swagelok 제품명</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Swagelok 제품코드</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">S-LOK 제품명</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">S-LOK 제품코드</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록일</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록자</th>
                   </tr>
@@ -217,10 +217,10 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                       <td className="px-4 py-3 text-sm text-gray-800">
                         {filteredRows.length - ((effectivePage - 1) * PAGE_SIZE + index)}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{row.product_name_from || "-"}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800">{row.code_from || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{row.product_name_to || "-"}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800">{row.code_to || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{row.product_name_from || "-"}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">{row.code_from || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{row.product_name_to || "-"}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">{row.code_to || "-"}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">{formatDateTime(row.created_at)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
                         {row.created_by ? resolveSubstituteRegistrantLabel(row.created_by, userNameById) : "-"}

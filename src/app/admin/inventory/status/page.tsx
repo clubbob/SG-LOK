@@ -1173,7 +1173,7 @@ export default function AdminInventoryStatusPage() {
       productName,
       itemCode,
       variantCode: defaultVariant?.code ?? '',
-      actualStockInput: defaultVariant ? String(defaultVariant.currentStock) : '',
+      actualStockInput: '',
       reasonInput: '',
     });
     setAdjustmentFormError('');
@@ -2470,9 +2470,7 @@ export default function AdminInventoryStatusPage() {
                         return {
                           ...prev,
                           variantCode: e.target.value,
-                          actualStockInput: selectedVariant
-                            ? String(selectedVariant.currentStock)
-                            : prev.actualStockInput,
+                          actualStockInput: '',
                         };
                       })
                     }

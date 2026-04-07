@@ -397,7 +397,13 @@ function InventoryStatusPageContent() {
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-sm font-semibold text-gray-800">{item.code}</p>
                               <span
-                                className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700"
+                                className={`rounded-md px-2.5 py-1 text-sm font-bold shadow-sm ${
+                                  (item.variants && item.variants.length > 0
+                                    ? item.variants.reduce((sum, variant) => sum + variant.currentStock, 0)
+                                    : item.currentStock) > 0
+                                    ? 'border-2 border-emerald-600 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300'
+                                    : 'border border-blue-300 bg-blue-100 text-blue-900'
+                                }`}
                               >
                                 총 현재고{' '}
                                 {item.variants && item.variants.length > 0
@@ -422,11 +428,17 @@ function InventoryStatusPageContent() {
                                     return (
                                       <div
                                         key={variant.code}
-                                        className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
+                                        className="rounded border border-gray-200 bg-white px-2 py-1.5 text-[11px]"
                                       >
                                         <div className="flex items-center justify-between gap-1">
                                           <span className="font-medium text-gray-700">{variant.code}</span>
-                                          <span className="rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 font-semibold text-blue-700">
+                                          <span
+                                            className={`rounded-md px-2 py-0.5 text-xs font-bold shadow-sm ${
+                                              variant.currentStock > 0
+                                                ? 'border-2 border-emerald-600 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300'
+                                                : 'border border-blue-300 bg-blue-100 text-blue-900'
+                                            }`}
+                                          >
                                             {variant.currentStock} {variant.unit}
                                           </span>
                                         </div>

@@ -601,7 +601,7 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
 
             {showNoMappingHelp && (
               <div className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 space-y-2">
-                <p>등록된 매핑이 없습니다. 품번 미등록이거나 표기 차이일 수 있습니다.</p>
+                <p>등록한 대체 제품이 DB에 없습니다. 품번 미등록이거나 표기 차이일 수 있습니다.</p>
               </div>
             )}
           </div>

@@ -38,6 +38,8 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
   const PAGE_SIZE = 10;
   const { isAuthenticated, loading, user } = useAuth();
   const canAccessPage = embedded ? Boolean(user) : isAuthenticated;
+  const canEditRows = canAccessPage;
+  const canDeleteRows = embedded;
   const router = useRouter();
   const [rows, setRows] = useState<SubstituteMappingDoc[]>([]);
   const [isLoadingRows, setIsLoadingRows] = useState(false);
@@ -67,9 +69,21 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
       const usersSnap = await getDocs(collection(db, "users"));
       const nextUserNameById: Record<string, string> = {};
       usersSnap.forEach((d) => {
-        const data = d.data() as { name?: unknown };
-        nextUserNameById[d.id] =
-          typeof data.name === "string" && data.name.trim() ? data.name.trim() : d.id;
+        const data = d.data() as { name?: unknown; isAdmin?: unknown; role?: unknown; email?: unknown };
+        const isAdminUser = data.isAdmin === true || data.role === "admin";
+        if (isAdminUser) {
+          nextUserNameById[d.id] = "관리자";
+          return;
+        }
+        if (typeof data.name === "string" && data.name.trim()) {
+          nextUserNameById[d.id] = data.name.trim();
+          return;
+        }
+        if (typeof data.email === "string" && data.email.includes("@")) {
+          nextUserNameById[d.id] = data.email.split("@")[0] || d.id;
+          return;
+        }
+        nextUserNameById[d.id] = d.id;
       });
       setUserNameById(nextUserNameById);
       const onlySwToSlok = all.filter(
@@ -215,61 +229,63 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
       {!embedded && <Header />}
       <main className={embedded ? "" : "flex-1 bg-gray-50"}>
         <div className={embedded ? "max-w-[1400px] mx-auto" : "max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8"}>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">코드 목록</h1>
-          <p className="text-gray-600 mt-2 text-sm sm:text-base">
-            Swagelok / S-LOK 매핑 목록을 확인할 수 있습니다.
-          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">코드 목록</h1>
+              <p className="text-gray-600 mt-2 text-sm sm:text-base">
+                Swagelok / S-LOK 매핑 목록을 확인할 수 있습니다.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() =>
+                  downloadSubstituteListXlsx(
+                    filteredRows,
+                    userNameById,
+                    `substitute-code-list-${new Date().toISOString().slice(0, 10)}.xlsx`
+                  )
+                }
+                disabled={filteredRows.length === 0}
+                className="inline-flex items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                엑셀 다운로드
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadRows()}
+                disabled={isLoadingRows}
+                className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {isLoadingRows ? "불러오는 중..." : "새로고침"}
+              </button>
+            </div>
+          </div>
 
           <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div className="flex-1">
-                <label htmlFor="code-list-search" className="mb-1 block text-sm font-medium text-gray-700">
-                  목록 검색
-                </label>
-                <div className="relative">
-                  <input
-                    id="code-list-search"
-                    type="text"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="제품명 또는 제품코드 검색"
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                  />
-                  {query && (
-                    <button
-                      type="button"
-                      aria-label="검색어 지우기"
-                      onClick={() => setQuery("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    downloadSubstituteListXlsx(
-                      filteredRows,
-                      userNameById,
-                      `substitute-code-list-${new Date().toISOString().slice(0, 10)}.xlsx`
-                    )
-                  }
-                  disabled={filteredRows.length === 0}
-                  className="inline-flex items-center justify-center rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  엑셀 다운로드
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void loadRows()}
-                  disabled={isLoadingRows}
-                  className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                >
-                  {isLoadingRows ? "불러오는 중..." : "새로고침"}
-                </button>
+            <div className="flex-1">
+              <label htmlFor="code-list-search" className="mb-1 block text-sm font-medium text-gray-700">
+                목록 검색
+              </label>
+              <div className="relative">
+                <input
+                  id="code-list-search"
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="제품명 또는 제품코드 검색"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    aria-label="검색어 지우기"
+                    onClick={() => setQuery("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             </div>
 
@@ -284,7 +300,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">S-LOK 제품코드</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록일</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록자</th>
-                    {embedded && (
+                    {canEditRows && (
                       <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">관리</th>
                     )}
                   </tr>
@@ -296,7 +312,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                         {filteredRows.length - ((effectivePage - 1) * PAGE_SIZE + index)}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                        {embedded && editingId === row.id ? (
+                        {canEditRows && editingId === row.id ? (
                           <input
                             type="text"
                             value={editFromName}
@@ -308,7 +324,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
-                        {embedded && editingId === row.id ? (
+                        {canEditRows && editingId === row.id ? (
                           <input
                             type="text"
                             value={editFromCode}
@@ -320,7 +336,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                        {embedded && editingId === row.id ? (
+                        {canEditRows && editingId === row.id ? (
                           <input
                             type="text"
                             value={editToName}
@@ -332,7 +348,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
-                        {embedded && editingId === row.id ? (
+                        {canEditRows && editingId === row.id ? (
                           <input
                             type="text"
                             value={editToCode}
@@ -347,7 +363,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
                         {row.created_by ? resolveSubstituteRegistrantLabel(row.created_by, userNameById) : "-"}
                       </td>
-                      {embedded && (
+                      {canEditRows && (
                         <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
                           {editingId === row.id ? (
                             <div className="flex items-center gap-2">
@@ -378,14 +394,16 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                               >
                                 수정
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => void removeRow(row)}
-                                disabled={Boolean(editingId) || deletingId === row.id}
-                                className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-                              >
-                                {deletingId === row.id ? "삭제 중..." : "삭제"}
-                              </button>
+                              {canDeleteRows && (
+                                <button
+                                  type="button"
+                                  onClick={() => void removeRow(row)}
+                                  disabled={Boolean(editingId) || deletingId === row.id}
+                                  className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                                >
+                                  {deletingId === row.id ? "삭제 중..." : "삭제"}
+                                </button>
+                              )}
                             </div>
                           )}
                         </td>

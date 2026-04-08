@@ -39,11 +39,13 @@ function formatDateTimeLocal(date: Date): string {
 }
 
 export default function DealerCustomersPage() {
+  const PAGE_SIZE = 10;
   const { user, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<DealerCustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     if (authLoading) return;
@@ -97,8 +99,9 @@ export default function DealerCustomersPage() {
   const hasRows = useMemo(() => rows.length > 0, [rows]);
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredRows = useMemo(() => {
-    if (!normalizedQuery) return rows;
-    return rows.filter((row) => {
+    const base = !normalizedQuery
+      ? rows
+      : rows.filter((row) => {
       const dealer = row.dealerName.toLowerCase();
       const customer = row.customerName.toLowerCase();
       const managerName = row.managerName.toLowerCase();
@@ -112,8 +115,50 @@ export default function DealerCustomersPage() {
         registrant.includes(normalizedQuery)
       );
     });
+    return [...base].sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0));
   }, [rows, normalizedQuery]);
   const hasFilteredRows = filteredRows.length > 0;
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const effectivePage = Math.min(currentPage, totalPages);
+  const pagedRows = useMemo(() => {
+    const sliced = filteredRows.slice((effectivePage - 1) * PAGE_SIZE, effectivePage * PAGE_SIZE);
+    return [...sliced].reverse();
+  }, [filteredRows, effectivePage]);
+
+  useEffect(() => {
+    if (filteredRows.length === 0) {
+      setCurrentPage(1);
+      return;
+    }
+    if (!normalizedQuery) {
+      setCurrentPage(totalPages);
+    } else {
+      setCurrentPage(1);
+    }
+  }, [normalizedQuery, filteredRows.length, totalPages]);
+
+  const handleDownloadExcel = async () => {
+    const XLSX = await import("xlsx");
+    const exportSource = [...filteredRows].reverse();
+    const exportRows = exportSource.map((row, index) => ({
+      번호: filteredRows.length - index,
+      대리점: row.dealerName,
+      담당고객사: row.customerName,
+      담당자: row.managerName,
+      현황: row.status,
+      최초등록일: row.createdAt ? formatDateTimeLocal(row.createdAt) : "-",
+      현황변경일: row.statusUpdatedAt ? formatDateTimeLocal(row.statusUpdatedAt) : "-",
+      등록자: row.createdBy,
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "대리점담당고객");
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    XLSX.writeFile(wb, `dealer-customers-user-${y}${m}${d}.xlsx`);
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -125,13 +170,22 @@ export default function DealerCustomersPage() {
               <h1 className="text-2xl font-bold text-gray-900">대리점 담당고객</h1>
               <p className="mt-2 text-gray-600">관리자에서 등록/수정한 담당고객 목록입니다.</p>
             </div>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-            >
-              새로고침
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadExcel}
+                className="inline-flex items-center rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-100"
+              >
+                엑셀다운로드
+              </button>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                새로고침
+              </button>
+            </div>
           </div>
 
           <div className="mb-4">
@@ -148,22 +202,23 @@ export default function DealerCustomersPage() {
                 placeholder="대리점, 담당고객사, 담당자, 현황, 등록자 검색"
                 className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
               />
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                disabled={searchQuery.trim().length === 0}
-                className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:cursor-default disabled:opacity-40"
-                aria-label="검색어 지우기"
-                title="검색어 지우기"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path
-                    fillRule="evenodd"
-                    d="M4.22 4.22a.75.75 0 011.06 0L10 8.94l4.72-4.72a.75.75 0 111.06 1.06L11.06 10l4.72 4.72a.75.75 0 11-1.06 1.06L10 11.06l-4.72 4.72a.75.75 0 01-1.06-1.06L8.94 10 4.22 5.28a.75.75 0 010-1.06z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </button>
+              {searchQuery.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  aria-label="검색어 지우기"
+                  title="검색어 지우기"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path
+                      fillRule="evenodd"
+                      d="M4.22 4.22a.75.75 0 011.06 0L10 8.94l4.72-4.72a.75.75 0 111.06 1.06L11.06 10l4.72 4.72a.75.75 0 11-1.06 1.06L10 11.06l-4.72 4.72a.75.75 0 01-1.06-1.06L8.94 10 4.22 5.28a.75.75 0 010-1.06z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
 
@@ -172,6 +227,7 @@ export default function DealerCustomersPage() {
               <table className="w-full min-w-[760px]">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">번호</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">대리점</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">담당고객사</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">담당자</th>
@@ -184,37 +240,40 @@ export default function DealerCustomersPage() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td className="px-4 py-6 text-sm text-gray-500" colSpan={7}>
+                      <td className="px-4 py-6 text-sm text-gray-500" colSpan={8}>
                         목록을 불러오는 중입니다...
                       </td>
                     </tr>
                   ) : !user ? (
                     <tr>
-                      <td className="px-4 py-6 text-sm text-gray-500" colSpan={7}>
+                      <td className="px-4 py-6 text-sm text-gray-500" colSpan={8}>
                         목록 조회는 로그인 후 사용할 수 있습니다.
                       </td>
                     </tr>
                   ) : permissionDenied ? (
                     <tr>
-                      <td className="px-4 py-6 text-sm text-red-600" colSpan={7}>
+                      <td className="px-4 py-6 text-sm text-red-600" colSpan={8}>
                         조회 권한이 없습니다. 관리자에게 권한을 요청해 주세요.
                       </td>
                     </tr>
                   ) : !hasRows ? (
                     <tr>
-                      <td className="px-4 py-6 text-sm text-gray-500" colSpan={7}>
+                      <td className="px-4 py-6 text-sm text-gray-500" colSpan={8}>
                         등록된 담당고객이 없습니다.
                       </td>
                     </tr>
                   ) : !hasFilteredRows ? (
                     <tr>
-                      <td className="px-4 py-6 text-sm text-gray-500" colSpan={7}>
+                      <td className="px-4 py-6 text-sm text-gray-500" colSpan={8}>
                         검색 결과가 없습니다.
                       </td>
                     </tr>
                   ) : (
-                    filteredRows.map((row) => (
+                    pagedRows.map((row, index) => (
                       <tr key={row.id} className="border-t border-gray-100">
+                        <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                          {(effectivePage - 1) * PAGE_SIZE + (pagedRows.length - 1 - index) + 1}
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{row.dealerName}</td>
                         <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">{row.customerName}</td>
                         <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{row.managerName}</td>
@@ -232,6 +291,41 @@ export default function DealerCustomersPage() {
                 </tbody>
               </table>
             </div>
+            {filteredRows.length > 0 && (
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={effectivePage <= 1}
+                  className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  이전
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <button
+                    key={pageNum}
+                    type="button"
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`rounded-md border px-3 py-1.5 text-sm ${
+                      pageNum === effectivePage
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    }`}
+                    aria-current={pageNum === effectivePage ? "page" : undefined}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={effectivePage >= totalPages}
+                  className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  다음
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </main>

@@ -11,6 +11,7 @@ type DealerCustomerRow = {
   managerName: string;
   status: "업체등록중" | "판매중" | "거래중단중";
   createdBy: string;
+  createdAtMs: number;
   createdAtText: string;
   statusChangedAtText: string;
 };
@@ -24,7 +25,12 @@ function formatDateTimeLocal(date: Date): string {
   return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
+function normalizeUppercaseForEnglish(value: string): string {
+  return value.trim().toUpperCase();
+}
+
 export default function AdminDealerCustomersPage() {
+  const PAGE_SIZE = 10;
   const [dealerName, setDealerName] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [managerName, setManagerName] = useState("");
@@ -38,6 +44,7 @@ export default function AdminDealerCustomersPage() {
   const [editingDealerName, setEditingDealerName] = useState("");
   const [editingCustomerName, setEditingCustomerName] = useState("");
   const [editingManagerName, setEditingManagerName] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     const q = query(collection(db, "dealer_customers"), orderBy("createdAt", "desc"));
@@ -63,6 +70,7 @@ export default function AdminDealerCustomersPage() {
             managerName: String(data.managerName ?? data.manager_name ?? data.manager ?? data.contactName ?? "-"),
             status: statusValue,
             createdBy: String(data.createdByName ?? data.created_by_name ?? data.createdBy ?? data.created_by ?? "관리자"),
+            createdAtMs: createdAtDate ? createdAtDate.getTime() : 0,
             createdAtText: createdAtDate ? formatDateTimeLocal(createdAtDate) : "-",
             statusChangedAtText: statusChangedAtDate ? formatDateTimeLocal(statusChangedAtDate) : "-",
           };
@@ -81,8 +89,9 @@ export default function AdminDealerCustomersPage() {
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredRows = useMemo(() => {
-    if (!normalizedQuery) return rows;
-    return rows.filter((row) => {
+    const base = !normalizedQuery
+      ? rows
+      : rows.filter((row) => {
       return (
         row.dealerName.toLowerCase().includes(normalizedQuery) ||
         row.customerName.toLowerCase().includes(normalizedQuery) ||
@@ -91,13 +100,55 @@ export default function AdminDealerCustomersPage() {
         row.createdBy.toLowerCase().includes(normalizedQuery)
       );
     });
+    return [...base].sort((a, b) => a.createdAtMs - b.createdAtMs);
   }, [rows, normalizedQuery]);
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const effectivePage = Math.min(currentPage, totalPages);
+  const pagedRows = useMemo(() => {
+    const sliced = filteredRows.slice((effectivePage - 1) * PAGE_SIZE, effectivePage * PAGE_SIZE);
+    return [...sliced].reverse();
+  }, [filteredRows, effectivePage]);
+
+  useEffect(() => {
+    if (filteredRows.length === 0) {
+      setCurrentPage(1);
+      return;
+    }
+    if (!normalizedQuery) {
+      setCurrentPage(totalPages);
+    } else {
+      setCurrentPage(1);
+    }
+  }, [normalizedQuery, filteredRows.length, totalPages]);
+
+  const handleDownloadExcel = async () => {
+    const XLSX = await import("xlsx");
+    const exportSource = [...filteredRows].reverse();
+    const exportRows = exportSource.map((row, index) => ({
+      번호: filteredRows.length - index,
+      대리점: row.dealerName,
+      담당고객사: row.customerName,
+      담당자: row.managerName,
+      현황: row.status,
+      최초등록일: row.createdAtText,
+      현황변경일: row.statusChangedAtText,
+      등록자: row.createdBy,
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "대리점담당고객");
+    const date = new Date();
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    XLSX.writeFile(wb, `dealer-customers-${y}${m}${d}.xlsx`);
+  };
 
   const handleCreate = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const d = dealerName.trim();
-    const c = customerName.trim();
-    const m = managerName.trim();
+    const d = normalizeUppercaseForEnglish(dealerName);
+    const c = normalizeUppercaseForEnglish(customerName);
+    const m = normalizeUppercaseForEnglish(managerName);
     if (!d || !c || !m || !status) {
       alert("대리점, 담당고객사, 담당자, 현황을 모두 입력/선택해 주세요.");
       return;
@@ -144,9 +195,9 @@ export default function AdminDealerCustomersPage() {
 
   const saveEdit = async () => {
     if (!editingId) return;
-    const d = editingDealerName.trim();
-    const c = editingCustomerName.trim();
-    const m = editingManagerName.trim();
+    const d = normalizeUppercaseForEnglish(editingDealerName);
+    const c = normalizeUppercaseForEnglish(editingCustomerName);
+    const m = normalizeUppercaseForEnglish(editingManagerName);
     if (!d || !c || !m) {
       alert("대리점, 담당고객사, 담당자를 모두 입력해 주세요.");
       return;
@@ -212,13 +263,22 @@ export default function AdminDealerCustomersPage() {
             <h1 className="text-2xl font-bold text-gray-900">대리점 담당고객 관리</h1>
             <p className="mt-2 text-gray-600">대리점 담당고객을 등록/수정/삭제합니다.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            새로고침
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDownloadExcel}
+              className="inline-flex items-center rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-semibold text-green-700 hover:bg-green-100"
+            >
+              엑셀다운로드
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              새로고침
+            </button>
+          </div>
         </div>
 
         <form onSubmit={handleCreate} className="mt-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
@@ -288,24 +348,25 @@ export default function AdminDealerCustomersPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="대리점, 담당고객사, 담당자, 현황, 등록자 검색"
-              className="w-full rounded-md border border-gray-300 bg-white py-2 pl-9 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className="h-11 w-full rounded-md border border-gray-300 bg-white py-2.5 pl-9 pr-10 text-base text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
             />
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              disabled={searchQuery.trim().length === 0}
-              className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:cursor-default disabled:opacity-40"
-              aria-label="검색어 지우기"
-              title="검색어 지우기"
-            >
-              <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                <path
-                  fillRule="evenodd"
-                  d="M4.22 4.22a.75.75 0 011.06 0L10 8.94l4.72-4.72a.75.75 0 111.06 1.06L11.06 10l4.72 4.72a.75.75 0 11-1.06 1.06L10 11.06l-4.72 4.72a.75.75 0 01-1.06-1.06L8.94 10 4.22 5.28a.75.75 0 010-1.06z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            </button>
+            {searchQuery.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute inset-y-0 right-2 my-auto inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                aria-label="검색어 지우기"
+                title="검색어 지우기"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path
+                    fillRule="evenodd"
+                    d="M4.22 4.22a.75.75 0 011.06 0L10 8.94l4.72-4.72a.75.75 0 111.06 1.06L11.06 10l4.72 4.72a.75.75 0 11-1.06 1.06L10 11.06l-4.72 4.72a.75.75 0 01-1.06-1.06L8.94 10 4.22 5.28a.75.75 0 010-1.06z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+            )}
           </div>
         </div>
 
@@ -313,6 +374,7 @@ export default function AdminDealerCustomersPage() {
           <table className="w-full min-w-[900px]">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">번호</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">대리점</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">담당고객사</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">담당자</th>
@@ -326,21 +388,24 @@ export default function AdminDealerCustomersPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="px-4 py-6 text-sm text-gray-500" colSpan={8}>
+                  <td className="px-4 py-6 text-sm text-gray-500" colSpan={9}>
                     목록을 불러오는 중입니다...
                   </td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-sm text-gray-500" colSpan={8}>
+                  <td className="px-4 py-6 text-sm text-gray-500" colSpan={9}>
                     {rows.length === 0 ? "등록된 담당고객이 없습니다." : "검색 결과가 없습니다."}
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((row) => {
+                pagedRows.map((row, index) => {
                   const isEditing = editingId === row.id;
+                  const reversedIdx = pagedRows.length - 1 - index;
+                  const displayNumber = (effectivePage - 1) * PAGE_SIZE + reversedIdx + 1;
                   return (
                     <tr key={row.id} className="border-t border-gray-100">
+                      <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">{displayNumber}</td>
                       <td className="px-4 py-3 text-sm text-gray-800 whitespace-nowrap">
                         {isEditing ? (
                           <input
@@ -451,6 +516,41 @@ export default function AdminDealerCustomersPage() {
             </tbody>
           </table>
         </div>
+        {filteredRows.length > 0 && (
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={effectivePage <= 1}
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              이전
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                type="button"
+                onClick={() => setCurrentPage(pageNum)}
+                className={`rounded-md border px-3 py-1.5 text-sm ${
+                  pageNum === effectivePage
+                    ? "border-blue-600 bg-blue-600 text-white"
+                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+                aria-current={pageNum === effectivePage ? "page" : undefined}
+              >
+                {pageNum}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={effectivePage >= totalPages}
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              다음
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

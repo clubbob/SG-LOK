@@ -41,6 +41,31 @@ function cloneUhp(state: UhpInventoryState): UhpInventoryState {
   return JSON.parse(JSON.stringify(state)) as UhpInventoryState;
 }
 
+function normalizeLineName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+function collectImageByLineName(lines: InventoryProduct[] | undefined): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!Array.isArray(lines)) return out;
+  for (const line of lines) {
+    const image = (line.imageSrc ?? "").trim();
+    if (!image) continue;
+    const key = normalizeLineName(line.name);
+    if (!out.has(key)) out.set(key, image);
+  }
+  return out;
+}
+
+function applyPreservedImages(lines: InventoryProduct[], imageMap: Map<string, string>): InventoryProduct[] {
+  return lines.map((line) => {
+    const preserved = imageMap.get(normalizeLineName(line.name));
+    if (!preserved) return line;
+    if ((line.imageSrc ?? "").trim() === preserved) return line;
+    return { ...line, imageSrc: preserved };
+  });
+}
+
 export default function AdminInventoryProductsPage() {
   const [activeTabId, setActiveTabId] = useState("microWeld");
   const [searchQuery, setSearchQuery] = useState("");
@@ -101,6 +126,15 @@ export default function AdminInventoryProductsPage() {
           customCategoryProducts?: unknown;
         }
       | undefined;
+    const microImageMap = collectImageByLineName(
+      Array.isArray(data?.products) ? data.products : undefined
+    );
+    const tubeImageMap = collectImageByLineName(
+      Array.isArray(data?.tubeButtWeldProducts) ? data.tubeButtWeldProducts : undefined
+    );
+    const metalImageMap = collectImageByLineName(
+      Array.isArray(data?.metalFaceSealProducts) ? data.metalFaceSealProducts : undefined
+    );
     const raw = snapshot.data() as Record<string, unknown> | undefined;
     const hasLegacyLongElbowField =
       raw != null && Object.prototype.hasOwnProperty.call(raw, "longElbowProducts");
@@ -141,15 +175,21 @@ export default function AdminInventoryProductsPage() {
         },
         data
       );
-      setUhpInventory(reseedPreview);
+      const reseedPreviewWithImages: UhpInventoryState = {
+        ...reseedPreview,
+        products: applyPreservedImages(reseedPreview.products, microImageMap),
+        tubeButtWeldProducts: applyPreservedImages(reseedPreview.tubeButtWeldProducts, tubeImageMap),
+        metalFaceSealProducts: applyPreservedImages(reseedPreview.metalFaceSealProducts, metalImageMap),
+      };
+      setUhpInventory(reseedPreviewWithImages);
       if (allowAutoPersist) {
         try {
           await setDoc(
             inventoryRef,
             {
-              products: productsForReseed.next,
-              tubeButtWeldProducts: tubeForReseed.next,
-              metalFaceSealProducts: metalForReseed.next,
+              products: reseedPreviewWithImages.products,
+              tubeButtWeldProducts: reseedPreviewWithImages.tubeButtWeldProducts,
+              metalFaceSealProducts: reseedPreviewWithImages.metalFaceSealProducts,
               longElbowProducts: deleteField(),
               vcrToVcrProducts: deleteField(),
               inventorySeedVersion: INVENTORY_SEED_VERSION,
@@ -197,7 +237,13 @@ export default function AdminInventoryProductsPage() {
     const { next: afterDrop, shouldPersistSlice } =
       dropRemovedDefaultCategoryProducts(mergedWithCatalog);
     const reconciled = reconcileUhpInventoryWithSeedCatalog(afterDrop);
-    const next = reconciled.changed ? reconciled.next : afterDrop;
+    const nextRaw = reconciled.changed ? reconciled.next : afterDrop;
+    const next: UhpInventoryState = {
+      ...nextRaw,
+      products: applyPreservedImages(nextRaw.products, microImageMap),
+      tubeButtWeldProducts: applyPreservedImages(nextRaw.tubeButtWeldProducts, tubeImageMap),
+      metalFaceSealProducts: applyPreservedImages(nextRaw.metalFaceSealProducts, metalImageMap),
+    };
     const shouldPersistLegacyLongElbowMerge =
       elbowMerge.changed ||
       Boolean(hasLegacyLongElbowField) ||

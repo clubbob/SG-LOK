@@ -6,8 +6,9 @@ import { collection, getDocs } from "firebase/firestore";
 import { Header, Footer } from "@/components/layout";
 import { useAuth } from "@/hooks/useAuth";
 import { db } from "@/lib/firebase";
-import { fetchAllMappings } from "@/lib/substitute/firestoreMapping";
+import { deleteMapping, fetchAllMappings, updateMapping } from "@/lib/substitute/firestoreMapping";
 import { MANUFACTURER } from "@/lib/substitute/constants";
+import { normalizeInstrumentCode } from "@/lib/substitute/codeNormalize";
 import { downloadSubstituteListXlsx } from "@/lib/substitute/exportXlsx";
 import { resolveSubstituteRegistrantLabel } from "@/lib/substitute/registrantDisplay";
 import type { SubstituteMappingDoc } from "@/lib/substitute/types";
@@ -44,6 +45,13 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
   const [query, setQuery] = useState("");
   const [userNameById, setUserNameById] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editFromName, setEditFromName] = useState("");
+  const [editFromCode, setEditFromCode] = useState("");
+  const [editToName, setEditToName] = useState("");
+  const [editToCode, setEditToCode] = useState("");
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !canAccessPage) {
@@ -91,6 +99,73 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
   useEffect(() => {
     void loadRows();
   }, []);
+
+  const startEdit = (row: SubstituteMappingDoc) => {
+    setEditingId(row.id);
+    setEditFromName(row.product_name_from ?? "");
+    setEditFromCode(row.code_from ?? "");
+    setEditToName(row.product_name_to ?? "");
+    setEditToCode(row.code_to ?? "");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditFromName("");
+    setEditFromCode("");
+    setEditToName("");
+    setEditToCode("");
+  };
+
+  const saveEdit = async (row: SubstituteMappingDoc) => {
+    const nextFromName = editFromName.trim();
+    const nextFromCode = normalizeInstrumentCode(editFromCode);
+    const nextToName = editToName.trim();
+    const nextToCode = normalizeInstrumentCode(editToCode);
+    if (!nextFromName || !nextFromCode || !nextToName || !nextToCode) {
+      alert("제품명/제품코드는 비워둘 수 없습니다.");
+      return;
+    }
+
+    const changedBy = user?.uid ?? "admin";
+    setSavingId(row.id);
+    try {
+      await updateMapping(
+        db,
+        row.id,
+        {
+          product_name_from: nextFromName,
+          code_from: nextFromCode,
+          normalized_code_from: normalizeInstrumentCode(nextFromCode),
+          product_name_to: nextToName,
+          code_to: nextToCode,
+          normalized_code_to: normalizeInstrumentCode(nextToCode),
+        },
+        changedBy
+      );
+      cancelEdit();
+      await loadRows();
+    } catch (error) {
+      console.error(error);
+      alert("수정에 실패했습니다.");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const removeRow = async (row: SubstituteMappingDoc) => {
+    if (!window.confirm("이 매핑을 삭제하시겠습니까?")) return;
+    setDeletingId(row.id);
+    try {
+      await deleteMapping(db, row.id, user?.uid ?? "admin");
+      if (editingId === row.id) cancelEdit();
+      await loadRows();
+    } catch (error) {
+      console.error(error);
+      alert("삭제에 실패했습니다.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const normalized = query.trim().toLowerCase();
   const filteredRows = useMemo(() => {
@@ -209,6 +284,9 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">S-LOK 제품코드</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록일</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록자</th>
+                    {embedded && (
+                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">관리</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
@@ -217,14 +295,101 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                       <td className="px-4 py-3 text-sm text-gray-800">
                         {filteredRows.length - ((effectivePage - 1) * PAGE_SIZE + index)}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{row.product_name_from || "-"}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">{row.code_from || "-"}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{row.product_name_to || "-"}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">{row.code_to || "-"}</td>
+                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                        {embedded && editingId === row.id ? (
+                          <input
+                            type="text"
+                            value={editFromName}
+                            onChange={(e) => setEditFromName(e.target.value)}
+                            className="w-full min-w-[220px] rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                          />
+                        ) : (
+                          row.product_name_from || "-"
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
+                        {embedded && editingId === row.id ? (
+                          <input
+                            type="text"
+                            value={editFromCode}
+                            onChange={(e) => setEditFromCode(e.target.value.toUpperCase())}
+                            className="w-full min-w-[150px] rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                          />
+                        ) : (
+                          row.code_from || "-"
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                        {embedded && editingId === row.id ? (
+                          <input
+                            type="text"
+                            value={editToName}
+                            onChange={(e) => setEditToName(e.target.value)}
+                            className="w-full min-w-[220px] rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                          />
+                        ) : (
+                          row.product_name_to || "-"
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
+                        {embedded && editingId === row.id ? (
+                          <input
+                            type="text"
+                            value={editToCode}
+                            onChange={(e) => setEditToCode(e.target.value.toUpperCase())}
+                            className="w-full min-w-[150px] rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                          />
+                        ) : (
+                          row.code_to || "-"
+                        )}
+                      </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">{formatDateTime(row.created_at)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
                         {row.created_by ? resolveSubstituteRegistrantLabel(row.created_by, userNameById) : "-"}
                       </td>
+                      {embedded && (
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                          {editingId === row.id ? (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void saveEdit(row)}
+                                disabled={savingId === row.id}
+                                className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                              >
+                                {savingId === row.id ? "저장 중..." : "저장"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEdit}
+                                disabled={savingId === row.id}
+                                className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                              >
+                                취소
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => startEdit(row)}
+                                disabled={Boolean(editingId) || deletingId === row.id}
+                                className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                              >
+                                수정
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void removeRow(row)}
+                                disabled={Boolean(editingId) || deletingId === row.id}
+                                className="rounded-md border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                              >
+                                {deletingId === row.id ? "삭제 중..." : "삭제"}
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

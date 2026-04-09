@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Header, Footer } from "@/components/layout";
 import { collection, onSnapshot, orderBy, query, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -41,10 +41,11 @@ function formatDateTimeLocal(date: Date): string {
 
 function DealerCustomersPageContent() {
   const PAGE_SIZE = 10;
+  const router = useRouter();
   const searchParams = useSearchParams();
   const initialStatusFilter = searchParams.get("status")?.trim() ?? "";
   const hasPresetStatusFilter = initialStatusFilter.length > 0;
-  const { user, loading: authLoading } = useAuth();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<DealerCustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -56,8 +57,14 @@ function DealerCustomersPageContent() {
   }, [initialStatusFilter]);
 
   useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push("/login");
+    }
+  }, [authLoading, isAuthenticated, router]);
+
+  useEffect(() => {
     if (authLoading) return;
-    if (!user) {
+    if (!isAuthenticated) {
       setRows([]);
       setLoading(false);
       setPermissionDenied(false);
@@ -102,7 +109,7 @@ function DealerCustomersPageContent() {
       }
     );
     return () => unsubscribe();
-  }, [authLoading, user]);
+  }, [authLoading, isAuthenticated, user]);
 
   const hasRows = useMemo(() => rows.length > 0, [rows]);
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -167,6 +174,21 @@ function DealerCustomersPageContent() {
     const d = String(now.getDate()).padStart(2, "0");
     XLSX.writeFile(wb, `dealer-customers-user-${y}${m}${d}.xlsx`);
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+          <p className="mt-4 text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex flex-col">

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Header, Footer } from '@/components/layout';
+import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
 import {
   INITIAL_METAL_FACE_SEAL_PRODUCTS,
@@ -75,6 +76,8 @@ const FALLBACK_UHP: UhpInventoryState = {
 const PRODUCT_LIST_PAGE_SIZE = 10;
 
 function InventoryStatusPageContent() {
+  const { isAuthenticated, loading: authLoading } = useAuth();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const stockFilterParam = searchParams.get('stock');
   const stockFilter: 'in' | 'out' | null =
@@ -88,6 +91,12 @@ function InventoryStatusPageContent() {
   const [productListPage, setProductListPage] = useState(1);
   const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(new Set());
   const [uhpInventory, setUhpInventory] = useState<UhpInventoryState>(FALLBACK_UHP);
+
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push('/login');
+    }
+  }, [authLoading, isAuthenticated, router]);
 
   useEffect(() => {
     const inventoryRef = doc(db, 'inventory', 'microWeldProducts');
@@ -277,6 +286,21 @@ function InventoryStatusPageContent() {
       nearestDueDate,
     };
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+          <p className="mt-4 text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex flex-col">

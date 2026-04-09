@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Header, Footer } from "@/components/layout";
 import { collection, onSnapshot, orderBy, query, Timestamp } from "firebase/firestore";
@@ -39,7 +39,7 @@ function formatDateTimeLocal(date: Date): string {
   return `${year}-${month}-${day} ${hours}:${minutes}`;
 }
 
-export default function DealerCustomersPage() {
+function DealerCustomersPageContent() {
   const PAGE_SIZE = 10;
   const searchParams = useSearchParams();
   const initialStatusFilter = searchParams.get("status")?.trim() ?? "";
@@ -339,6 +339,23 @@ export default function DealerCustomersPage() {
       </main>
       <Footer />
     </div>
+  );
+}
+
+export default function DealerCustomersPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto" />
+            <p className="mt-4 text-gray-600">로딩 중...</p>
+          </div>
+        </div>
+      }
+    >
+      <DealerCustomersPageContent />
+    </Suspense>
   );
 }
 

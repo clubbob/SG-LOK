@@ -33,6 +33,7 @@ type Props = {
   handleDeleteItem: (productName: string, itemCode: string) => void;
   handleRenameVariant: (productName: string, itemCode: string, variantCode: string) => void;
   handleDeleteVariant: (productName: string, itemCode: string, variantCode: string) => void;
+  handleAddVariant: (productName: string, itemCode: string) => void;
   openInboundCreateModal: (productName: string, itemCode: string) => void;
   openOutboundCreateModal: (productName: string, itemCode: string) => void;
   openProductionPlanCreateModal: (productName: string, itemCode: string) => void;
@@ -65,6 +66,7 @@ export function AdminUhpInventoryProductCard({
   handleDeleteItem,
   handleRenameVariant,
   handleDeleteVariant,
+  handleAddVariant,
   openInboundCreateModal,
   openOutboundCreateModal,
   openProductionPlanCreateModal,
@@ -133,8 +135,10 @@ export function AdminUhpInventoryProductCard({
                             key={variant.code}
                             className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
                           >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="font-medium text-gray-700">{variant.code}</span>
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span className="rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-slate-800">
+                                {variant.code}
+                              </span>
                               <div className="flex items-center gap-1">
                               <span
                                 className={`rounded-md px-2 py-0.5 text-xs font-bold shadow-sm ${
@@ -168,35 +172,14 @@ export function AdminUhpInventoryProductCard({
                               </div>
                             </div>
                             {variantPlanInfo && (
-                              <div className="mt-1 flex items-center justify-between gap-1">
-                                <span className="text-[10px] text-gray-500">
+                              <div className="mt-2.5 flex items-center justify-between gap-2">
+                                <span className="text-xs font-medium text-gray-600">
                                   {variantPlanInfo.nearestDueDate ?? '-'}
                                 </span>
                                 <div className="flex shrink-0 items-center gap-1">
-                                  <span className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700">
+                                  <span className="rounded-md border-2 border-purple-600 bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-900 ring-1 ring-purple-300 shadow-sm">
                                     예상 {variantExpectedStock} {variant.unit}
                                   </span>
-                                  <button
-                                    type="button"
-                                    title="생산계획 수정"
-                                    onClick={() => {
-                                      const plansForVariant = (item.productionPlanHistory ?? []).filter(
-                                        (p) => p.variantCode === variant.code
-                                      );
-                                      if (plansForVariant.length === 1) {
-                                        openProductionPlanEditModal(
-                                          product.name,
-                                          item.code,
-                                          plansForVariant[0]!
-                                        );
-                                      } else if (plansForVariant.length > 1) {
-                                        openHistoryModal(product.name, item.code);
-                                      }
-                                    }}
-                                    className="rounded px-1 py-0.5 text-[10px] font-semibold text-purple-700 underline decoration-purple-300 underline-offset-2 hover:text-purple-900"
-                                  >
-                                    수정
-                                  </button>
                                 </div>
                               </div>
                             )}
@@ -206,6 +189,15 @@ export function AdminUhpInventoryProductCard({
                     )}
                   </div>
                 )}
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAddVariant(product.name, item.code)}
+                    className="rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                  >
+                    + 서브 품목 추가
+                  </button>
+                </div>
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   <button
                     type="button"

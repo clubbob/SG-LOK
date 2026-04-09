@@ -52,8 +52,6 @@ type InventoryProduct = {
   items: InventoryItem[];
 };
 
-const isVisibleVariantCode = (code: string): boolean => !code.toUpperCase().includes('-SL-');
-
 const FALLBACK_UHP: UhpInventoryState = {
   products: INITIAL_MICRO_WELD_PRODUCTS as CatalogInventoryProduct[],
   tubeButtWeldProducts: INITIAL_TUBE_BUTT_WELD_PRODUCTS as CatalogInventoryProduct[],
@@ -177,8 +175,7 @@ function InventoryStatusPageContent() {
     categoryLabel?: string;
   };
 
-  const getVisibleVariants = (item: InventoryItem): InventoryVariant[] =>
-    (item.variants ?? []).filter((variant) => isVisibleVariantCode(variant.code));
+  const getVisibleVariants = (item: InventoryItem): InventoryVariant[] => item.variants ?? [];
 
   const getItemCurrentStock = (item: InventoryItem): number => {
     const visibleVariants = getVisibleVariants(item);
@@ -285,7 +282,7 @@ function InventoryStatusPageContent() {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 bg-gray-50">
-        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+        <div className="w-full max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
           <div className="mb-6">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
@@ -441,8 +438,10 @@ function InventoryStatusPageContent() {
                                         key={variant.code}
                                         className="rounded border border-gray-200 bg-white px-2 py-1.5 text-[11px]"
                                       >
-                                        <div className="flex items-center justify-between gap-1">
-                                          <span className="font-medium text-gray-700">{variant.code}</span>
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <span className="rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-slate-800">
+                                            {variant.code}
+                                          </span>
                                           <span
                                             className={`rounded-md px-2 py-0.5 text-xs font-bold shadow-sm ${
                                               variant.currentStock > 0
@@ -454,11 +453,11 @@ function InventoryStatusPageContent() {
                                           </span>
                                         </div>
                                         {variantPlanInfo && (
-                                          <div className="mt-1 flex items-center justify-between gap-1">
-                                            <span className="text-[10px] text-gray-500">
+                                          <div className="mt-2.5 flex items-center justify-between gap-2">
+                                            <span className="text-xs font-medium text-gray-600">
                                               {variantPlanInfo.nearestDueDate ?? '-'}
                                             </span>
-                                            <span className="rounded border border-purple-200 bg-purple-50 px-1.5 py-0.5 font-semibold text-purple-700">
+                                            <span className="rounded-md border-2 border-purple-600 bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-900 ring-1 ring-purple-300 shadow-sm">
                                               예상 {variantExpectedStock} {variant.unit}
                                             </span>
                                           </div>

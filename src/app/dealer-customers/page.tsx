@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Header, Footer } from "@/components/layout";
 import { collection, onSnapshot, orderBy, query, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -40,12 +41,19 @@ function formatDateTimeLocal(date: Date): string {
 
 export default function DealerCustomersPage() {
   const PAGE_SIZE = 10;
+  const searchParams = useSearchParams();
+  const initialStatusFilter = searchParams.get("status")?.trim() ?? "";
+  const hasPresetStatusFilter = initialStatusFilter.length > 0;
   const { user, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<DealerCustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [permissionDenied, setPermissionDenied] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialStatusFilter);
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setSearchQuery(initialStatusFilter);
+  }, [initialStatusFilter]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -130,12 +138,12 @@ export default function DealerCustomersPage() {
       setCurrentPage(1);
       return;
     }
-    if (!normalizedQuery) {
+    if (!normalizedQuery || hasPresetStatusFilter) {
       setCurrentPage(totalPages);
     } else {
       setCurrentPage(1);
     }
-  }, [normalizedQuery, filteredRows.length, totalPages]);
+  }, [normalizedQuery, filteredRows.length, totalPages, hasPresetStatusFilter]);
 
   const handleDownloadExcel = async () => {
     const XLSX = await import("xlsx");

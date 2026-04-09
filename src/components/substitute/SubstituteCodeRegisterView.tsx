@@ -790,7 +790,7 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
             </div>
           )}
 
-          {results.length > 0 && !mappingRegistered && (
+          {!embedded && results.length > 0 && !mappingRegistered && (
             <>
               <div className="mt-6 rounded-xl border-2 border-blue-200 bg-blue-50/90 px-4 py-4 shadow-sm">
                 <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">

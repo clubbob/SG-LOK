@@ -46,6 +46,12 @@ export default function DashboardPage() {
   const [substituteStats, setSubstituteStats] = useState({
     total: 0,
   });
+  const [dealerStats, setDealerStats] = useState({
+    total: 0,
+    onboarding: 0,
+    selling: 0,
+    paused: 0,
+  });
   const [loadingStats, setLoadingStats] = useState(true);
   const [showLoginPopup, setShowLoginPopup] = useState(false);
 
@@ -282,6 +288,39 @@ export default function DashboardPage() {
         }
         setSubstituteStats({
           total: 0,
+        });
+      }
+
+      // 대리점관리 통계 (권한이 없으면 0으로 안전 처리)
+      try {
+        const dealerSnapshot = await getDocs(collection(db, 'dealer_customers'));
+        let onboardingCount = 0;
+        let sellingCount = 0;
+        let pausedCount = 0;
+
+        dealerSnapshot.forEach((d) => {
+          const data = d.data() as { status?: unknown };
+          const status = String(data.status ?? '');
+          if (status === '업체등록중') onboardingCount += 1;
+          else if (status === '판매중') sellingCount += 1;
+          else if (status === '거래중단중') pausedCount += 1;
+        });
+
+        setDealerStats({
+          total: dealerSnapshot.size,
+          onboarding: onboardingCount,
+          selling: sellingCount,
+          paused: pausedCount,
+        });
+      } catch (e) {
+        if (!isPermissionDeniedError(e)) {
+          console.error('대리점관리 통계 로드 오류:', e);
+        }
+        setDealerStats({
+          total: 0,
+          onboarding: 0,
+          selling: 0,
+          paused: 0,
         });
       }
     } catch (error) {
@@ -640,6 +679,76 @@ export default function DashboardPage() {
                           strokeWidth={2}
                           d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                         />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* 대리점관리 바로가기 */}
+          <div className="mb-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <h2 className="text-base font-semibold text-gray-900 mb-3">대리점관리</h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              <Link href="/dealer-customers" className="block h-full">
+                <div className="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-3 border border-teal-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 mb-0.5">전체 목록</p>
+                      <p className="text-2xl font-bold text-gray-900">{dealerStats.total}</p>
+                    </div>
+                    <div className="bg-teal-500 rounded-lg p-2">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M5 7v11a1 1 0 001 1h12a1 1 0 001-1V7M9 11h6M9 15h6" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+
+              <Link href="/dealer-customers?status=업체등록중" className="block h-full">
+                <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-3 border border-amber-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 mb-0.5">업체등록중</p>
+                      <p className="text-2xl font-bold text-gray-900">{dealerStats.onboarding}</p>
+                    </div>
+                    <div className="bg-amber-500 rounded-lg p-2">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+
+              <Link href="/dealer-customers?status=판매중" className="block h-full">
+                <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-3 border border-emerald-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 mb-0.5">판매중</p>
+                      <p className="text-2xl font-bold text-gray-900">{dealerStats.selling}</p>
+                    </div>
+                    <div className="bg-emerald-500 rounded-lg p-2">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </Link>
+
+              <Link href="/dealer-customers?status=거래중단중" className="block h-full">
+                <div className="bg-gradient-to-br from-rose-50 to-rose-100 rounded-lg p-3 border border-rose-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 mb-0.5">거래중단중</p>
+                      <p className="text-2xl font-bold text-gray-900">{dealerStats.paused}</p>
+                    </div>
+                    <div className="bg-rose-500 rounded-lg p-2">
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </div>
                   </div>

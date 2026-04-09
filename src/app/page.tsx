@@ -216,6 +216,41 @@ export default function Home() {
               </ul>
             </div>
 
+            {/* 대리점관리 */}
+            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+              <div className="flex items-center mb-4">
+                <div className="bg-teal-100 rounded-lg p-3 mr-4">
+                  <svg className="w-8 h-8 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M5 7v11a1 1 0 001 1h12a1 1 0 001-1V7M9 11h6M9 15h6" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900">대리점관리</h3>
+              </div>
+              <p className="text-gray-600 mb-4">
+                대리점 담당고객 정보를 조회하고 현황을 빠르게 확인할 수 있습니다.
+              </p>
+              <ul className="text-sm text-gray-500 space-y-2">
+                <li className="flex items-center">
+                  <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  대리점별 담당고객 목록 조회
+                </li>
+                <li className="flex items-center">
+                  <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  등록일·현황변경일·담당자 확인
+                </li>
+                <li className="flex items-center">
+                  <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  검색 및 엑셀 다운로드 지원
+                </li>
+              </ul>
+            </div>
+
             {/* 대체품코드 */}
             <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
               <div className="flex items-center mb-4">

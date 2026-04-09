@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
@@ -31,11 +32,14 @@ function normalizeUppercaseForEnglish(value: string): string {
 
 export default function AdminDealerCustomersPage() {
   const PAGE_SIZE = 10;
+  const searchParams = useSearchParams();
+  const initialStatusFilter = searchParams.get("status")?.trim() ?? "";
+  const hasPresetStatusFilter = initialStatusFilter.length > 0;
   const [dealerName, setDealerName] = useState("");
   const [customerName, setCustomerName] = useState("");
   const [managerName, setManagerName] = useState("");
   const [status, setStatus] = useState<"" | "업체등록중" | "판매중" | "거래중단중">("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialStatusFilter);
   const [rows, setRows] = useState<DealerCustomerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -87,6 +91,10 @@ export default function AdminDealerCustomersPage() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    setSearchQuery(initialStatusFilter);
+  }, [initialStatusFilter]);
+
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredRows = useMemo(() => {
     const base = !normalizedQuery
@@ -114,12 +122,12 @@ export default function AdminDealerCustomersPage() {
       setCurrentPage(1);
       return;
     }
-    if (!normalizedQuery) {
+    if (!normalizedQuery || hasPresetStatusFilter) {
       setCurrentPage(totalPages);
     } else {
       setCurrentPage(1);
     }
-  }, [normalizedQuery, filteredRows.length, totalPages]);
+  }, [normalizedQuery, filteredRows.length, totalPages, hasPresetStatusFilter]);
 
   const handleDownloadExcel = async () => {
     const XLSX = await import("xlsx");
@@ -257,7 +265,7 @@ export default function AdminDealerCustomersPage() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
-      <div className="max-w-6xl">
+      <div className="w-full max-w-[1500px]">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">대리점 담당고객 관리</h1>
@@ -371,7 +379,7 @@ export default function AdminDealerCustomersPage() {
         </div>
 
         <div className="mt-4 overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full min-w-[900px]">
+          <table className="w-full min-w-full">
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">번호</th>

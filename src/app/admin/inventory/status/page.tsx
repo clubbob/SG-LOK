@@ -1055,6 +1055,64 @@ export default function AdminInventoryStatusPage() {
     void persistUhpInventory(updated);
   };
 
+  const handleAddVariant = (productName: string, itemCode: string) => {
+    const inv = uhpInventoryRef.current;
+    const tab = findUhpTabDefByProductName(inv, productName);
+    if (!tab) {
+      setSyncError('품목을 찾을 수 없습니다.');
+      return;
+    }
+
+    const nextCodeInput = prompt('추가할 서브 품목 코드를 입력해 주세요. (예: HP-04-SL-BA)');
+    const nextCode = nextCodeInput?.trim().toUpperCase() ?? '';
+    if (!nextCode) return;
+
+    const targetProduct = getTabSliceProducts(inv, tab).find((line) => line.name === productName);
+    const targetItem = targetProduct?.items.find((item) => item.code === itemCode);
+    if (!targetItem) {
+      setSyncError('품목을 찾을 수 없습니다.');
+      return;
+    }
+    if ((targetItem.variants ?? []).some((v) => v.code === nextCode)) {
+      setSyncError('이미 같은 서브 품목 코드가 있습니다.');
+      return;
+    }
+
+    const nextState: UhpInventoryState = JSON.parse(JSON.stringify(inv)) as UhpInventoryState;
+    let added = false;
+    const nextSlice = getTabSliceProducts(nextState, tab).map((line) => {
+      if (line.name !== productName) return line;
+      return {
+        ...line,
+        items: line.items.map((item) => {
+          if (item.code !== itemCode) return item;
+          added = true;
+          return {
+            ...item,
+            variants: [
+              ...(item.variants ?? []),
+              {
+                code: nextCode,
+                currentStock: 0,
+                unit: item.unit,
+              },
+            ],
+          };
+        }),
+      };
+    });
+
+    if (!added) {
+      setSyncError('서브 품목을 추가할 대상을 찾을 수 없습니다.');
+      return;
+    }
+
+    const updated = setTabSliceProducts(nextState, tab, nextSlice);
+    setSyncError('');
+    setUhpInventory(updated);
+    void persistUhpInventory(updated);
+  };
+
   const handleRenameItem = (productName: string, itemCode: string) => {
     const tab = findUhpTabDefByProductName(uhpInventory, productName);
     if (!tab) {
@@ -1984,6 +2042,7 @@ export default function AdminInventoryStatusPage() {
     handleDeleteItem,
     handleRenameVariant,
     handleDeleteVariant,
+    handleAddVariant,
     openInboundCreateModal,
     openOutboundCreateModal,
     openProductionPlanCreateModal,

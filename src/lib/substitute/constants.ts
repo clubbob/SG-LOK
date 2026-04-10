@@ -67,6 +67,7 @@ export const SWAGELOK_CATALOG_URL =
 export const SWAGELOK_UHP_CATALOG_URL =
   process.env.NEXT_PUBLIC_SWAGELOK_UHP_CATALOG_URL?.trim() || '/catalogs/Swagelok-UHP-Fittings.pdf';
 
+/** S-Lok Tube / UHP 카탈로그. 기본은 `public/catalogs` 정적 파일. 로컬 PDF는 `NEXT_PUBLIC_*` 로 URL 지정(예: file:///D:/삼원그린/...). */
 export const SLOK_CATALOG_URL =
   process.env.NEXT_PUBLIC_SLOK_CATALOG_URL?.trim() || '/catalogs/S-LOK-Tube-Fittings.pdf';
 

@@ -14,9 +14,9 @@ import {
   MANUFACTURER,
   MAPPING_STATUS,
   MAPPING_STATUS_LABEL,
+  SOURCE_TYPE,
   SLOK_CATALOG_URL,
   SLOK_UHP_CATALOG_URL,
-  SOURCE_TYPE,
   SWAGELOK_CATALOG_URL,
   SWAGELOK_UHP_CATALOG_URL,
 } from '@/lib/substitute/constants';
@@ -617,14 +617,28 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
                     onClick={() => openCatalogPopup(SWAGELOK_CATALOG_URL, 'swagelok_catalog')}
                     className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
                   >
-                    Swagelok Tube Fitting Catalogue
+                    Swagelok Tube Fitting
                   </button>
                   <button
                     type="button"
                     onClick={() => openCatalogPopup(SWAGELOK_UHP_CATALOG_URL, 'swagelok_uhp_catalog')}
                     className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
                   >
-                    Swagelok UHP Fitting Catalogue
+                    Swagelok UHP Fitting
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openCatalogPopup(SLOK_CATALOG_URL, 'slok_catalog')}
+                    className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    S-Lok Tube Fitting
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openCatalogPopup(SLOK_UHP_CATALOG_URL, 'slok_uhp_catalog')}
+                    className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                  >
+                    S-Lok UHP Fitting
                   </button>
               </div>
               {officialRef.productPageUrl ? (
@@ -706,27 +720,9 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
                 </div>
 
                 <div className="border-t border-gray-100 pt-4">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
-                    <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-                      S-LOK
-                    </h3>
-                    <div className="self-start flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <button
-                        type="button"
-                        onClick={() => openCatalogPopup(SLOK_CATALOG_URL, 'slok_catalog')}
-                        className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
-                      >
-                        S-LOK Tube Fitting Catalogue
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => openCatalogPopup(SLOK_UHP_CATALOG_URL, 'slok_uhp_catalog')}
-                        className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
-                      >
-                        S-LOK UHP Fitting Catalogue
-                      </button>
-                    </div>
-                  </div>
+                  <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">
+                    S-LOK
+                  </h3>
                   <div className="space-y-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:space-y-0">
                     <label className="block text-sm">
                       <span className="text-gray-600">제품명</span>

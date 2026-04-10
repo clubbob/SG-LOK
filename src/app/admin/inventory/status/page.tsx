@@ -2724,7 +2724,7 @@ export default function AdminInventoryStatusPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
           <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
             <div className="shrink-0 border-b border-gray-200 px-5 py-4">
-              <h3 className="text-lg font-semibold text-gray-900">전체 이력</h3>
+              <h3 className="text-lg font-semibold text-gray-900">전체이력</h3>
               <p className="mt-1 text-sm text-gray-600">
                 {historyViewModal.productName} / {historyViewModal.itemCode}
               </p>
@@ -2848,7 +2848,7 @@ export default function AdminInventoryStatusPage() {
                 {historyModal.productName} / {historyModal.itemCode}
               </p>
               <p className="mt-1 text-xs text-gray-500">
-                입고·출고·생산계획 행만 「수정」할 수 있습니다. 전체 목록은 「전체 이력」에서 보세요. (페이지당 최대{' '}
+                입고·출고·생산계획 행만 「수정」할 수 있습니다. 전체 목록은 「전체이력」에서 보세요. (페이지당 최대{' '}
                 {HISTORY_PAGE_SIZE}건)
               </p>
             </div>

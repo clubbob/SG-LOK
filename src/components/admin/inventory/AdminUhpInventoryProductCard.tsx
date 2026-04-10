@@ -189,7 +189,7 @@ export function AdminUhpInventoryProductCard({
                     )}
                   </div>
                 )}
-                <div className="mt-2">
+                <div className="mt-3 flex items-center justify-between gap-2">
                   <button
                     type="button"
                     onClick={() => handleAddVariant(product.name, item.code)}
@@ -197,50 +197,50 @@ export function AdminUhpInventoryProductCard({
                   >
                     + 서브 품목 추가
                   </button>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => openInboundCreateModal(product.name, item.code)}
-                    className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
-                  >
-                    입고
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openOutboundCreateModal(product.name, item.code)}
-                    className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
-                  >
-                    출고
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openProductionPlanCreateModal(product.name, item.code)}
-                    className="rounded border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100"
-                  >
-                    생산계획
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openAdjustmentModal(product.name, item.code)}
-                    className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
-                  >
-                    재고조정
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openHistoryModal(product.name, item.code)}
-                    className="rounded border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
-                  >
-                    이력수정
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openHistoryViewModal(product.name, item.code)}
-                    className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
-                  >
-                    전체 이력
-                  </button>
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => openInboundCreateModal(product.name, item.code)}
+                      className="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                    >
+                      입고
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openOutboundCreateModal(product.name, item.code)}
+                      className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                    >
+                      출고
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openProductionPlanCreateModal(product.name, item.code)}
+                      className="rounded border border-purple-200 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100"
+                    >
+                      생산계획
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openAdjustmentModal(product.name, item.code)}
+                      className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                    >
+                      재고조정
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openHistoryModal(product.name, item.code)}
+                      className="rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                    >
+                      이력수정
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openHistoryViewModal(product.name, item.code)}
+                      className="rounded border border-violet-200 bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 hover:bg-violet-100"
+                    >
+                      전체이력
+                    </button>
+                  </div>
                 </div>
               </>
             );

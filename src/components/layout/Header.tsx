@@ -1,14 +1,22 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  getAllowedMenusOrDefault,
+  isPathGuardExcluded,
+  MENU_ACCESS_LABELS,
+  resolveFallbackPath,
+  resolveMenuKeyByPath,
+} from '@/lib/auth/menuAccess';
 
 export default function Header() {
   const { user, userProfile, isAuthenticated, signOut, loading } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isProdMenuOpen, setIsProdMenuOpen] = useState(false);
@@ -16,6 +24,7 @@ export default function Header() {
   const [isInventoryMenuOpen, setIsInventoryMenuOpen] = useState(false);
   const [isDealerMenuOpen, setIsDealerMenuOpen] = useState(false);
   const [isSubstituteMenuOpen, setIsSubstituteMenuOpen] = useState(false);
+  const [blockedAlertPath, setBlockedAlertPath] = useState('');
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -25,6 +34,20 @@ export default function Header() {
     setIsDealerMenuOpen(false);
     setIsSubstituteMenuOpen(false);
   }, [pathname]);
+
+  useLayoutEffect(() => {
+    if (!pathname) return;
+    if (loading || !isAuthenticated || !userProfile) return;
+    if (isPathGuardExcluded(pathname)) return;
+    const currentMenuKey = resolveMenuKeyByPath(pathname);
+    if (!currentMenuKey) return;
+    const allowedMenus = getAllowedMenusOrDefault(userProfile.allowedMenus);
+    if (allowedMenus.includes(currentMenuKey)) return;
+    if (blockedAlertPath === pathname) return;
+    setBlockedAlertPath(pathname);
+    window.alert(`이 계정은 「${MENU_ACCESS_LABELS[currentMenuKey]}」 메뉴에 접근할 수 없습니다.`);
+    router.replace(resolveFallbackPath(allowedMenus));
+  }, [pathname, loading, isAuthenticated, userProfile, router, blockedAlertPath]);
   
   // 로그인/회원가입 페이지에서는 메뉴를 완전히 숨김
   const isAuthPage = pathname === '/login' || pathname === '/signup';

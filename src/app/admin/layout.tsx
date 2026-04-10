@@ -53,7 +53,7 @@ const adminMenuItems: MenuItem[] = [
   },
   {
     id: 'users',
-    label: '회원 관리',
+    label: '회원 / 권한 관리',
     path: '/admin/users',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

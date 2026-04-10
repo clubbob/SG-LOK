@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, orderBy, getDocs, onSnapshot, Timestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { User } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui';
+import { MENU_ACCESS_KEYS, MENU_ACCESS_LABELS, type MenuAccessKey, normalizeAllowedMenus } from '@/lib/auth/menuAccess';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -42,6 +43,8 @@ export default function AdminUsersPage() {
   const [displayedUsers, setDisplayedUsers] = useState<User[]>([]);
   const [itemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [menuDraft, setMenuDraft] = useState<MenuAccessKey[]>([...MENU_ACCESS_KEYS]);
+  const [isSavingMenu, setIsSavingMenu] = useState(false);
 
   useEffect(() => {
     // 관리자 세션 확인
@@ -79,6 +82,7 @@ export default function AdminUsersPage() {
             deleted: data.deleted || false,
             deletedAt: data.deletedAt?.toDate(),
             deletedBy: data.deletedBy,
+            allowedMenus: normalizeAllowedMenus(data.allowedMenus),
           });
         });
         setUsers(usersData);
@@ -135,6 +139,7 @@ export default function AdminUsersPage() {
           deleted: data.deleted || false,
           deletedAt: data.deletedAt?.toDate(),
           deletedBy: data.deletedBy,
+          allowedMenus: normalizeAllowedMenus(data.allowedMenus),
         });
       });
       setUsers(usersData);
@@ -149,9 +154,50 @@ export default function AdminUsersPage() {
 
   const handleUserClick = (user: User) => {
     setSelectedUser(user);
+    const parsed = normalizeAllowedMenus(user.allowedMenus);
+    setMenuDraft(parsed.length > 0 ? parsed : [...MENU_ACCESS_KEYS]);
     setError('');
     setSuccessMessage('');
   };
+
+  const handleToggleMenu = (key: MenuAccessKey) => {
+    setMenuDraft((prev) => (prev.includes(key) ? prev.filter((v) => v !== key) : [...prev, key]));
+  };
+
+  const handleSaveMenuAccess = async () => {
+    if (!selectedUser) return;
+    if (menuDraft.length === 0) {
+      setSuccessMessage('');
+      setError('최소 1개 메뉴는 허용해야 합니다.');
+      return;
+    }
+    try {
+      setIsSavingMenu(true);
+      await updateDoc(doc(db, 'users', selectedUser.id), {
+        allowedMenus: menuDraft,
+        updatedAt: Timestamp.now(),
+      });
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === selectedUser.id ? { ...u, allowedMenus: [...menuDraft], updatedAt: new Date() } : u
+        )
+      );
+      setSelectedUser((prev) => (prev ? { ...prev, allowedMenus: [...menuDraft], updatedAt: new Date() } : prev));
+      setError('');
+      setSuccessMessage('메뉴 권한이 저장되었습니다.');
+    } catch (err) {
+      console.error('메뉴 권한 저장 오류:', err);
+      setSuccessMessage('');
+      setError('메뉴 권한 저장 중 오류가 발생했습니다.');
+    } finally {
+      setIsSavingMenu(false);
+    }
+  };
+  const selectedAllowedMenus = normalizeAllowedMenus(selectedUser?.allowedMenus);
+  const hasMenuChanges =
+    menuDraft.length !== selectedAllowedMenus.length ||
+    menuDraft.some((key) => !selectedAllowedMenus.includes(key));
+
 
   const handleApproveUser = async () => {
     if (!selectedUser) return;
@@ -179,17 +225,66 @@ export default function AdminUsersPage() {
 
   const handleDeleteUser = async () => {
     if (!selectedUser) return;
-    if (!window.confirm(`정말로 "${selectedUser.name}" 회원을 삭제하시겠습니까?\n삭제 후에는 되돌릴 수 없습니다.`)) {
+    if (!window.confirm(`정말로 "${selectedUser.name}" 회원을 삭제하시겠습니까?\n삭제 후에도 복구할 수 있습니다.`)) {
+      return;
+    }
+    if (!window.confirm(`최종 확인: "${selectedUser.name}" 회원 계정을 삭제 처리합니다.\n필요 시 관리자 화면에서 복구할 수 있습니다. 계속하시겠습니까?`)) {
       return;
     }
 
     try {
-      await deleteDoc(doc(db, 'users', selectedUser.id));
-      setUsers((prev) => prev.filter((u) => u.id !== selectedUser.id));
-      setSelectedUser(null);
+      await updateDoc(doc(db, 'users', selectedUser.id), {
+        deleted: true,
+        deletedAt: Timestamp.now(),
+        deletedBy: 'admin',
+        updatedAt: Timestamp.now(),
+      });
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === selectedUser.id
+            ? { ...u, deleted: true, deletedAt: new Date(), deletedBy: 'admin', updatedAt: new Date() }
+            : u
+        )
+      );
+      setSelectedUser((prev) =>
+        prev ? { ...prev, deleted: true, deletedAt: new Date(), deletedBy: 'admin', updatedAt: new Date() } : prev
+      );
+      setError('');
+      setSuccessMessage('회원이 삭제 처리되었습니다. (복구 가능)');
     } catch (err) {
       console.error('회원 삭제 오류:', err);
       setError('회원 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleRestoreUser = async () => {
+    if (!selectedUser) return;
+    if (!window.confirm(`"${selectedUser.name}" 회원을 복구하시겠습니까?`)) {
+      return;
+    }
+    try {
+      await updateDoc(doc(db, 'users', selectedUser.id), {
+        deleted: false,
+        deletedAt: null,
+        deletedBy: null,
+        updatedAt: Timestamp.now(),
+      });
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === selectedUser.id
+            ? { ...u, deleted: false, deletedAt: undefined, deletedBy: undefined, updatedAt: new Date() }
+            : u
+        )
+      );
+      setSelectedUser((prev) =>
+        prev ? { ...prev, deleted: false, deletedAt: undefined, deletedBy: undefined, updatedAt: new Date() } : prev
+      );
+      setError('');
+      setSuccessMessage('회원이 복구되었습니다.');
+    } catch (err) {
+      console.error('회원 복구 오류:', err);
+      setSuccessMessage('');
+      setError('회원 복구 중 오류가 발생했습니다.');
     }
   };
 
@@ -209,7 +304,7 @@ export default function AdminUsersPage() {
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">회원 관리</h1>
+            <h1 className="text-2xl font-bold text-gray-900">회원 / 권한 관리</h1>
             <Button
               variant="outline"
               size="sm"
@@ -432,6 +527,45 @@ export default function AdminUsersPage() {
                         )}
                       </div>
                     </div>
+                    <div className="rounded-lg border border-gray-200 bg-white p-4 mb-4">
+                      <div className="flex items-center justify-between gap-3 mb-3">
+                        <h3 className="text-sm font-semibold text-gray-900">메뉴 권한 설정</h3>
+                        <p className="text-xs text-gray-500">메뉴는 보여도 권한 없으면 진입 차단됩니다.</p>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {MENU_ACCESS_KEYS.map((key) => {
+                          const checked = menuDraft.includes(key);
+                          return (
+                            <label
+                              key={key}
+                              className={`flex items-center gap-2 rounded-md border px-2.5 py-2 text-sm ${
+                                checked
+                                  ? 'border-blue-300 bg-blue-50 text-blue-800'
+                                  : 'border-gray-200 bg-gray-50 text-gray-700'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => handleToggleMenu(key)}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span>{MENU_ACCESS_LABELS[key]}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-3">
+                        <Button
+                          variant={hasMenuChanges ? 'primary' : 'outline'}
+                          size="sm"
+                          onClick={handleSaveMenuAccess}
+                          disabled={isSavingMenu || !hasMenuChanges}
+                        >
+                          {isSavingMenu ? '저장 중...' : hasMenuChanges ? '메뉴 권한 저장' : '저장됨'}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex justify-end gap-3">
@@ -444,13 +578,15 @@ export default function AdminUsersPage() {
                         승인
                       </Button>
                     )}
-                    <Button
-                      variant="danger"
-                      size="md"
-                      onClick={handleDeleteUser}
-                    >
-                      삭제
-                    </Button>
+                    {selectedUser.deleted ? (
+                      <Button variant="primary" size="md" onClick={handleRestoreUser}>
+                        회원 복구
+                      </Button>
+                    ) : (
+                      <Button variant="danger" size="md" onClick={handleDeleteUser}>
+                        회원 삭제
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="md"
@@ -468,7 +604,7 @@ export default function AdminUsersPage() {
                     <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
-                    <p className="text-gray-500">회원을 선택하면 상세 정보를 확인할 수 있습니다.</p>
+                    <p className="text-gray-500">회원을 선택하면 상세 정보와 메뉴 사용 권한을 설정할 수 있습니다.</p>
                   </div>
                 </div>
               )}

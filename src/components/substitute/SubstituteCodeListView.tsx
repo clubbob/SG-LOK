@@ -228,7 +228,13 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
     <div className={embedded ? "min-h-full bg-gray-50 p-4 sm:p-8" : "min-h-screen flex flex-col"}>
       {!embedded && <Header />}
       <main className={embedded ? "" : "flex-1 bg-gray-50"}>
-        <div className={embedded ? "max-w-[1400px] mx-auto" : "max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8"}>
+        <div
+          className={
+            embedded
+              ? "max-w-[1480px] mx-auto"
+              : "max-w-[1480px] mx-auto px-4 sm:px-5 lg:px-6 py-8"
+          }
+        >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">코드 목록</h1>
@@ -290,7 +296,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
             </div>
 
             <div className="mt-4 overflow-x-auto rounded-md border border-gray-200">
-              <table className="min-w-[1100px] divide-y divide-gray-200">
+              <table className={`${embedded ? "min-w-[980px]" : "min-w-[1100px]"} divide-y divide-gray-200`}>
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">번호</th>

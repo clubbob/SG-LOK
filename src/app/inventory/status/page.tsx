@@ -19,10 +19,13 @@ import {
 } from '@/lib/inventory/searchFilter';
 import {
   attachTabsToUhpState,
+  findProductInUhpSlices,
   findTabById,
   getTabSliceProducts,
 } from '@/lib/inventory/uhpInventoryHelpers';
+import { buildCombinedHistoryRows, combinedHistoryRowMemo } from '@/lib/inventory/historyRows';
 import type {
+  InventoryItem as HistoryInventoryItem,
   InventoryProduct as CatalogInventoryProduct,
   UhpInventoryState,
 } from '@/lib/inventory/types';
@@ -40,10 +43,35 @@ type InventoryItem = {
   currentStock: number;
   safetyStock: number;
   unit: string;
+  inboundHistory?: {
+    id: string;
+    quantity: number;
+    createdAt: string;
+    variantCode?: string;
+  }[];
+  outboundHistory?: {
+    id: string;
+    quantity: number;
+    createdAt: string;
+    variantCode?: string;
+  }[];
+  adjustmentHistory?: {
+    id: string;
+    createdAt: string;
+    variantCode: string;
+    beforeStock: number;
+    afterStock: number;
+    delta: number;
+    reason: string;
+  }[];
   productionPlanHistory?: {
+    id: string;
+    createdAt: string;
+    updatedAt?: string;
     variantCode?: string;
     plannedQuantity: number;
     dueDate: string;
+    note?: string;
   }[];
 };
 
@@ -74,6 +102,14 @@ const FALLBACK_UHP: UhpInventoryState = {
 };
 
 const PRODUCT_LIST_PAGE_SIZE = 10;
+const HISTORY_PAGE_SIZE = 20;
+
+type HistoryViewModalState = {
+  isOpen: boolean;
+  productName: string;
+  itemCode: string;
+  page: number;
+};
 
 function InventoryStatusPageContent() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -91,6 +127,12 @@ function InventoryStatusPageContent() {
   const [productListPage, setProductListPage] = useState(1);
   const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(new Set());
   const [uhpInventory, setUhpInventory] = useState<UhpInventoryState>(FALLBACK_UHP);
+  const [historyViewModal, setHistoryViewModal] = useState<HistoryViewModalState>({
+    isOpen: false,
+    productName: '',
+    itemCode: '',
+    page: 1,
+  });
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -287,6 +329,48 @@ function InventoryStatusPageContent() {
     };
   };
 
+  const openHistoryViewModal = (productName: string, itemCode: string) => {
+    setHistoryViewModal({
+      isOpen: true,
+      productName,
+      itemCode,
+      page: 1,
+    });
+  };
+
+  const closeHistoryViewModal = () => {
+    setHistoryViewModal({
+      isOpen: false,
+      productName: '',
+      itemCode: '',
+      page: 1,
+    });
+  };
+
+  const historyViewTargetItem = findProductInUhpSlices(uhpInventory, historyViewModal.productName)?.items.find(
+    (item) => item.code === historyViewModal.itemCode
+  ) as InventoryItem | undefined;
+  const toHistoryViewItem = (item: InventoryItem | undefined): HistoryInventoryItem | undefined => {
+    if (!item) return undefined;
+    return {
+      ...item,
+      inboundHistory: item.inboundHistory ?? [],
+      outboundHistory: item.outboundHistory ?? [],
+      adjustmentHistory: item.adjustmentHistory ?? [],
+      productionPlanHistory: item.productionPlanHistory ?? [],
+    };
+  };
+  const combinedHistoryViewRows = buildCombinedHistoryRows(toHistoryViewItem(historyViewTargetItem));
+  const historyViewTotalPages = Math.max(
+    1,
+    Math.ceil(combinedHistoryViewRows.length / HISTORY_PAGE_SIZE)
+  );
+  const historyViewCurrentPage = Math.min(historyViewModal.page, historyViewTotalPages);
+  const pagedHistoryViewRows = combinedHistoryViewRows.slice(
+    (historyViewCurrentPage - 1) * HISTORY_PAGE_SIZE,
+    historyViewCurrentPage * HISTORY_PAGE_SIZE
+  );
+
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -428,24 +512,33 @@ function InventoryStatusPageContent() {
                           >
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-sm font-semibold text-gray-800">{item.code}</p>
-                              <span
-                                className={`rounded-md px-2.5 py-1 text-sm font-bold shadow-sm ${
-                                  (item.variants && item.variants.length > 0
-                                    ? item.variants.reduce((sum, variant) => sum + variant.currentStock, 0)
-                                    : item.currentStock) > 0
-                                    ? 'border-2 border-emerald-600 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300'
-                                    : 'border border-blue-300 bg-blue-100 text-blue-900'
-                                }`}
-                              >
-                                총 현재고{' '}
-                                {item.variants && item.variants.length > 0
-                                  ? item.variants.reduce(
-                                      (sum, variant) => sum + variant.currentStock,
-                                      0
-                                    )
-                                  : item.currentStock}{' '}
-                                {item.unit}
-                              </span>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => openHistoryViewModal(product.name, item.code)}
+                                  className="rounded-md border border-indigo-300 bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 shadow-sm hover:bg-indigo-100"
+                                >
+                                  전체이력
+                                </button>
+                                <span
+                                  className={`rounded-md px-2.5 py-1 text-sm font-bold shadow-sm ${
+                                    (item.variants && item.variants.length > 0
+                                      ? item.variants.reduce((sum, variant) => sum + variant.currentStock, 0)
+                                      : item.currentStock) > 0
+                                      ? 'border-2 border-emerald-600 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300'
+                                      : 'border border-blue-300 bg-blue-100 text-blue-900'
+                                  }`}
+                                >
+                                  총 현재고{' '}
+                                  {item.variants && item.variants.length > 0
+                                    ? item.variants.reduce(
+                                        (sum, variant) => sum + variant.currentStock,
+                                        0
+                                      )
+                                    : item.currentStock}{' '}
+                                  {item.unit}
+                                </span>
+                              </div>
                             </div>
                             {item.variants && getVisibleVariants(item).length > 0 && (
                               <div className="mt-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
@@ -596,6 +689,127 @@ function InventoryStatusPageContent() {
             </div>
           </div>
         </div>
+
+        {historyViewModal.isOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
+            <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-xl">
+              <div className="shrink-0 border-b border-gray-200 px-5 py-4">
+                <h3 className="text-lg font-semibold text-gray-900">전체이력</h3>
+                <p className="mt-1 text-sm text-gray-600">
+                  {historyViewModal.productName} / {historyViewModal.itemCode}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  입고·출고·재고조정·생산계획을 시간순으로 조회합니다. (조회 전용) 한 페이지에 최대{' '}
+                  {HISTORY_PAGE_SIZE}건이며, 하단에서 페이지를 넘겨 전체를 볼 수 있습니다.
+                </p>
+              </div>
+              <div className="min-h-0 flex-1 px-5 py-4">
+                {pagedHistoryViewRows.length === 0 ? (
+                  <p className="rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-4 text-sm text-gray-500">
+                    등록된 이력이 없습니다.
+                  </p>
+                ) : (
+                  <div className="max-h-[min(50vh,26rem)] overflow-auto rounded-md border border-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200 text-sm">
+                      <thead className="sticky top-0 z-[1] bg-gray-50 text-gray-700 shadow-[0_1px_0_0_rgb(229_231_235)]">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold">일시</th>
+                          <th className="px-3 py-2 text-left font-semibold">구분</th>
+                          <th className="px-3 py-2 text-left font-semibold">세부코드</th>
+                          <th className="px-3 py-2 text-left font-semibold">생산완료일</th>
+                          <th className="px-3 py-2 text-right font-semibold">수량</th>
+                          <th className="px-3 py-2 text-left font-semibold min-w-[140px]">비고</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 bg-white">
+                        {pagedHistoryViewRows.map((row) => (
+                          <tr key={`view-${row.kind}-${row.id}`}>
+                            <td className="px-3 py-2 text-gray-700 whitespace-nowrap">
+                              {new Date(row.createdAt).toLocaleString('ko-KR')}
+                            </td>
+                            <td className="px-3 py-2">
+                              <span
+                                className={`rounded border px-2 py-0.5 text-xs font-semibold ${
+                                  row.kind === 'inbound'
+                                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                    : row.kind === 'outbound'
+                                      ? 'border-red-200 bg-red-50 text-red-700'
+                                      : row.kind === 'adjustment'
+                                        ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                        : 'border-purple-200 bg-purple-50 text-purple-700'
+                                }`}
+                              >
+                                {row.kind === 'inbound'
+                                  ? '입고'
+                                  : row.kind === 'outbound'
+                                    ? '출고'
+                                    : row.kind === 'adjustment'
+                                      ? '조정'
+                                      : '생산계획'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-gray-700">{row.variantCode || '-'}</td>
+                            <td className="px-3 py-2 text-gray-700">
+                              {row.kind === 'production' ? row.dueDate : '-'}
+                            </td>
+                            <td className="px-3 py-2 text-right font-medium text-gray-800 whitespace-nowrap">
+                              {row.kind === 'adjustment' && row.quantity > 0
+                                ? `+${row.quantity}`
+                                : row.quantity}
+                            </td>
+                            <td className="px-3 py-2 text-gray-600 text-xs max-w-xs break-words">
+                              {combinedHistoryRowMemo(row)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              <div className="flex shrink-0 items-center justify-between border-t border-gray-200 px-5 py-4">
+                <div className="text-sm text-gray-600">
+                  총 {combinedHistoryViewRows.length}건 / {historyViewCurrentPage} / {historyViewTotalPages} 페이지
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setHistoryViewModal((prev) => ({
+                        ...prev,
+                        page: Math.max(1, prev.page - 1),
+                      }))
+                    }
+                    disabled={historyViewCurrentPage <= 1}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    이전
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setHistoryViewModal((prev) => ({
+                        ...prev,
+                        page: Math.min(historyViewTotalPages, prev.page + 1),
+                      }))
+                    }
+                    disabled={historyViewCurrentPage >= historyViewTotalPages}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    다음
+                  </button>
+                  <button
+                    type="button"
+                    onClick={closeHistoryViewModal}
+                    className="ml-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
       <Footer />
     </div>

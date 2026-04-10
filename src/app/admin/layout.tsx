@@ -282,11 +282,14 @@ export default function AdminLayout({
   };
 
   const handleGoUserLogin = () => {
-    // 관리자 탭과 사용자 탭의 Firebase Auth 세션 충돌을 막기 위해
-    // 다른 host(origin)로 사용자 로그인 탭을 연다. (localhost <-> 127.0.0.1)
-    const { protocol, port, hostname } = window.location;
-    const altHost = hostname === 'localhost' ? '127.0.0.1' : 'localhost';
-    const userLoginUrl = `${protocol}//${altHost}${port ? `:${port}` : ''}/login`;
+    // 로컬 개발 환경에서만 host를 바꿔 세션 충돌을 피하고,
+    // 운영/스테이징 도메인에서는 현재 origin 그대로 이동한다.
+    const { protocol, port, hostname, origin } = window.location;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const targetOrigin = isLocalhost
+      ? `${protocol}//${hostname === 'localhost' ? '127.0.0.1' : 'localhost'}${port ? `:${port}` : ''}`
+      : origin;
+    const userLoginUrl = `${targetOrigin}/login`;
     window.open(userLoginUrl, '_blank', 'noopener,noreferrer');
   };
 

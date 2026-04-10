@@ -443,7 +443,7 @@ export default function AdminUsersPage() {
                               size="sm"
                               onClick={() => handleUserClick(user)}
                             >
-                              메뉴 권한 설정
+                              이용 권한 설정
                             </Button>
                           </div>
                         </div>
@@ -588,8 +588,12 @@ export default function AdminUsersPage() {
                     </div>
                     <div className="rounded-lg border border-gray-200 bg-white p-4 mb-4">
                       <div className="flex items-center justify-between gap-3 mb-3">
-                        <h3 className="text-sm font-semibold text-gray-900">메뉴 권한 설정</h3>
-                        <p className="text-xs text-gray-500">메뉴는 보여도 권한 없으면 진입 차단됩니다.</p>
+                        <h3 className="text-sm font-semibold text-gray-900">이용 권한 설정</h3>
+                        <p className="text-xs text-gray-500">
+                          {isProtectedMainAdminSelected
+                            ? '메인 관리자 계정은 메뉴 권한을 수정할 수 없습니다.'
+                            : '메뉴는 보여도 권한 없으면 진입 차단됩니다.'}
+                        </p>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {MENU_ACCESS_KEYS.map((key) => {
@@ -607,6 +611,7 @@ export default function AdminUsersPage() {
                                 type="checkbox"
                                 checked={checked}
                                 onChange={() => handleToggleMenu(key)}
+                                disabled={isProtectedMainAdminSelected}
                                 className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                               />
                               <span>{MENU_ACCESS_LABELS[key]}</span>
@@ -619,9 +624,15 @@ export default function AdminUsersPage() {
                           variant={hasMenuChanges ? 'primary' : 'outline'}
                           size="sm"
                           onClick={handleSaveMenuAccess}
-                          disabled={isSavingMenu || !hasMenuChanges}
+                          disabled={isProtectedMainAdminSelected || isSavingMenu || !hasMenuChanges}
                         >
-                          {isSavingMenu ? '저장 중...' : hasMenuChanges ? '메뉴 권한 저장' : '저장됨'}
+                          {isProtectedMainAdminSelected
+                            ? '수정 불가'
+                            : isSavingMenu
+                              ? '저장 중...'
+                              : hasMenuChanges
+                                ? '메뉴 권한 저장'
+                                : '저장됨'}
                         </Button>
                       </div>
                     </div>

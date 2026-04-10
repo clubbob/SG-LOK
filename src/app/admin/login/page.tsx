@@ -1,13 +1,15 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Header, Footer } from '@/components/layout';
 import { Button, Input } from '@/components/ui';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 // Firebase Auth는 Firestore 접근을 위해 필요
-import { signInAnonymously } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
+import { hasEffectiveAdminAccess } from '@/lib/auth/adminBootstrap';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -24,6 +26,42 @@ export default function AdminLoginPage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [accessReady, setAccessReady] = useState(false);
+
+  useEffect(() => {
+    const checkAdminEligible = async (firebaseUser: FirebaseUser | null) => {
+      if (!firebaseUser || firebaseUser.isAnonymous) {
+        setError('관리자 로그인을 위해선 먼저 사용자 로그인을 해야 합니다.');
+        setAccessReady(false);
+        return;
+      }
+      try {
+        const userSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
+        const profile = userSnap.exists() ? userSnap.data() : null;
+        const firestoreIsAdmin =
+          profile && typeof profile.isAdmin === 'boolean' ? profile.isAdmin : undefined;
+        const allowed = hasEffectiveAdminAccess({
+          firestoreIsAdmin,
+          email: firebaseUser.email,
+        });
+        if (!allowed) {
+          setError('관리자 기능이 없는 계정입니다.');
+          setAccessReady(false);
+          return;
+        }
+        setAccessReady(true);
+        setError('');
+      } catch (e) {
+        console.error('관리자 권한 확인 오류:', e);
+        setError('관리자 권한 확인에 실패했습니다.');
+        setAccessReady(false);
+      }
+    };
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      void checkAdminEligible(firebaseUser);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -39,26 +77,26 @@ export default function AdminLoginPage() {
     setError('');
 
     try {
+      if (!accessReady) {
+        setError('관리자 기능이 부여된 사용자만 관리자 로그인을 사용할 수 있습니다.');
+        return;
+      }
       // 관리자 인증 확인 (아이디와 비밀번호만 확인)
       if (formData.id === ADMIN_ID && formData.password === ADMIN_PASSWORD) {
+        const currentUser = auth.currentUser;
+        if (!currentUser || currentUser.isAnonymous) {
+          setError('사용자 로그인 세션을 확인할 수 없습니다. 다시 로그인해 주세요.');
+          return;
+        }
         // 세션 저장 (24시간 유지)
         const sessionData = {
           authenticated: true,
+          uid: currentUser.uid,
           timestamp: new Date().getTime(),
           expiresAt: new Date().getTime() + 24 * 60 * 60 * 1000, // 24시간
         };
         localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(sessionData));
-        
-        // Firestore 접근을 위해 Firebase 익명 인증 수행
-        // 사용자가 로그아웃한 상태에서도 Firestore 권한이 필요하므로 익명 인증 사용
-        try {
-          await signInAnonymously(auth);
-          console.log('관리자 Firebase 익명 인증 완료');
-        } catch (authError) {
-          console.warn('Firebase 익명 인증 실패 (계속 진행):', authError);
-          // 익명 인증 실패해도 관리자 세션이 있으면 계속 진행
-        }
-        
+
         // 관리자 홈 페이지로 리다이렉트
         router.push('/admin/dashboard');
       } else {
@@ -131,6 +169,7 @@ export default function AdminLoginPage() {
                 variant="primary"
                 size="lg"
                 loading={loading}
+                disabled={!accessReady}
                 className="w-full"
               >
                 로그인

@@ -8,6 +8,7 @@ import { User } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui';
 import { MENU_ACCESS_KEYS, MENU_ACCESS_LABELS, type MenuAccessKey, normalizeAllowedMenus } from '@/lib/auth/menuAccess';
+import { isBootstrapAdminEmail } from '@/lib/auth/adminBootstrap';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -83,6 +84,7 @@ export default function AdminUsersPage() {
             deletedAt: data.deletedAt?.toDate(),
             deletedBy: data.deletedBy,
             allowedMenus: normalizeAllowedMenus(data.allowedMenus),
+            isAdmin: data.isAdmin === true,
           });
         });
         setUsers(usersData);
@@ -140,6 +142,7 @@ export default function AdminUsersPage() {
           deletedAt: data.deletedAt?.toDate(),
           deletedBy: data.deletedBy,
           allowedMenus: normalizeAllowedMenus(data.allowedMenus),
+          isAdmin: data.isAdmin === true,
         });
       });
       setUsers(usersData);
@@ -193,10 +196,46 @@ export default function AdminUsersPage() {
       setIsSavingMenu(false);
     }
   };
+
+  const handleToggleAdminAccess = async () => {
+    if (!selectedUser) return;
+    const nextIsAdmin = !(selectedUser.isAdmin === true);
+    const isProtectedMainAdmin =
+      selectedUser.isAdmin === true && isBootstrapAdminEmail(selectedUser.email);
+    if (isProtectedMainAdmin && !nextIsAdmin) {
+      setSuccessMessage('');
+      setError('메인 관리자 계정은 관리자 기능을 해제할 수 없습니다.');
+      return;
+    }
+    const actionLabel = nextIsAdmin ? '부여' : '해제';
+    if (!window.confirm(`"${selectedUser.name}" 회원의 관리자 기능을 ${actionLabel}하시겠습니까?`)) {
+      return;
+    }
+    try {
+      await updateDoc(doc(db, 'users', selectedUser.id), {
+        isAdmin: nextIsAdmin,
+        updatedAt: Timestamp.now(),
+      });
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === selectedUser.id ? { ...u, isAdmin: nextIsAdmin, updatedAt: new Date() } : u
+        )
+      );
+      setSelectedUser((prev) => (prev ? { ...prev, isAdmin: nextIsAdmin, updatedAt: new Date() } : prev));
+      setError('');
+      setSuccessMessage(`관리자 기능이 ${nextIsAdmin ? '부여' : '해제'}되었습니다.`);
+    } catch (err) {
+      console.error('관리자 기능 권한 변경 오류:', err);
+      setSuccessMessage('');
+      setError('관리자 기능 권한 변경 중 오류가 발생했습니다.');
+    }
+  };
   const selectedAllowedMenus = normalizeAllowedMenus(selectedUser?.allowedMenus);
   const hasMenuChanges =
     menuDraft.length !== selectedAllowedMenus.length ||
     menuDraft.some((key) => !selectedAllowedMenus.includes(key));
+  const isProtectedMainAdminSelected =
+    !!selectedUser && selectedUser.isAdmin === true && isBootstrapAdminEmail(selectedUser.email);
 
 
   const handleApproveUser = async () => {
@@ -353,10 +392,9 @@ export default function AdminUsersPage() {
                       </div>
                     ) : (
                       displayedUsers.map((user) => (
-                        <button
+                        <div
                           key={user.id}
-                          onClick={() => handleUserClick(user)}
-                          className={`w-full text-left p-4 hover:bg-gray-50 transition-colors ${
+                          className={`w-full text-left p-4 transition-colors ${
                             selectedUser?.id === user.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
                           }`}
                         >
@@ -364,19 +402,26 @@ export default function AdminUsersPage() {
                             <h3 className="font-semibold text-gray-900 text-sm truncate flex-1">
                               {user.name}
                             </h3>
-                            {user.deleted ? (
-                              <span className="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded">
-                                삭제됨
-                              </span>
-                            ) : user.approved === false ? (
-                              <span className="text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded">
-                                승인 대기
-                              </span>
-                            ) : (
-                              <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
-                                승인 완료
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1.5">
+                              {user.isAdmin === true && (
+                                <span className="text-xs text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
+                                  관리자
+                                </span>
+                              )}
+                              {user.deleted ? (
+                                <span className="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded">
+                                  삭제됨
+                                </span>
+                              ) : user.approved === false ? (
+                                <span className="text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded">
+                                  승인 대기
+                                </span>
+                              ) : (
+                                <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
+                                  승인 완료
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <p className="text-xs text-gray-600 mb-1 truncate">
                             {user.email}
@@ -392,7 +437,16 @@ export default function AdminUsersPage() {
                           <p className="text-xs text-gray-500">
                             최근 로그인: {user.lastLoginAt ? formatDateTime(user.lastLoginAt) : '-'}
                           </p>
-                        </button>
+                          <div className="mt-3">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleUserClick(user)}
+                            >
+                              메뉴 권한 설정
+                            </Button>
+                          </div>
+                        </div>
                       ))
                     )}
                   </div>
@@ -448,6 +502,11 @@ export default function AdminUsersPage() {
                         {selectedUser.deleted && (
                           <span className="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded">
                             삭제된 회원
+                          </span>
+                        )}
+                        {selectedUser.isAdmin === true && (
+                          <span className="text-xs text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
+                            관리자 기능 부여됨
                           </span>
                         )}
                       </div>
@@ -569,6 +628,15 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="flex justify-end gap-3">
+                    {!isProtectedMainAdminSelected && (
+                      <Button
+                        variant={selectedUser.isAdmin === true ? 'outline' : 'primary'}
+                        size="md"
+                        onClick={handleToggleAdminAccess}
+                      >
+                        {selectedUser.isAdmin === true ? '관리자 기능 해제' : '관리자 기능 부여'}
+                      </Button>
+                    )}
                     {selectedUser.approved === false && !selectedUser.deleted && (
                       <Button
                         variant="primary"
@@ -582,11 +650,11 @@ export default function AdminUsersPage() {
                       <Button variant="primary" size="md" onClick={handleRestoreUser}>
                         회원 복구
                       </Button>
-                    ) : (
+                    ) : !isProtectedMainAdminSelected ? (
                       <Button variant="danger" size="md" onClick={handleDeleteUser}>
                         회원 삭제
                       </Button>
-                    )}
+                    ) : null}
                     <Button
                       variant="outline"
                       size="md"

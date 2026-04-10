@@ -4,18 +4,18 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
-import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { signInAnonymously } from 'firebase/auth';
+import { hasEffectiveAdminAccess, isBootstrapAdminEmail } from '@/lib/auth/adminBootstrap';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
 // 관리자 인증 확인 함수
-const checkAdminAuth = (): boolean => {
-  if (typeof window === 'undefined') return false;
+const checkAdminAuth = (): { ok: boolean; uid?: string } => {
+  if (typeof window === 'undefined') return { ok: false };
   
   const sessionData = localStorage.getItem(ADMIN_SESSION_KEY);
-  if (!sessionData) return false;
+  if (!sessionData) return { ok: false };
   
   try {
     const session = JSON.parse(sessionData);
@@ -23,12 +23,14 @@ const checkAdminAuth = (): boolean => {
     
     if (now > session.expiresAt) {
       localStorage.removeItem(ADMIN_SESSION_KEY);
-      return false;
+      return { ok: false };
     }
-    
-    return session.authenticated === true;
+    return {
+      ok: session.authenticated === true && typeof session.uid === 'string' && session.uid.length > 0,
+      uid: typeof session.uid === 'string' ? session.uid : undefined,
+    };
   } catch {
-    return false;
+    return { ok: false };
   }
 };
 
@@ -185,71 +187,90 @@ export default function AdminLayout({
       return;
     }
 
-    const isAdmin = checkAdminAuth();
-    setIsAdminAuthenticated(isAdmin);
-    setLoading(false);
-    
-    if (!isAdmin) {
-      router.push('/admin/login');
-    }
+    const verifyAdmin = async () => {
+      const session = checkAdminAuth();
+      if (!session.ok || !session.uid) {
+        setIsAdminAuthenticated(false);
+        setLoading(false);
+        router.push('/admin/login');
+        return;
+      }
 
-    // 생산관리 관련 페이지일 때 메뉴 자동 확장
-    if (pathname?.startsWith('/admin/production')) {
-      setExpandedMenus(prev => new Set(prev).add('production'));
-    }
-    // 성적서관리 관련 페이지일 때 메뉴 자동 확장
-    if (pathname?.startsWith('/admin/certificate')) {
-      setExpandedMenus(prev => new Set(prev).add('certificate'));
-    }
-    // 재고관리 관련 페이지일 때 메뉴 자동 확장
-    if (pathname?.startsWith('/admin/inventory')) {
-      setExpandedMenus(prev => new Set(prev).add('inventory'));
-    }
-    if (pathname?.startsWith('/admin/substitute')) {
-      setExpandedMenus(prev => new Set(prev).add('substitute'));
-    }
-    if (pathname?.startsWith('/admin/dealer-customers')) {
-      setExpandedMenus(prev => new Set(prev).add('dealer-customers'));
-    }
-  }, [router, pathname]);
-
-  // admin_session은 localStorage 기반이므로, Firebase 인증이 만료/실패된 경우
-  // request.auth가 null이 되어 보안 규칙에서 권한이 막힐 수 있습니다.
-  // 따라서 admin 세션이 유효한 동안에는 익명 인증을 한 번 더 보장합니다.
-  useEffect(() => {
-    if (!isAdminAuthenticated) return;
-
-    const ensureAdminIdentity = async () => {
       try {
-        // Firebase 인증이 없으면 익명 인증으로 관리자 세션을 연결
-        if (!auth.currentUser) {
-          await signInAnonymously(auth);
-        }
         const currentUser = auth.currentUser;
-        const uid = currentUser?.uid;
-        if (!uid) return;
+        if (!currentUser || currentUser.isAnonymous || currentUser.uid !== session.uid) {
+          setIsAdminAuthenticated(false);
+          setLoading(false);
+          router.push('/admin/login');
+          return;
+        }
+        const userSnap = await getDoc(doc(db, 'users', session.uid));
+        const profile = userSnap.exists() ? userSnap.data() : null;
+        const profileEmail =
+          typeof profile?.email === 'string' ? profile.email : '';
+        const emailForCheck = (currentUser.email || profileEmail).trim();
+        const firestoreIsAdmin =
+          profile && typeof profile.isAdmin === 'boolean' ? profile.isAdmin : undefined;
+        const hasAdminRole = hasEffectiveAdminAccess({
+          firestoreIsAdmin,
+          email: emailForCheck,
+        });
 
-        // 일반 사용자 프로필(users/{uid})은 절대 덮어쓰지 않음.
-        // 관리자(익명 인증) 세션에서만 관리자 플래그를 보장한다.
-        if (!currentUser?.isAnonymous) return;
+        // 문서에 isAdmin 필드가 아직 없을 때만 부트스트랩 계정에 true 동기화 (명시 false 는 덮어쓰지 않음)
+        if (
+          isBootstrapAdminEmail(emailForCheck) &&
+          userSnap.exists() &&
+          profile &&
+          profile.isAdmin !== true &&
+          profile.isAdmin !== false
+        ) {
+          try {
+            await setDoc(
+              doc(db, 'users', session.uid),
+              { isAdmin: true, updatedAt: serverTimestamp() },
+              { merge: true }
+            );
+          } catch (syncErr) {
+            console.warn('부트스트랩 관리자 isAdmin 동기화 실패:', syncErr);
+          }
+        }
 
-        // Firestore 규칙의 isAdmin() 판별용 관리자 플래그 보장
-        await setDoc(
-          doc(db, 'users', uid),
-          {
-            isAdmin: true,
-            role: 'admin',
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
+        setIsAdminAuthenticated(hasAdminRole);
+        setLoading(false);
+        if (!hasAdminRole) {
+          localStorage.removeItem(ADMIN_SESSION_KEY);
+          router.push('/admin/login');
+          return;
+        }
       } catch (e) {
-        console.warn('Firebase 익명 인증/관리자 플래그 설정 실패:', e);
+        console.error('관리자 권한 검증 오류:', e);
+        setIsAdminAuthenticated(false);
+        setLoading(false);
+        router.push('/admin/login');
+        return;
+      }
+
+      // 생산관리 관련 페이지일 때 메뉴 자동 확장
+      if (pathname?.startsWith('/admin/production')) {
+        setExpandedMenus(prev => new Set(prev).add('production'));
+      }
+      // 성적서관리 관련 페이지일 때 메뉴 자동 확장
+      if (pathname?.startsWith('/admin/certificate')) {
+        setExpandedMenus(prev => new Set(prev).add('certificate'));
+      }
+      // 재고관리 관련 페이지일 때 메뉴 자동 확장
+      if (pathname?.startsWith('/admin/inventory')) {
+        setExpandedMenus(prev => new Set(prev).add('inventory'));
+      }
+      if (pathname?.startsWith('/admin/substitute')) {
+        setExpandedMenus(prev => new Set(prev).add('substitute'));
+      }
+      if (pathname?.startsWith('/admin/dealer-customers')) {
+        setExpandedMenus(prev => new Set(prev).add('dealer-customers'));
       }
     };
-
-    ensureAdminIdentity();
-  }, [isAdminAuthenticated]);
+    verifyAdmin();
+  }, [router, pathname]);
 
   // 승인 대기 회원 수 실시간 구독
   useEffect(() => {

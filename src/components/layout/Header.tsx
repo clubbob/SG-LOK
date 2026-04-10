@@ -12,6 +12,7 @@ import {
   resolveFallbackPath,
   resolveMenuKeyByPath,
 } from '@/lib/auth/menuAccess';
+import { hasEffectiveAdminAccess } from '@/lib/auth/adminBootstrap';
 
 export default function Header() {
   const { user, userProfile, isAuthenticated, signOut, loading } = useAuth();
@@ -91,6 +92,11 @@ export default function Header() {
     return '사용자';
   };
 
+  const canShowAdminEntry = hasEffectiveAdminAccess({
+    firestoreIsAdmin: userProfile?.isAdmin,
+    email: userProfile?.email || user?.email,
+  });
+
   return (
     <header className="sticky top-0 z-50 bg-blue-500 shadow-lg">
       <div className="w-full max-w-[1600px] mx-auto px-1 sm:px-2 lg:px-3">
@@ -119,6 +125,15 @@ export default function Header() {
               >
                 대시보드
               </Link>
+              {isAuthenticated && canShowAdminEntry && (
+                <Link
+                  href="/admin/login"
+                  className="mx-2 px-4 py-2.5 rounded-lg text-[15px] font-semibold transition-colors text-white/95 hover:bg-blue-600"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                >
+                  관리자
+                </Link>
+              )}
               <div className="relative">
                 <button
                   type="button"
@@ -445,6 +460,14 @@ export default function Header() {
 
           {/* 우측 메뉴 */}
           <div className="flex items-center space-x-4">
+            {!loading && isAuthenticated && canShowAdminEntry && !isAuthPage && (
+              <Link
+                href="/admin/login"
+                className="hidden sm:inline-flex items-center rounded-md border border-white/50 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/20"
+              >
+                관리자
+              </Link>
+            )}
             {loading ? (
               // 로딩 중일 때는 아무것도 표시하지 않음 (깜빡임 방지)
               <div className="w-8 h-8"></div>

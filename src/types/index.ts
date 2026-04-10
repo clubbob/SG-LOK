@@ -23,6 +23,7 @@ export interface User {
   sessionId?: string; // 현재 활성 세션 ID (한 곳에서만 로그인 허용)
   lastLoginAt?: Date; // 마지막 로그인 시간
   allowedMenus?: string[]; // 계정별 허용 메뉴 키
+  isAdmin?: boolean; // 관리자 기능 사용 가능 여부
 }
 
 export interface FirebaseError {

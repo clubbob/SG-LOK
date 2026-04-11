@@ -613,7 +613,7 @@ export default function AdminLayout({
         </aside>
 
         {/* 우측 콘텐츠 영역: 문서(body) 스크롤 사용 */}
-        <main className="flex-1 min-w-0 overflow-x-hidden">
+        <main className="flex-1 min-w-0 overflow-x-auto">
           {children}
         </main>
       </div>

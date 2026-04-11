@@ -11,7 +11,33 @@ import { MANUFACTURER } from "@/lib/substitute/constants";
 import { normalizeInstrumentCode } from "@/lib/substitute/codeNormalize";
 import { downloadSubstituteListXlsx } from "@/lib/substitute/exportXlsx";
 import { resolveSubstituteRegistrantLabel } from "@/lib/substitute/registrantDisplay";
+import { buildSwagelokEnProductPageUrl } from "@/lib/substitute/swagelokProductImage";
 import type { SubstituteMappingDoc } from "@/lib/substitute/types";
+
+function openSwagelokProductPopup(url: string) {
+  const w = 1180;
+  const h = 820;
+  const left = Math.max(0, Math.floor((window.screen.width - w) / 2));
+  const top = Math.max(0, Math.floor((window.screen.height - h) / 2));
+  window.open(
+    url,
+    "swagelok_product_page",
+    `popup=yes,width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`
+  );
+}
+
+function resolveSwagelokPageUrlForRow(
+  row: SubstituteMappingDoc,
+  editingId: string | null,
+  editFromCode: string
+): string | null {
+  const normalized =
+    editingId === row.id
+      ? normalizeInstrumentCode(editFromCode)
+      : (row.normalized_code_from ?? "").trim() || normalizeInstrumentCode(row.code_from ?? "");
+  if (!normalized) return null;
+  return buildSwagelokEnProductPageUrl(normalized);
+}
 
 function toMillis(ts: unknown): number {
   if (!ts || typeof ts !== "object") return 0;
@@ -231,8 +257,8 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
         <div
           className={
             embedded
-              ? "max-w-[1480px] mx-auto"
-              : "max-w-[1480px] mx-auto px-4 sm:px-5 lg:px-6 py-8"
+              ? "w-full max-w-none mx-auto"
+              : "w-full max-w-[min(1840px,calc(100vw-2rem))] mx-auto px-4 sm:px-5 lg:px-6 py-8"
           }
         >
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -296,28 +322,29 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
             </div>
 
             <div className="mt-4 overflow-x-auto rounded-md border border-gray-200">
-              <table className={`${embedded ? "min-w-[980px]" : "min-w-[1100px]"} divide-y divide-gray-200`}>
+              <table className="w-max min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">번호</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Swagelok 제품명</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">Swagelok 제품코드</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">S-LOK 제품명</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">S-LOK 제품코드</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록일</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록자</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">번호</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Swagelok 제품명</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Swagelok 제품코드</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-600">제품 이미지</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">S-LOK 제품명</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">S-LOK 제품코드</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록일</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록자</th>
                     {canEditRows && (
-                      <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600 whitespace-nowrap">관리</th>
+                      <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">관리</th>
                     )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
                   {pagedRows.map((row, index) => (
                     <tr key={row.id} className="hover:bg-gray-50/60">
-                      <td className="px-4 py-3 text-sm text-gray-800">
+                      <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-800">
                         {filteredRows.length - ((effectivePage - 1) * PAGE_SIZE + index)}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900">
                         {canEditRows && editingId === row.id ? (
                           <input
                             type="text"
@@ -329,7 +356,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                           row.product_name_from || "-"
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-3 py-3 text-sm font-medium text-gray-800">
                         {canEditRows && editingId === row.id ? (
                           <input
                             type="text"
@@ -341,7 +368,39 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                           row.code_from || "-"
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                      <td className="shrink-0 whitespace-nowrap px-3 py-3 text-center align-middle">
+                        <button
+                          type="button"
+                          disabled={!resolveSwagelokPageUrlForRow(row, editingId, editFromCode)}
+                          onClick={() => {
+                            const u = resolveSwagelokPageUrlForRow(row, editingId, editFromCode);
+                            if (u) openSwagelokProductPopup(u);
+                          }}
+                          title={
+                            resolveSwagelokPageUrlForRow(row, editingId, editFromCode)
+                              ? "Swagelok 공식 제품 페이지(사진·사양)를 팝업으로 엽니다"
+                              : "Swagelok 제품코드가 있어야 합니다"
+                          }
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-sky-200 bg-sky-50 px-2.5 py-1.5 text-xs font-medium text-sky-800 hover:bg-sky-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                        >
+                          <svg
+                            className="h-4 w-4 shrink-0 opacity-90"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden
+                          >
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <path d="M21 15l-5-5L5 21" />
+                          </svg>
+                          열기
+                        </button>
+                      </td>
+                      <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900">
                         {canEditRows && editingId === row.id ? (
                           <input
                             type="text"
@@ -353,7 +412,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                           row.product_name_to || "-"
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800 whitespace-nowrap">
+                      <td className="whitespace-nowrap px-3 py-3 text-sm font-medium text-gray-800">
                         {canEditRows && editingId === row.id ? (
                           <input
                             type="text"
@@ -365,12 +424,12 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                           row.code_to || "-"
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">{formatDateTime(row.created_at)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                      <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-700">{formatDateTime(row.created_at)}</td>
+                      <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-700">
                         {row.created_by ? resolveSubstituteRegistrantLabel(row.created_by, userNameById) : "-"}
                       </td>
                       {canEditRows && (
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                        <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-700">
                           {editingId === row.id ? (
                             <div className="flex items-center gap-2">
                               <button

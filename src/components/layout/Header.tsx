@@ -125,15 +125,6 @@ export default function Header() {
               >
                 대시보드
               </Link>
-              {isAuthenticated && canShowAdminEntry && (
-                <Link
-                  href="/admin/login"
-                  className="mx-2 px-4 py-2.5 rounded-lg text-[15px] font-semibold transition-colors text-white/95 hover:bg-blue-600"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  관리자
-                </Link>
-              )}
               <div className="relative">
                 <button
                   type="button"

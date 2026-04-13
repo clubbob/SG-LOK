@@ -93,7 +93,6 @@ export function useAuth() {
         try {
           await updateDoc(doc(db, 'users', user.uid), {
             sessionId: deleteField(),
-            lastLoginAt: deleteField(),
           });
         } catch (error) {
           console.error('세션 정보 제거 중 오류:', error);

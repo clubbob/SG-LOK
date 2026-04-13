@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { collection, query, orderBy, getDocs, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { User } from '@/types';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime24 } from '@/lib/utils';
 import { Button } from '@/components/ui';
 import { MENU_ACCESS_KEYS, MENU_ACCESS_LABELS, type MenuAccessKey, normalizeAllowedMenus } from '@/lib/auth/menuAccess';
 import { isBootstrapAdminEmail } from '@/lib/auth/adminBootstrap';
@@ -432,10 +432,10 @@ export default function AdminUsersPage() {
                             </p>
                           )}
                           <p className="text-xs text-gray-500">
-                            가입일: {formatDateTime(user.createdAt)}
+                            가입일: {formatDateTime24(user.createdAt)}
                           </p>
                           <p className="text-xs text-gray-500">
-                            최근 로그인: {user.lastLoginAt ? formatDateTime(user.lastLoginAt) : '-'}
+                            최근 로그인: {user.lastLoginAt ? formatDateTime24(user.lastLoginAt) : '-'}
                           </p>
                           <div className="mt-3">
                             <Button
@@ -566,22 +566,22 @@ export default function AdminUsersPage() {
                         )}
                         <div className="flex">
                           <span className="font-medium text-gray-700 w-32 flex-shrink-0">가입일:</span>
-                          <span className="text-gray-900">{formatDateTime(selectedUser.createdAt)}</span>
+                          <span className="text-gray-900">{formatDateTime24(selectedUser.createdAt)}</span>
                         </div>
                         <div className="flex">
                           <span className="font-medium text-gray-700 w-32 flex-shrink-0">수정일:</span>
-                          <span className="text-gray-900">{formatDateTime(selectedUser.updatedAt)}</span>
+                          <span className="text-gray-900">{formatDateTime24(selectedUser.updatedAt)}</span>
                         </div>
                         <div className="flex">
                           <span className="font-medium text-gray-700 w-32 flex-shrink-0">최근 로그인:</span>
                           <span className="text-gray-900">
-                            {selectedUser.lastLoginAt ? formatDateTime(selectedUser.lastLoginAt) : '-'}
+                            {selectedUser.lastLoginAt ? formatDateTime24(selectedUser.lastLoginAt) : '-'}
                           </span>
                         </div>
                         {selectedUser.deletedAt && (
                           <div className="flex">
                             <span className="font-medium text-gray-700 w-32 flex-shrink-0">삭제일:</span>
-                            <span className="text-gray-900">{formatDateTime(selectedUser.deletedAt)}</span>
+                            <span className="text-gray-900">{formatDateTime24(selectedUser.deletedAt)}</span>
                           </div>
                         )}
                       </div>

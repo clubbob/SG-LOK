@@ -36,6 +36,19 @@ export function formatDateTime(date: Date | string): string {
   });
 }
 
+// 24시간 기준 날짜/시간 포맷
+export function formatDateTime24(date: Date | string): string {
+  const d = new Date(date);
+  return d.toLocaleString('ko-KR', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 // 날짜 유효성 검사
 export function isValidDate(date: string): boolean {
   const d = new Date(date);

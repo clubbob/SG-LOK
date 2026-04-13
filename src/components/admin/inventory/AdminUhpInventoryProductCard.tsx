@@ -252,17 +252,41 @@ export function AdminUhpInventoryProductCard({
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-5">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           {dragHandle}
-          <h3 className="text-lg font-semibold text-gray-900">
-            {product.name}
-            {product.categoryLabel != null && (
-              <span className="ml-2 align-middle text-sm font-normal text-blue-700">
-                ({product.categoryLabel})
-              </span>
-            )}
-          </h3>
+          <div className="flex min-w-0 items-center gap-3">
+            <h3 className="truncate text-lg font-semibold text-gray-900">
+              {product.name}
+              {product.categoryLabel != null && (
+                <span className="ml-2 align-middle text-sm font-normal text-blue-700">
+                  ({product.categoryLabel})
+                </span>
+              )}
+            </h3>
+            <div className="rounded-md border border-gray-200 bg-gray-50 p-1.5">
+              <div className="h-[90px] w-[90px] overflow-hidden rounded-md border border-gray-200 bg-white">
+                {product.imageSrc?.trim() && !brokenImageKeys.has(product.listKey) ? (
+                  <img
+                    src={product.imageSrc}
+                    alt={product.name}
+                    className="h-full w-full object-contain"
+                    onError={() =>
+                      setBrokenImageKeys((prev) => {
+                        const next = new Set(prev);
+                        next.add(product.listKey);
+                        return next;
+                      })
+                    }
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-[11px] font-medium text-gray-400">
+                    이미지 없음
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -281,60 +305,35 @@ export function AdminUhpInventoryProductCard({
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-          <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
-            {product.imageSrc?.trim() && !brokenImageKeys.has(product.listKey) ? (
-              <img
-                src={product.imageSrc}
-                alt={product.name}
-                className="h-full w-full object-contain"
-                onError={() =>
-                  setBrokenImageKeys((prev) => {
-                    const next = new Set(prev);
-                    next.add(product.listKey);
-                    return next;
-                  })
-                }
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-sm font-medium text-gray-400">
-                제품 이미지 없음
-              </div>
-            )}
-          </div>
+      <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={() => openAddStructureItem(product.name)}
+            className="inline-flex shrink-0 items-center justify-center rounded-md border border-dashed border-blue-300 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
+          >
+            + 품목 추가
+          </button>
         </div>
-
-        <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-          <div className="mb-3 flex justify-end">
-            <button
-              type="button"
-              onClick={() => openAddStructureItem(product.name)}
-              className="inline-flex shrink-0 items-center justify-center rounded-md border border-dashed border-blue-300 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-100"
-            >
-              + 품목 추가
-            </button>
+        {product.filteredItems.length === 0 ? (
+          <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-6 text-center text-sm text-gray-500">
+            등록된 품목이 없습니다. 「품목 추가」로 품목 코드를 등록하면 SL-BA 등 6종 세부코드가 자동
+            생성됩니다.
+          </p>
+        ) : itemReorderEnabled && onItemReorder && product.items.length > 0 ? (
+          <InventoryItemDndGrid
+            items={product.items}
+            sortableIds={sortableItemIds}
+            onReorder={(oldIndex, newIndex) => onItemReorder(product.name, oldIndex, newIndex)}
+            renderItem={(item, handle) => renderItemBlock(item, handle)}
+          />
+        ) : (
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {product.filteredItems.map((item) => (
+              <div key={item.code}>{renderItemBlock(item, null)}</div>
+            ))}
           </div>
-          {product.filteredItems.length === 0 ? (
-            <p className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-6 text-center text-sm text-gray-500">
-              등록된 품목이 없습니다. 「품목 추가」로 품목 코드를 등록하면 SL-BA 등 6종 세부코드가 자동
-              생성됩니다.
-            </p>
-          ) : itemReorderEnabled && onItemReorder && product.items.length > 0 ? (
-            <InventoryItemDndGrid
-              items={product.items}
-              sortableIds={sortableItemIds}
-              onReorder={(oldIndex, newIndex) => onItemReorder(product.name, oldIndex, newIndex)}
-              renderItem={(item, handle) => renderItemBlock(item, handle)}
-            />
-          ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {product.filteredItems.map((item) => (
-                <div key={item.code}>{renderItemBlock(item, null)}</div>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );

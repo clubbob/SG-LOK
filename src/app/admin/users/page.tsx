@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, query, orderBy, getDocs, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { User } from '@/types';
 import { formatDateTime24 } from '@/lib/utils';
 import { Button } from '@/components/ui';
@@ -46,6 +46,7 @@ export default function AdminUsersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [menuDraft, setMenuDraft] = useState<MenuAccessKey[]>([...MENU_ACCESS_KEYS]);
   const [isSavingMenu, setIsSavingMenu] = useState(false);
+  const [isIssuingTempPassword, setIsIssuingTempPassword] = useState(false);
 
   useEffect(() => {
     // 관리자 세션 확인
@@ -230,6 +231,52 @@ export default function AdminUsersPage() {
       setError('관리자 기능 권한 변경 중 오류가 발생했습니다.');
     }
   };
+
+  const handleIssueTempPassword = async () => {
+    if (!selectedUser) return;
+    const confirmed = window.confirm(
+      `"${selectedUser.name}" 회원의 비밀번호를 임시 비밀번호로 초기화하시겠습니까?`
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsIssuingTempPassword(true);
+      const currentUser = auth.currentUser;
+      if (!currentUser || currentUser.isAnonymous) {
+        throw new Error('AUTH_REQUIRED');
+      }
+
+      const idToken = await currentUser.getIdToken();
+      const response = await fetch('/api/admin/users/temp-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          targetUserId: selectedUser.id,
+        }),
+      });
+
+      const payload = (await response.json()) as { message?: string; tempPassword?: string };
+      if (!response.ok || !payload.tempPassword) {
+        throw new Error(payload.message || 'FAILED');
+      }
+
+      setError('');
+      setSuccessMessage('임시 비밀번호를 발급했습니다. 사용자에게 안전한 채널로 전달해주세요.');
+      window.prompt(
+        '아래 임시 비밀번호를 복사해 사용자에게 전달하세요. (확인 버튼을 눌러 닫기)',
+        payload.tempPassword
+      );
+    } catch (err) {
+      console.error('임시 비밀번호 발급 오류:', err);
+      setSuccessMessage('');
+      setError('임시 비밀번호 발급 중 오류가 발생했습니다.');
+    } finally {
+      setIsIssuingTempPassword(false);
+    }
+  };
   const selectedAllowedMenus = normalizeAllowedMenus(selectedUser?.allowedMenus);
   const hasMenuChanges =
     menuDraft.length !== selectedAllowedMenus.length ||
@@ -339,151 +386,119 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="bg-gray-50 h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">회원 / 권한 관리</h1>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={loadUsers}
-              disabled={loadingUsers}
-            >
-              새로고침
-            </Button>
+    <div className="bg-gray-50 min-h-full">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">회원 / 권한 관리</h1>
+          <Button variant="outline" size="sm" onClick={loadUsers} disabled={loadingUsers}>
+            새로고침
+          </Button>
+        </div>
+
+        {successMessage && (
+          <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-4">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <p className="text-sm font-medium">{successMessage}</p>
+            </div>
+          </div>
+        )}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm font-medium">{error}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div className="p-4 border-b border-gray-200">
+                <h2 className="text-base font-semibold text-gray-900">회원 목록 ({users.length})</h2>
+              </div>
+              <div className="divide-y divide-gray-200">
+                {users.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500">등록된 회원이 없습니다.</div>
+                ) : (
+                  displayedUsers.map((user) => (
+                    <div
+                      key={user.id}
+                      className={`w-full text-left p-4 transition-colors ${
+                        selectedUser?.id === user.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="font-semibold text-gray-900 text-sm truncate flex-1">{user.name}</h3>
+                        <div className="flex items-center gap-1.5">
+                          {user.isAdmin === true && (
+                            <span className="text-xs text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
+                              관리자
+                            </span>
+                          )}
+                          {user.deleted ? (
+                            <span className="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded">삭제됨</span>
+                          ) : user.approved === false ? (
+                            <span className="text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded">
+                              승인 대기
+                            </span>
+                          ) : (
+                            <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
+                              승인 완료
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-600 mb-1 truncate">{user.email}</p>
+                      {user.company && <p className="text-xs text-gray-500 mb-1 truncate">{user.company}</p>}
+                      <p className="text-xs text-gray-500">가입일: {formatDateTime24(user.createdAt)}</p>
+                      <p className="text-xs text-gray-500">
+                        최근 로그인: {user.lastLoginAt ? formatDateTime24(user.lastLoginAt) : '-'}
+                      </p>
+                      <div className="mt-3">
+                        <Button variant="outline" size="sm" onClick={() => handleUserClick(user)}>
+                          회원 관리 설정
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              {totalPages > 1 && (
+                <div className="p-4 border-t border-gray-200 flex items-center justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    이전
+                  </Button>
+                  <span className="text-xs text-gray-600">
+                    {currentPage} / {totalPages} (전체 {users.length}개)
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    다음
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
 
-          {successMessage && (
-            <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-4">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                <p className="text-sm font-medium">{successMessage}</p>
-              </div>
-            </div>
-          )}
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-sm font-medium">{error}</p>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            {/* 회원 목록 */}
-            <div className="lg:col-span-1">
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col h-[calc(100vh-12rem)]">
-                <div className="p-4 border-b border-gray-200 flex-shrink-0">
-                  <h2 className="text-base font-semibold text-gray-900">
-                    회원 목록 ({users.length})
-                  </h2>
-                </div>
-                <div className="flex flex-col flex-1 overflow-hidden">
-                  <div className="divide-y divide-gray-200 flex-1 overflow-y-auto">
-                    {users.length === 0 ? (
-                      <div className="p-4 text-center text-gray-500">
-                        등록된 회원이 없습니다.
-                      </div>
-                    ) : (
-                      displayedUsers.map((user) => (
-                        <div
-                          key={user.id}
-                          className={`w-full text-left p-4 transition-colors ${
-                            selectedUser?.id === user.id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-                          }`}
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <h3 className="font-semibold text-gray-900 text-sm truncate flex-1">
-                              {user.name}
-                            </h3>
-                            <div className="flex items-center gap-1.5">
-                              {user.isAdmin === true && (
-                                <span className="text-xs text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
-                                  관리자
-                                </span>
-                              )}
-                              {user.deleted ? (
-                                <span className="text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded">
-                                  삭제됨
-                                </span>
-                              ) : user.approved === false ? (
-                                <span className="text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded">
-                                  승인 대기
-                                </span>
-                              ) : (
-                                <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded">
-                                  승인 완료
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <p className="text-xs text-gray-600 mb-1 truncate">
-                            {user.email}
-                          </p>
-                          {user.company && (
-                            <p className="text-xs text-gray-500 mb-1 truncate">
-                              {user.company}
-                            </p>
-                          )}
-                          <p className="text-xs text-gray-500">
-                            가입일: {formatDateTime24(user.createdAt)}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            최근 로그인: {user.lastLoginAt ? formatDateTime24(user.lastLoginAt) : '-'}
-                          </p>
-                          <div className="mt-3">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleUserClick(user)}
-                            >
-                              이용 권한 설정
-                            </Button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                  
-                  {/* 페이지네이션 */}
-                  {totalPages > 1 && (
-                    <div className="p-4 border-t border-gray-200 flex items-center justify-center gap-2 flex-shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                      >
-                        이전
-                      </Button>
-                      <span className="text-xs text-gray-600">
-                        {currentPage} / {totalPages} (전체 {users.length}개)
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
-                      >
-                        다음
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* 회원 상세 정보 */}
-            <div className="lg:col-span-2">
-              {selectedUser ? (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 h-[calc(100vh-12rem)] overflow-y-auto">
-                  <div className="mb-6">
+          <div className="lg:col-span-2">
+            {selectedUser ? (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="mb-6">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <h2 className="text-xl font-semibold text-gray-900">
@@ -624,56 +639,53 @@ export default function AdminUsersPage() {
                     </div>
                   </div>
 
-                  <div className="flex justify-end gap-3">
-                    {!isProtectedMainAdminSelected && (
-                      <Button
-                        variant={selectedUser.isAdmin === true ? 'outline' : 'primary'}
-                        size="md"
-                        onClick={handleToggleAdminAccess}
-                      >
-                        {selectedUser.isAdmin === true ? '관리자 기능 해제' : '관리자 기능 부여'}
-                      </Button>
-                    )}
-                    {selectedUser.approved === false && !selectedUser.deleted && (
-                      <Button
-                        variant="primary"
-                        size="md"
-                        onClick={handleApproveUser}
-                      >
-                        승인
-                      </Button>
-                    )}
-                    {selectedUser.deleted ? (
-                      <Button variant="primary" size="md" onClick={handleRestoreUser}>
-                        회원 복구
-                      </Button>
-                    ) : !isProtectedMainAdminSelected ? (
-                      <Button variant="danger" size="md" onClick={handleDeleteUser}>
-                        회원 삭제
-                      </Button>
-                    ) : null}
+                <div className="flex justify-end gap-3">
+                  <Button
+                    variant="outline"
+                    size="md"
+                    onClick={handleIssueTempPassword}
+                    disabled={selectedUser.deleted || isIssuingTempPassword}
+                  >
+                    {isIssuingTempPassword ? '발급 중...' : '임시 비밀번호 발급'}
+                  </Button>
+                  {!isProtectedMainAdminSelected && (
                     <Button
-                      variant="outline"
+                      variant={selectedUser.isAdmin === true ? 'outline' : 'primary'}
                       size="md"
-                      onClick={() => {
-                        setSelectedUser(null);
-                      }}
+                      onClick={handleToggleAdminAccess}
                     >
-                      닫기
+                      {selectedUser.isAdmin === true ? '관리자 기능 해제' : '관리자 기능 부여'}
                     </Button>
-                  </div>
+                  )}
+                  {selectedUser.approved === false && !selectedUser.deleted && (
+                    <Button variant="primary" size="md" onClick={handleApproveUser}>
+                      승인
+                    </Button>
+                  )}
+                  {selectedUser.deleted ? (
+                    <Button variant="primary" size="md" onClick={handleRestoreUser}>
+                      회원 복구
+                    </Button>
+                  ) : !isProtectedMainAdminSelected ? (
+                    <Button variant="danger" size="md" onClick={handleDeleteUser}>
+                      회원 삭제
+                    </Button>
+                  ) : null}
+                  <Button variant="outline" size="md" onClick={() => setSelectedUser(null)}>
+                    닫기
+                  </Button>
                 </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center h-[calc(100vh-12rem)] flex items-center justify-center">
-                  <div>
-                    <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                    <p className="text-gray-500">회원을 선택하면 상세 정보와 메뉴 사용 권한을 설정할 수 있습니다.</p>
-                  </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center min-h-[420px] flex items-center justify-center">
+                <div>
+                  <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                  <p className="text-gray-500">회원을 선택하면 상세 정보와 메뉴 사용 권한을 설정할 수 있습니다.</p>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -44,16 +44,6 @@ type MenuItem = {
 
 const adminMenuItems: MenuItem[] = [
   {
-    id: 'home',
-    label: '대시보드',
-    path: '/admin/dashboard',
-    icon: (
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-      </svg>
-    ),
-  },
-  {
     id: 'users',
     label: '회원 / 권한 관리',
     path: '/admin/users',
@@ -80,6 +70,16 @@ const adminMenuItems: MenuItem[] = [
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118.5 14.158V11a6.002 6.002 0 00-4-5.659V4a1 1 0 10-2 0v1.341C9.67 5.165 8 7.388 8 10v4.159c0 .538-.214 1.055-.595 1.436L6 17h5m4 0v1a2 2 0 11-4 0v-1m4 0H6" />
+      </svg>
+    ),
+  },
+  {
+    id: 'home',
+    label: '대시보드',
+    path: '/admin/dashboard',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
       </svg>
     ),
   },
@@ -148,7 +148,7 @@ const adminMenuItems: MenuItem[] = [
           strokeLinecap="round"
           strokeLinejoin="round"
           strokeWidth={2}
-          d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+          d="M4 7h16M4 12h16M4 17h10"
         />
       </svg>
     ),
@@ -432,97 +432,51 @@ export default function AdminLayout({
                 <React.Fragment key={item.id}>
                   <div
                     className={`mb-1 ${
-                      item.id === 'production'
+                      item.id === 'home'
                         ? 'border-t border-gray-200 pt-3 mt-3'
                         : ''
                     }`}
                   >
                   {hasSubItems ? (
                     <>
-                      {item.path ? (
-                        <Link
-                          href={item.id === 'substitute' ? '#' : item.path}
-                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition-colors ${
-                            isMainActive
-                              ? 'bg-blue-50 text-blue-600 font-semibold'
-                              : 'text-gray-700 hover:bg-gray-50'
-                          }`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setExpandedMenus(prev => {
-                              const newSet = new Set(prev);
-                              if (newSet.has(item.id)) {
-                                newSet.delete(item.id);
-                              } else {
-                                newSet.add(item.id);
-                              }
-                              return newSet;
-                            });
-                            if (item.id !== 'substitute' && item.path) {
-                              router.push(item.path);
+                      <button
+                        onClick={() => {
+                          setExpandedMenus(prev => {
+                            const newSet = new Set(prev);
+                            if (newSet.has(item.id)) {
+                              newSet.delete(item.id);
+                            } else {
+                              newSet.add(item.id);
                             }
-                          }}
+                            return newSet;
+                          });
+                        }}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition-colors ${
+                          isMainActive
+                            ? 'bg-blue-50 text-blue-600 font-semibold'
+                            : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {item.icon}
+                          <span className="text-sm flex items-center gap-1">
+                            {item.label}
+                            {item.id === 'users' && pendingUserCount > 0 && (
+                              <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold">
+                                {pendingUserCount}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <svg
+                          className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
                         >
-                          <div className="flex items-center gap-2">
-                            {item.icon}
-                            <span className="text-sm flex items-center gap-1">
-                              {item.label}
-                              {item.id === 'users' && pendingUserCount > 0 && (
-                                <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold">
-                                  {pendingUserCount}
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                          <svg
-                            className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </Link>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setExpandedMenus(prev => {
-                              const newSet = new Set(prev);
-                              if (newSet.has(item.id)) {
-                                newSet.delete(item.id);
-                              } else {
-                                newSet.add(item.id);
-                              }
-                              return newSet;
-                            });
-                          }}
-                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition-colors ${
-                            isMainActive
-                              ? 'bg-blue-50 text-blue-600 font-semibold'
-                              : 'text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2">
-                            {item.icon}
-                            <span className="text-sm flex items-center gap-1">
-                              {item.label}
-                              {item.id === 'users' && pendingUserCount > 0 && (
-                                <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold">
-                                  {pendingUserCount}
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                          <svg
-                            className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </button>
-                      )}
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
                       {isExpanded && item.subItems && (
                         <div className="ml-3 mt-1 space-y-1">
                           {item.subItems.map((subItem) => {

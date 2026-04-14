@@ -534,20 +534,6 @@ export default function AdminUsersPage() {
                             <span className="text-gray-900">{selectedUser.position}</span>
                           </div>
                         )}
-                        {selectedUser.phone && (
-                          <div className="flex">
-                            <span className="font-medium text-gray-700 w-32 flex-shrink-0">핸드폰 번호:</span>
-                            <span className="text-gray-900">{selectedUser.phone}</span>
-                          </div>
-                        )}
-                        {selectedUser.businessNumber && (
-                          <div className="flex">
-                            <span className="font-medium text-gray-700 w-32 flex-shrink-0 whitespace-nowrap">사업자 등록번호:</span>
-                            <span className="text-gray-900 whitespace-nowrap">
-                              {selectedUser.businessNumber.replace(/(\d{3})(\d{2})(\d{5})/, '$1-$2-$3')}
-                            </span>
-                          </div>
-                        )}
                         {selectedUser.address && (
                           <div className="flex">
                             <span className="font-medium text-gray-700 w-32 flex-shrink-0">주소:</span>

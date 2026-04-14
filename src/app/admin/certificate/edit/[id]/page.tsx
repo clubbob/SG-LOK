@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, getBlob, deleteObject, listAll } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, getBlob, deleteObject, listAll, getMetadata } from 'firebase/storage';
 import { db, storage, auth } from '@/lib/firebase';
 import { getProductMappingByCode, getAllProductMappings, addProductMapping, updateProductMapping, deleteProductMapping } from '@/lib/productMappings';
 import { CertificateAttachment, MaterialTestCertificate, CertificateProduct, ProductMapping } from '@/types';
@@ -1793,6 +1793,64 @@ function MaterialTestCertificateEditContent() {
   const [removedAttachmentKeys, setRemovedAttachmentKeys] = useState<Set<string>>(new Set());
   const [loadedExistingAttachmentsByIndex, setLoadedExistingAttachmentsByIndex] = useState<CertificateAttachment[][]>([]);
   const [touchedAttachmentProductIndexes, setTouchedAttachmentProductIndexes] = useState<Set<number>>(new Set());
+  const initialEditFingerprintRef = useRef<string>('');
+
+  const buildEditFingerprint = (
+    nextFormData: {
+      certificateNo: string;
+      dateOfIssue: string;
+      customer: string;
+      poNo: string;
+      testResult: string;
+    },
+    nextProducts: Array<{
+      productName: string;
+      productCode: string;
+      quantity: string;
+      heatNo: string;
+      material: string;
+      remark: string;
+      inspectionCertificates: Array<CertificateAttachment | File>;
+    }>
+  ): string => {
+    const normalized = {
+      formData: {
+        certificateNo: nextFormData.certificateNo.trim(),
+        dateOfIssue: nextFormData.dateOfIssue.trim(),
+        customer: nextFormData.customer.trim(),
+        poNo: nextFormData.poNo.trim(),
+        testResult: nextFormData.testResult.trim(),
+      },
+      products: (nextProducts || []).map((p) => ({
+        productName: (p.productName || '').trim(),
+        productCode: (p.productCode || '').trim(),
+        quantity: (p.quantity || '').trim(),
+        heatNo: (p.heatNo || '').trim(),
+        material: (p.material || '').trim(),
+        remark: (p.remark || '').trim(),
+        inspectionCertificates: (p.inspectionCertificates || []).map((item) => {
+          if (item instanceof File) {
+            return {
+              kind: 'file',
+              name: item.name || '',
+              size: item.size || 0,
+              type: item.type || '',
+              lastModified: item.lastModified || 0,
+            };
+          }
+          return {
+            kind: 'attachment',
+            name: item.name || '',
+            url: item.url || '',
+            storagePath: item.storagePath || '',
+            size: item.size || 0,
+            type: item.type || '',
+          };
+        }),
+      })),
+    };
+    return JSON.stringify(normalized);
+  };
 
   // 관리자 인증 확인 및 Firebase 인증 확인
   useEffect(() => {
@@ -1816,6 +1874,7 @@ function MaterialTestCertificateEditContent() {
       }
 
       attachmentsHydratedRef.current = false;
+      initialEditFingerprintRef.current = '';
       setRemovedAttachmentKeys(new Set());
       setTouchedAttachmentProductIndexes(new Set());
       setLoadingCertificate(true);
@@ -1832,12 +1891,9 @@ function MaterialTestCertificateEditContent() {
 
         const data = certDoc.data();
 
-        // 단일 진실 소스: 성적서 작성(create)에서 저장한 materialTestCertificate.products 우선
-        // 구버전 문서만 data.products를 fallback으로 사용
-        const sourceProducts =
-          data.materialTestCertificate?.products && Array.isArray(data.materialTestCertificate.products)
-            ? data.materialTestCertificate.products
-            : (data.products && Array.isArray(data.products) ? data.products : []);
+        // 수정 화면에서 첨부 fallback은 최초 요청 원본(data.products)을 기준으로 사용
+        const requestProducts =
+          data.products && Array.isArray(data.products) ? data.products : [];
 
         const toAttachmentFromUnknown = (raw: unknown): CertificateAttachment | null => {
           if (!raw || typeof raw !== 'object') return null;
@@ -1886,9 +1942,9 @@ function MaterialTestCertificateEditContent() {
               loadedProducts = mtc.products.map((p: CertificateProduct, index: number) => {
                 // 원본 성적서 요청 데이터에서 remark 가져오기 (materialTestCertificate에 없을 경우 fallback)
                 // 제품명과 제품코드로 매칭하여 더 정확하게 찾기
-                const originalProduct = sourceProducts.find((op: CertificateProduct) => 
+                const originalProduct = requestProducts.find((op: CertificateProduct) => 
                   op.productName === p.productName && op.productCode === p.productCode
-                ) || sourceProducts[index] as CertificateProduct | undefined;
+                ) || requestProducts[index] as CertificateProduct | undefined;
                 
                 const remarkValue = p.remark || originalProduct?.remark || '';
                 console.log(`[로드] 제품 "${p.productName || '이름 없음'}" remark 로드:`, {
@@ -2028,7 +2084,7 @@ function MaterialTestCertificateEditContent() {
               }
 
               if (existingCerts.length === 0) {
-                const fallbackProduct = sourceProducts[0] as CertificateProduct | undefined;
+                const fallbackProduct = requestProducts[0] as CertificateProduct | undefined;
                 const fallbackCerts = extractAttachmentsFromUnknownProduct(fallbackProduct);
                 if (fallbackCerts.length > 0) {
                   existingCerts = fallbackCerts;
@@ -2045,9 +2101,9 @@ function MaterialTestCertificateEditContent() {
               
               // 원본 성적서 요청 데이터에서 remark 가져오기 (fallback)
               // 제품명과 제품코드로 매칭하여 더 정확하게 찾기
-              const originalProduct = sourceProducts.find((op: CertificateProduct) => 
+              const originalProduct = requestProducts.find((op: CertificateProduct) => 
                 op.productName === mtc.description && op.productCode === mtc.code
-              ) || sourceProducts[0] as CertificateProduct | undefined;
+              ) || requestProducts[0] as CertificateProduct | undefined;
               
               const remarkValue = originalProduct?.remark || '';
               console.log(`[로드] 단일 제품 "${mtc.description || '이름 없음'}" remark 로드:`, {
@@ -2072,6 +2128,7 @@ function MaterialTestCertificateEditContent() {
                 (p.inspectionCertificates || []).filter((item) => !(item instanceof File)) as CertificateAttachment[]
               )
             );
+            initialEditFingerprintRef.current = buildEditFingerprint(loadedFormData, loadedProducts);
           } else {
             // 수정 페이지에서는 materialTestCertificate가 필수입니다
             setError('성적서 데이터가 없습니다. 성적서를 먼저 작성해주세요.');
@@ -2125,11 +2182,28 @@ function MaterialTestCertificateEditContent() {
       }
     };
 
+    const normalizeFileName = (name: string): string => {
+      const lower = (name || '').trim().toLowerCase();
+      return lower.replace(/[^a-z0-9._-]/g, '');
+    };
+
     const hydrateAttachmentUrls = async () => {
       let changed = false;
+      let listedItems: Array<{ name: string; fullPath: string }> = [];
+
+      try {
+        const dirRef = ref(storage, `certificates/${certificateId}/inspection_certi`);
+        const listed = await listAll(dirRef);
+        listedItems = listed.items.map((itemRef) => ({
+          name: itemRef.name || '',
+          fullPath: itemRef.fullPath || '',
+        }));
+      } catch (error) {
+        console.warn('[로드] inspection_certi 폴더 조회 실패(메타 기반 로드로 계속):', error);
+      }
 
       const nextProducts = await Promise.all(
-        products.map(async (product) => {
+        products.map(async (product, productIndex) => {
           const currentFiles = product.inspectionCertificates || [];
           if (currentFiles.length === 0) return product;
 
@@ -2139,13 +2213,27 @@ function MaterialTestCertificateEditContent() {
 
               const cert = item as CertificateAttachment;
               const nextCert: CertificateAttachment = { ...cert };
+              let resolvedUrl = nextCert.url || '';
+
+              if ((!nextCert.storagePath || nextCert.storagePath.trim().length === 0) && nextCert.name) {
+                const certName = normalizeFileName(nextCert.name);
+                const matched = listedItems.find((listedItem) => {
+                  const listedName = normalizeFileName(listedItem.name);
+                  return listedName === certName || listedName.includes(certName) || certName.includes(listedName);
+                });
+                if (matched?.fullPath) {
+                  nextCert.storagePath = matched.fullPath;
+                  changed = true;
+                }
+              }
 
               if (nextCert.storagePath && nextCert.storagePath.trim().length > 0) {
                 try {
                   const storageRef = ref(storage, nextCert.storagePath);
                   const refreshedUrl = await getDownloadURL(storageRef);
-                  if (refreshedUrl && refreshedUrl !== (nextCert.url || '')) {
+                  if (refreshedUrl && refreshedUrl !== resolvedUrl) {
                     nextCert.url = refreshedUrl;
+                    resolvedUrl = refreshedUrl;
                     changed = true;
                   }
                 } catch (error) {
@@ -2153,13 +2241,36 @@ function MaterialTestCertificateEditContent() {
                 }
               }
 
-              if ((!nextCert.base64 || nextCert.base64.trim().length === 0) && nextCert.url && nextCert.url.trim().length > 0) {
-                const base64 = await fetchUrlAsBase64DataUrl(nextCert.url);
+              // storagePath로 URL을 못 찾았으면 기존 URL이 실제 접근 가능한지 검증
+              if ((!resolvedUrl || resolvedUrl.trim().length === 0) && nextCert.url && nextCert.url.trim().length > 0) {
+                try {
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 15000);
+                  const response = await fetch(nextCert.url, { method: 'GET', signal: controller.signal });
+                  clearTimeout(timeoutId);
+                  if (response.ok) {
+                    resolvedUrl = nextCert.url;
+                  }
+                } catch {
+                  // 아래 정리 분기에서 처리
+                }
+              }
+
+              // 실제 URL이 아직 확인되지 않아도 메타는 유지한다.
+              // (저장 단계에서 storagePath/listAll 기반 복구를 다시 시도하기 위해 필요)
+              if (!resolvedUrl || resolvedUrl.trim().length === 0) {
+                return nextCert;
+              }
+
+              if ((!nextCert.base64 || nextCert.base64.trim().length === 0) && resolvedUrl.trim().length > 0) {
+                const base64 = await fetchUrlAsBase64DataUrl(resolvedUrl);
                 if (base64 && base64 !== nextCert.base64) {
                   nextCert.base64 = base64;
                   changed = true;
                 }
               }
+
+              nextCert.url = resolvedUrl;
 
               return nextCert;
             })
@@ -2169,11 +2280,108 @@ function MaterialTestCertificateEditContent() {
         })
       );
 
+      // Storage의 최근 PNG를 직접 로드해 누락된 첨부를 보강
+      // (메타가 비어도 최근 등록 파일이 수정 저장 시 PDF에 반영되도록 보장)
+      const allExistingStoragePaths = new Set<string>();
+      nextProducts.forEach((product) => {
+        (product.inspectionCertificates || []).forEach((item) => {
+          if (item instanceof File) return;
+          const cert = item as CertificateAttachment;
+          if (cert.storagePath && cert.storagePath.trim().length > 0) {
+            allExistingStoragePaths.add(cert.storagePath.trim());
+          }
+        });
+      });
+
+      const pngCandidates = listedItems.filter((item) => {
+        const lower = (item.name || '').toLowerCase();
+        return (
+          lower.endsWith('.png') ||
+          lower.endsWith('.jpg') ||
+          lower.endsWith('.jpeg') ||
+          lower.endsWith('.webp')
+        );
+      });
+
+      const missingImageCandidates = pngCandidates.filter(
+        (item) => !allExistingStoragePaths.has((item.fullPath || '').trim())
+      );
+
+      if (missingImageCandidates.length > 0 && nextProducts.length > 0) {
+        const loadedRecentAttachments: CertificateAttachment[] = [];
+        for (const candidate of missingImageCandidates) {
+          try {
+            const storageRef = ref(storage, candidate.fullPath);
+            const [downloadUrl, metadata] = await Promise.all([
+              getDownloadURL(storageRef),
+              getMetadata(storageRef).catch(() => null),
+            ]);
+            const fileName = candidate.name || '';
+            const lowerName = fileName.toLowerCase();
+            const inferredType =
+              metadata?.contentType ||
+              (lowerName.endsWith('.png')
+                ? 'image/png'
+                : lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')
+                  ? 'image/jpeg'
+                  : lowerName.endsWith('.webp')
+                    ? 'image/webp'
+                    : 'image/png');
+
+            loadedRecentAttachments.push({
+              name: fileName,
+              url: downloadUrl,
+              storagePath: candidate.fullPath,
+              size: typeof metadata?.size === 'number' ? metadata.size : 0,
+              type: inferredType,
+              uploadedAt: metadata?.updated ? new Date(metadata.updated) : new Date(),
+              uploadedBy: 'admin',
+            });
+          } catch (error) {
+            console.warn('[로드] 최근 이미지 직접 로드 실패(건너뜀):', candidate.fullPath, error);
+          }
+        }
+
+        if (loadedRecentAttachments.length > 0) {
+          // 최신 파일이 먼저 오도록 정렬 후 첫 제품에 보강
+          loadedRecentAttachments.sort(
+            (a, b) => (b.uploadedAt?.getTime?.() || 0) - (a.uploadedAt?.getTime?.() || 0)
+          );
+          const targetIndex = 0;
+          const targetProduct = nextProducts[targetIndex];
+          const currentCerts = (targetProduct.inspectionCertificates || []).filter(
+            (item): item is CertificateAttachment => !(item instanceof File)
+          );
+          const merged = [...currentCerts, ...loadedRecentAttachments].filter((cert, idx, arr) => {
+            const key = cert.storagePath && cert.storagePath.trim().length > 0
+              ? `sp:${cert.storagePath.trim()}`
+              : `nu:${cert.name || ''}::${cert.url || ''}`;
+            return arr.findIndex((x) => {
+              const xKey = x.storagePath && x.storagePath.trim().length > 0
+                ? `sp:${x.storagePath.trim()}`
+                : `nu:${x.name || ''}::${x.url || ''}`;
+              return xKey === key;
+            }) === idx;
+          });
+          nextProducts[targetIndex] = {
+            ...targetProduct,
+            inspectionCertificates: merged,
+          };
+          changed = true;
+          console.log(`[로드] Storage 최근 이미지 직접 보강 적용: ${loadedRecentAttachments.length}개`);
+        }
+      }
+
       if (cancelled) return;
       attachmentsHydratedRef.current = true;
 
       if (changed) {
         setProducts(nextProducts);
+        setLoadedExistingAttachmentsByIndex(
+          nextProducts.map((p) =>
+            (p.inspectionCertificates || []).filter((item) => !(item instanceof File)) as CertificateAttachment[]
+          )
+        );
       }
     };
 
@@ -2656,11 +2864,13 @@ function MaterialTestCertificateEditContent() {
     createdBy: string;
     existingCertificateFileStoragePath: string | null;
     existingProductsFromFirestore: CertificateProduct[];
+    existingRootAttachments: CertificateAttachment[];
   }> => {
     let createdAt = new Date();
     let createdBy = 'admin';
     let existingCertificateFileStoragePath: string | null = null;
     let existingProductsFromFirestore: CertificateProduct[] = [];
+    let existingRootAttachments: CertificateAttachment[] = [];
 
     const existingDoc = await getDoc(doc(db, 'certificates', targetCertificateId));
     if (existingDoc.exists()) {
@@ -2672,6 +2882,24 @@ function MaterialTestCertificateEditContent() {
           existingProductsFromFirestore = existingData.materialTestCertificate.products;
         }
       }
+      if (Array.isArray(existingData.attachments)) {
+        existingRootAttachments = existingData.attachments.map((raw: unknown) => {
+          const record = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+          const uploadedAtCandidate = record.uploadedAt;
+          return {
+            name: typeof record.name === 'string' ? record.name : '',
+            url: typeof record.url === 'string' ? record.url : '',
+            storagePath: typeof record.storagePath === 'string' ? record.storagePath : undefined,
+            size: typeof record.size === 'number' ? record.size : 0,
+            type: typeof record.type === 'string' ? record.type : '',
+            uploadedAt:
+              uploadedAtCandidate && typeof uploadedAtCandidate === 'object' && 'toDate' in uploadedAtCandidate
+                ? (uploadedAtCandidate as { toDate: () => Date }).toDate()
+                : (uploadedAtCandidate instanceof Date ? uploadedAtCandidate : new Date()),
+            uploadedBy: typeof record.uploadedBy === 'string' ? record.uploadedBy : 'admin',
+          } as CertificateAttachment;
+        });
+      }
       if (existingData.certificateFile && existingData.certificateFile.storagePath) {
         existingCertificateFileStoragePath = existingData.certificateFile.storagePath;
       }
@@ -2682,6 +2910,7 @@ function MaterialTestCertificateEditContent() {
       createdBy,
       existingCertificateFileStoragePath,
       existingProductsFromFirestore,
+      existingRootAttachments,
     };
   };
 
@@ -2737,6 +2966,17 @@ function MaterialTestCertificateEditContent() {
     setSuccess('');
 
     try {
+      const currentFingerprint = buildEditFingerprint(formData, products);
+      if (
+        initialEditFingerprintRef.current &&
+        currentFingerprint === initialEditFingerprintRef.current &&
+        touchedAttachmentProductIndexes.size === 0
+      ) {
+        setSuccess('변경사항이 없어 기존 PDF/첨부를 그대로 유지했습니다. 목록으로 이동합니다.');
+        router.push('/admin/certificate');
+        return;
+      }
+
       const readBlobAsDataUrl = (blob: Blob): Promise<string> =>
         new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
@@ -2818,7 +3058,37 @@ function MaterialTestCertificateEditContent() {
         createdBy,
         existingCertificateFileStoragePath,
         existingProductsFromFirestore,
+        existingRootAttachments,
       } = await loadCertificateForEdit(certificateId);
+
+      // 문서 ID 기준 Storage 실파일 존재 여부 점검
+      let storageAttachmentItems: Array<{ name: string; fullPath: string }> = [];
+      try {
+        const storageDirRef = ref(storage, `certificates/${certificateId}/inspection_certi`);
+        const listed = await listAll(storageDirRef);
+        storageAttachmentItems = listed.items.map((itemRef) => ({
+          name: itemRef.name || '',
+          fullPath: itemRef.fullPath || '',
+        }));
+        console.log(`[저장] Storage 실파일 점검: certificates/${certificateId}/inspection_certi -> ${storageAttachmentItems.length}개`);
+      } catch (storageInspectError) {
+        console.warn('[저장] Storage 실파일 점검 실패:', storageInspectError);
+      }
+
+      const loadedAttachmentCount = loadedExistingAttachmentsByIndex.reduce(
+        (sum, certs) => sum + (certs?.length || 0),
+        0
+      );
+      if (loadedAttachmentCount > 0 && storageAttachmentItems.length === 0) {
+        setError(
+          `Storage 실파일 점검 결과 첨부 폴더가 비어 있습니다.\n` +
+          `경로: certificates/${certificateId}/inspection_certi\n` +
+          `현재 문서는 첨부 메타(${loadedAttachmentCount}개)만 있고 실파일이 없어 PDF 통합이 불가능합니다.\n` +
+          `파일 재첨부 후 저장하거나 Storage 경로를 확인해주세요.`
+        );
+        setSaving(false);
+        return;
+      }
       
       // 제품별 Inspection Certi 업로드 및 제품 데이터 준비
       const productsData: CertificateProduct[] = [];
@@ -2886,6 +3156,16 @@ function MaterialTestCertificateEditContent() {
         cert.storagePath && cert.storagePath.trim().length > 0
           ? `sp:${cert.storagePath.trim()}`
           : `nu:${cert.name || ''}::${cert.url || ''}`;
+
+      const findRootAttachmentFallback = (name: string): CertificateAttachment | null => {
+        const target = (name || '').trim().toLowerCase();
+        if (!target) return null;
+        const matched = (existingRootAttachments || []).find((item) => {
+          const itemName = (item.name || '').trim().toLowerCase();
+          return itemName === target || itemName.includes(target) || target.includes(itemName);
+        });
+        return matched ? { ...matched } : null;
+      };
       
       console.log(`[저장] 시작 - 총 ${products.length}개 제품 처리 예정`);
       
@@ -2924,10 +3204,15 @@ function MaterialTestCertificateEditContent() {
           // 첨부를 건드리지 않은 제품은 기존 첨부 원본만 사용
           // - loadedExistingAttachmentsByIndex 우선
           // - 없으면 Firestore fallback
+          const currentStateCerts = (product.inspectionCertificates || []).filter(
+            (item): item is CertificateAttachment => !(item instanceof File)
+          );
           const preservedLoadedCerts = loadedExistingAttachmentsByIndex[i] || [];
           const sourceCerts =
-            preservedLoadedCerts.length > 0
-              ? preservedLoadedCerts
+            currentStateCerts.length > 0
+              ? currentStateCerts
+              : preservedLoadedCerts.length > 0
+                ? preservedLoadedCerts
               : getExistingProductAttachmentsFallback(
                   { productName: product.productName, productCode: product.productCode },
                   i
@@ -2935,7 +3220,79 @@ function MaterialTestCertificateEditContent() {
           for (const cert of sourceCerts) {
             const key = getAttachmentKey(cert);
             if (!removedAttachmentKeys.has(key)) {
-              inspectionCertificates.push({ ...cert });
+              const nextCert: CertificateAttachment = { ...cert };
+              let finalUrl = nextCert.url || '';
+
+              // 미수정 분기에서도 storagePath 기반 URL을 재동기화해 토큰 만료 이슈를 방지
+              if (nextCert.storagePath && nextCert.storagePath.trim().length > 0) {
+                try {
+                  const storageRef = ref(storage, nextCert.storagePath);
+                  const refreshedUrl = await getDownloadURL(storageRef);
+                  if (refreshedUrl && refreshedUrl.trim().length > 0) {
+                    finalUrl = refreshedUrl;
+                    nextCert.url = refreshedUrl;
+                  }
+                } catch (error) {
+                  console.warn(`[저장] 제품 ${i + 1} 미수정 파일 URL 재동기화 실패:`, nextCert.name, error);
+                }
+              }
+
+              // 미수정 분기에서도 링크 메타가 비어 있으면 파일명 기준으로 복구 시도
+              // (수정 페이지 진입 직후 저장 시 PNG 누락 방지)
+              if (
+                (!finalUrl || finalUrl.trim().length === 0) &&
+                (!nextCert.storagePath || nextCert.storagePath.trim().length === 0)
+              ) {
+                const rootFallback = findRootAttachmentFallback(nextCert.name || '');
+                if (rootFallback) {
+                  nextCert.url = nextCert.url || rootFallback.url || '';
+                  nextCert.storagePath = nextCert.storagePath || rootFallback.storagePath || undefined;
+                  nextCert.type = nextCert.type || rootFallback.type || '';
+                  nextCert.size = nextCert.size || rootFallback.size || 0;
+                  finalUrl = nextCert.url || '';
+                }
+              }
+
+              if (
+                (!finalUrl || finalUrl.trim().length === 0) &&
+                (!nextCert.storagePath || nextCert.storagePath.trim().length === 0)
+              ) {
+                try {
+                  if (certificateId && nextCert.name) {
+                    const dirRef = ref(storage, `certificates/${certificateId}/inspection_certi`);
+                    const listed = await listAll(dirRef);
+                    const matched = listed.items.find((itemRef) => {
+                      const fileNameInStorage = itemRef.name || '';
+                      return fileNameInStorage.includes(nextCert.name || '');
+                    });
+                    if (matched) {
+                      const recoveredUrl = await getDownloadURL(matched);
+                      nextCert.storagePath = matched.fullPath;
+                      nextCert.url = recoveredUrl;
+                      finalUrl = recoveredUrl;
+                      console.log(
+                        `[저장] 제품 ${i + 1} 미수정 파일 "${nextCert.name}" 링크 복구 성공: ${matched.fullPath}`
+                      );
+                    }
+                  }
+                } catch (recoverError) {
+                  console.warn(`[저장] 제품 ${i + 1} 미수정 파일 링크 복구 시도 실패:`, nextCert.name, recoverError);
+                }
+              }
+
+              // URL이 있고 base64가 비어 있으면 보강 (PDF 렌더 안정성)
+              if (
+                (!nextCert.base64 || nextCert.base64.trim().length === 0) &&
+                finalUrl &&
+                finalUrl.trim().length > 0
+              ) {
+                const base64DataUrl = await fetchUrlAsBase64DataUrl(finalUrl);
+                if (base64DataUrl) {
+                  nextCert.base64 = base64DataUrl;
+                }
+              }
+
+              inspectionCertificates.push(nextCert);
             }
           }
         } else if (product.inspectionCertificates && product.inspectionCertificates.length > 0) {
@@ -2993,6 +3350,23 @@ function MaterialTestCertificateEditContent() {
                   });
                   console.log(`[저장] 제품 ${i + 1} 기존 파일 "${cert.name}" 추가 (URL: 없음, storagePath: 있음), 현재 총 ${inspectionCertificates.length}개`);
                 } else {
+                  const rootFallback = findRootAttachmentFallback(cert.name || '');
+                  if (rootFallback) {
+                    const rootUrl = rootFallback.url || '';
+                    const rootStoragePath = rootFallback.storagePath || undefined;
+                    const rootBase64 = rootUrl ? (await fetchUrlAsBase64DataUrl(rootUrl)) || undefined : undefined;
+                    inspectionCertificates.push({
+                      ...cert,
+                      url: rootUrl,
+                      storagePath: rootStoragePath,
+                      type: cert.type || rootFallback.type || '',
+                      size: cert.size || rootFallback.size || 0,
+                      base64: cert.base64 || rootBase64,
+                    });
+                    console.log(`[저장] 제품 ${i + 1} 기존 파일 "${cert.name}" 루트 첨부 fallback 복구 적용`);
+                    continue;
+                  }
+
                   // 링크 정보가 비어있는 기존 첨부 복구 시도:
                   // certificates/{certificateId}/inspection_certi 폴더에서 파일명을 기준으로 찾아 URL/경로를 보강
                   let recovered = false;
@@ -3046,6 +3420,51 @@ function MaterialTestCertificateEditContent() {
           );
           if (fallbackCerts.length > 0) {
             inspectionCertificates.push(...fallbackCerts.map((c) => ({ ...c })));
+          }
+        }
+
+        // 최후 복구:
+        // 과거 버그로 Firestore 첨부 메타가 비어있는 문서는
+        // certificates/{certificateId}/inspection_certi 폴더를 직접 조회해 첨부를 재구성한다.
+        if (!wasAttachmentTouched && inspectionCertificates.length === 0 && certificateId) {
+          try {
+            const dirRef = ref(storage, `certificates/${certificateId}/inspection_certi`);
+            const listed = await listAll(dirRef);
+            if (listed.items.length > 0) {
+              const recoveredFromStorage: CertificateAttachment[] = [];
+              for (const itemRef of listed.items) {
+                try {
+                  const downloadUrl = await getDownloadURL(itemRef);
+                  const lowerName = (itemRef.name || '').toLowerCase();
+                  let inferredType = '';
+                  if (lowerName.endsWith('.png')) inferredType = 'image/png';
+                  else if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) inferredType = 'image/jpeg';
+                  else if (lowerName.endsWith('.webp')) inferredType = 'image/webp';
+                  else if (lowerName.endsWith('.gif')) inferredType = 'image/gif';
+                  else if (lowerName.endsWith('.pdf')) inferredType = 'application/pdf';
+
+                  recoveredFromStorage.push({
+                    name: itemRef.name || '',
+                    url: downloadUrl,
+                    storagePath: itemRef.fullPath,
+                    size: 0,
+                    type: inferredType,
+                    uploadedAt: new Date(),
+                    uploadedBy: 'admin',
+                  });
+                } catch (itemError) {
+                  console.warn('[저장] Storage 기반 첨부 복구 실패(개별 파일 건너뜀):', itemRef.fullPath, itemError);
+                }
+              }
+              if (recoveredFromStorage.length > 0) {
+                inspectionCertificates.push(...recoveredFromStorage);
+                console.log(
+                  `[저장] 제품 ${i + 1} Storage 폴더 직접 복구 적용: ${recoveredFromStorage.length}개`
+                );
+              }
+            }
+          } catch (storageFallbackError) {
+            console.warn('[저장] Storage 폴더 직접 복구 실패:', storageFallbackError);
           }
         }
         
@@ -3239,7 +3658,9 @@ function MaterialTestCertificateEditContent() {
       let renderedImageCount = 0;
       let mergedPdfCount = 0;
       let keptAttachmentCount = 0;
-      const shouldUpdateAttachments = touchedAttachmentProductIndexes.size > 0;
+      // 본문만 수정한 경우(수량/비고 등)에도 기존 첨부 보존 안전장치를 항상 적용
+      // 그렇지 않으면 무첨부로 재생성되어 기존 Inspection Certificate 페이지가 누락될 수 있음
+      const shouldUpdateAttachments = true;
       const shouldRegeneratePdf = true;
       let certificateFile: CertificateAttachment | null = null;
       console.log(
@@ -3257,6 +3678,9 @@ function MaterialTestCertificateEditContent() {
           const p = productsDataForFirestore[i];
           if (!p) continue;
           const pWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          const currentCerts = pWithCerts.inspectionCertificates && Array.isArray(pWithCerts.inspectionCertificates)
+            ? pWithCerts.inspectionCertificates
+            : [];
           const fallbackFromFirestore = getExistingProductAttachmentsFallback(
             {
               productName: p.productName || '',
@@ -3264,11 +3688,13 @@ function MaterialTestCertificateEditContent() {
             },
             i
           );
-          const preserved = fallbackFromFirestore.length > 0
-            ? fallbackFromFirestore
-            : (loadedExistingAttachmentsByIndex[i] || []);
-          // 첨부를 건드리지 않은 제품은 로드시점 기존 첨부를 그대로 고정 반영
-          // (제품 추가 시 기존 제품 첨부가 사라지는 문제 차단)
+          const loadedSnapshot = loadedExistingAttachmentsByIndex[i] || [];
+          // 핵심 원칙:
+          // 미수정 제품은 저장 루프에서 이미 계산된 currentCerts를 우선 유지한다.
+          // 비어 있을 때만 로드시점 스냅샷(loadedSnapshot) -> Firestore fallback 순으로 복구한다.
+          const preserved = currentCerts.length > 0
+            ? currentCerts
+            : (loadedSnapshot.length > 0 ? loadedSnapshot : fallbackFromFirestore);
           pWithCerts.inspectionCertificates = preserved.map((cert) => ({ ...cert }));
           p.inspectionCertificate = pWithCerts.inspectionCertificates[0];
           console.log(
@@ -3329,6 +3755,160 @@ function MaterialTestCertificateEditContent() {
           setError('기존 제품 첨부 보존 검증에 실패했습니다. 저장이 중단되었습니다. 첨부 상태를 확인 후 다시 저장해주세요.');
           setSaving(false);
           return;
+        }
+      }
+
+      // 저장 직전 첨부 정합성 확정:
+      // - 로드시점 스냅샷/Firestore/Storage 실파일을 다시 합쳐 PDF 입력 첨부를 보강한다.
+      // - 본문만 수정해도 기존 PNG/PDF 첨부가 재생성 PDF에 포함되도록 강제한다.
+      const normalizeNameForMatch = (value: string): string =>
+        (value || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+      const cachedStorageItems: Array<{ name: string; fullPath: string }> = [];
+      try {
+        const dirRef = ref(storage, `certificates/${certificateId}/inspection_certi`);
+        const listed = await listAll(dirRef);
+        listed.items.forEach((itemRef) => {
+          cachedStorageItems.push({
+            name: itemRef.name || '',
+            fullPath: itemRef.fullPath || '',
+          });
+        });
+      } catch (storageListError) {
+        console.warn('[저장] 첨부 폴더 목록 조회 실패(기존 데이터로 계속):', storageListError);
+      }
+
+      const findStorageItemByName = (name: string): { name: string; fullPath: string } | null => {
+        const target = normalizeNameForMatch(name);
+        if (!target) return null;
+        const matched = cachedStorageItems.find((item) => {
+          const normalizedItem = normalizeNameForMatch(item.name);
+          return normalizedItem === target || normalizedItem.includes(target) || target.includes(normalizedItem);
+        });
+        return matched || null;
+      };
+
+      for (let i = 0; i < productsDataForFirestore.length; i++) {
+        const p = productsDataForFirestore[i];
+        if (!p) continue;
+        const pWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+        let certs = pWithCerts.inspectionCertificates && Array.isArray(pWithCerts.inspectionCertificates)
+          ? [...pWithCerts.inspectionCertificates]
+          : [];
+
+        if (certs.length === 0) {
+          const fromLoaded = loadedExistingAttachmentsByIndex[i] || [];
+          const fromFirestore = getExistingProductAttachmentsFallback(
+            { productName: p.productName || '', productCode: p.productCode || '' },
+            i
+          );
+          certs = fromLoaded.length > 0 ? [...fromLoaded] : [...fromFirestore];
+        }
+
+        const repairedCerts: CertificateAttachment[] = [];
+        for (const cert of certs) {
+          const nextCert: CertificateAttachment = { ...cert };
+          let finalUrl = nextCert.url || '';
+
+          if ((!nextCert.storagePath || nextCert.storagePath.trim().length === 0) && nextCert.name) {
+            const matched = findStorageItemByName(nextCert.name);
+            if (matched?.fullPath) {
+              nextCert.storagePath = matched.fullPath;
+            }
+          }
+
+          if (nextCert.storagePath && nextCert.storagePath.trim().length > 0) {
+            try {
+              const refreshedUrl = await getDownloadURL(ref(storage, nextCert.storagePath));
+              if (refreshedUrl && refreshedUrl.trim().length > 0) {
+                finalUrl = refreshedUrl;
+                nextCert.url = refreshedUrl;
+              }
+            } catch {
+              // 아래 fallback 계속
+            }
+          }
+
+          if ((!finalUrl || finalUrl.trim().length === 0) && nextCert.name) {
+            const rootFallback = findRootAttachmentFallback(nextCert.name);
+            if (rootFallback) {
+              nextCert.storagePath = nextCert.storagePath || rootFallback.storagePath;
+              nextCert.type = nextCert.type || rootFallback.type;
+              nextCert.size = nextCert.size || rootFallback.size;
+              finalUrl = rootFallback.url || '';
+              nextCert.url = finalUrl;
+            }
+          }
+
+          if ((!nextCert.base64 || nextCert.base64.trim().length === 0) && finalUrl && finalUrl.trim().length > 0) {
+            const base64 = await fetchUrlAsBase64DataUrl(finalUrl);
+            if (base64) nextCert.base64 = base64;
+          }
+
+          // URL/경로/base64 중 하나라도 있으면 유지
+          if (
+            (nextCert.url && nextCert.url.trim().length > 0) ||
+            (nextCert.storagePath && nextCert.storagePath.trim().length > 0) ||
+            (nextCert.base64 && nextCert.base64.trim().length > 0)
+          ) {
+            repairedCerts.push(nextCert);
+          }
+        }
+
+        const deduped = repairedCerts.filter((cert, idx, arr) => {
+          const key = cert.storagePath && cert.storagePath.trim().length > 0
+            ? `sp:${cert.storagePath.trim()}`
+            : `nu:${cert.name || ''}::${cert.url || ''}`;
+          return arr.findIndex((x) => {
+            const xKey = x.storagePath && x.storagePath.trim().length > 0
+              ? `sp:${x.storagePath.trim()}`
+              : `nu:${x.name || ''}::${x.url || ''}`;
+            return xKey === key;
+          }) === idx;
+        });
+
+        pWithCerts.inspectionCertificates = deduped;
+        p.inspectionCertificate = deduped[0];
+      }
+
+      // 제품별 첨부가 모두 비어있으면 storage 실파일을 첫 제품에 강제 배치
+      const totalCertCountAfterRepair = productsDataForFirestore.reduce((sum, p) => {
+        const pWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+        const certs = pWithCerts.inspectionCertificates && Array.isArray(pWithCerts.inspectionCertificates)
+          ? pWithCerts.inspectionCertificates
+          : [];
+        return sum + certs.length;
+      }, 0);
+      if (totalCertCountAfterRepair === 0 && cachedStorageItems.length > 0 && productsDataForFirestore.length > 0) {
+        const recoveredFromStorage: CertificateAttachment[] = [];
+        for (const item of cachedStorageItems) {
+          try {
+            const downloadUrl = await getDownloadURL(ref(storage, item.fullPath));
+            const lower = (item.name || '').toLowerCase();
+            const inferredType = lower.endsWith('.pdf')
+              ? 'application/pdf'
+              : lower.endsWith('.jpg') || lower.endsWith('.jpeg')
+                ? 'image/jpeg'
+                : lower.endsWith('.webp')
+                  ? 'image/webp'
+                  : 'image/png';
+            recoveredFromStorage.push({
+              name: item.name || '',
+              url: downloadUrl,
+              storagePath: item.fullPath,
+              size: 0,
+              type: inferredType,
+              uploadedAt: new Date(),
+              uploadedBy: 'admin',
+            });
+          } catch {
+            // 건너뜀
+          }
+        }
+        if (recoveredFromStorage.length > 0) {
+          const first = productsDataForFirestore[0] as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          first.inspectionCertificates = recoveredFromStorage;
+          (productsDataForFirestore[0] as CertificateProduct).inspectionCertificate = recoveredFromStorage[0];
+          console.log(`[저장] 첨부 전역 강제 복구 적용: ${recoveredFromStorage.length}개`);
         }
       }
       
@@ -4236,7 +4816,7 @@ function MaterialTestCertificateEditContent() {
                       {/* 모든 파일 목록 (구분 제거) */}
                       {product.inspectionCertificates && product.inspectionCertificates.length > 0 && (
                         <div className="mb-3 space-y-2">
-                          <p className="text-sm text-gray-600 mb-2">첨부 파일:</p>
+                          <p className="text-sm text-gray-600 mb-2 font-medium">새 파일 (MTC에 포함됨)</p>
                           {product.inspectionCertificates.map((item, itemIndex) => {
                             const isFile = item instanceof File;
                             const fileName = isFile ? item.name : item.name;
@@ -4250,6 +4830,7 @@ function MaterialTestCertificateEditContent() {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                     </svg>
                                     <span className="text-sm text-gray-900 font-medium">{fileName}</span>
+                                    <span className="text-xs text-blue-600 font-medium">(MTC에 포함됨)</span>
                                     {fileSize && (
                                       <span className="text-xs text-gray-500">
                                         ({(fileSize / 1024).toFixed(1)} KB)

@@ -44,6 +44,7 @@ export default function Footer() {
                 <li>백엔드: Firebase (Firestore, Authentication, Storage)</li>
                 <li>상태 관리: Zustand</li>
                 <li>이메일: Nodemailer</li>
+                <li>개발 도구: Cursor (AI IDE)</li>
                 <li>배포: Vercel</li>
                 <li>형상관리: GitHub</li>
               </ul>

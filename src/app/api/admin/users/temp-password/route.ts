@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminAuth, adminDb } from '@/lib/firebaseAdmin';
+import { getAdminAuth, getAdminDb } from '@/lib/firebaseAdmin';
 import { hasEffectiveAdminAccess } from '@/lib/auth/adminBootstrap';
 
 function createTempPassword(length = 10): string {
@@ -13,6 +13,8 @@ function createTempPassword(length = 10): string {
 
 export async function POST(request: NextRequest) {
   try {
+    const adminAuth = getAdminAuth();
+    const adminDb = getAdminDb();
     const authHeader = request.headers.get('authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ message: '인증 토큰이 필요합니다.' }, { status: 401 });

@@ -632,7 +632,7 @@ export default function AdminUsersPage() {
                             : isSavingMenu
                               ? '저장 중...'
                               : hasMenuChanges
-                                ? '메뉴 권한 저장'
+                                ? '이용 권한 저장'
                                 : '저장됨'}
                         </Button>
                       </div>

@@ -33,6 +33,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 
 type InventoryVariant = {
   code: string;
+  hasQuoteRequest?: boolean;
   currentStock: number;
   unit: string;
 };

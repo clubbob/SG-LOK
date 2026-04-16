@@ -540,10 +540,10 @@ function InventoryStatusPageContent() {
                                       >
                                         <div className="flex items-center justify-between gap-1.5">
                                           <span
-                                            className={`rounded border px-1.5 py-0.5 text-xs font-semibold tracking-wide ${
+                                            className={`rounded px-1.5 py-0.5 text-xs font-semibold tracking-wide ${
                                               variant.hasQuoteRequest
-                                                ? 'border-rose-500 bg-rose-100 text-rose-900'
-                                                : 'border-slate-300 bg-slate-50 text-slate-800'
+                                                ? 'border-2 border-rose-500 bg-rose-100 text-rose-900 ring-1 ring-rose-300 shadow-sm'
+                                                : 'border border-slate-300 bg-slate-50 text-slate-800'
                                             }`}
                                           >
                                             {variant.code}

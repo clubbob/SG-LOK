@@ -131,11 +131,11 @@ export function AdminUhpInventoryProductCard({
                         return (
                           <div
                             key={variant.code}
-                            className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
+                            className="rounded border border-gray-200 bg-white px-1.5 py-1 text-[10px]"
                           >
-                            <div className="flex items-center justify-between gap-1.5">
+                            <div className="flex flex-nowrap items-center gap-1">
                               <span
-                                className={`rounded border px-1.5 py-0.5 text-xs font-semibold tracking-wide ${
+                                className={`min-w-0 flex-1 whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] font-semibold tracking-wide ${
                                   variant.hasQuoteRequest
                                     ? 'border-rose-500 bg-rose-100 text-rose-900'
                                     : 'border-slate-300 bg-slate-50 text-slate-800'
@@ -143,7 +143,7 @@ export function AdminUhpInventoryProductCard({
                               >
                                 {variant.code}
                               </span>
-                              <div className="flex items-center gap-1">
+                              <div className="flex shrink-0 items-center gap-0.5">
                                 {canToggleQuoteRequest && (
                                   <button
                                     type="button"
@@ -159,7 +159,7 @@ export function AdminUhpInventoryProductCard({
                                         variant.code
                                       )
                                     }
-                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                                    className={`rounded border px-1 py-0.5 text-[9px] font-bold leading-none ${
                                       variant.hasQuoteRequest
                                         ? 'border-rose-400 bg-rose-100 text-rose-900 hover:bg-rose-200'
                                         : 'border-slate-300 bg-slate-50 text-slate-500 hover:bg-slate-100'
@@ -169,7 +169,7 @@ export function AdminUhpInventoryProductCard({
                                   </button>
                                 )}
                               <span
-                                className={`rounded-md px-2 py-0.5 text-xs font-bold shadow-sm ${
+                                className={`whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-bold shadow-sm ${
                                   variant.currentStock > 0
                                     ? 'border-2 border-emerald-600 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300'
                                     : 'border border-blue-300 bg-blue-100 text-blue-900'
@@ -183,9 +183,15 @@ export function AdminUhpInventoryProductCard({
                                   onClick={() =>
                                     handleRenameVariant(product.name, item.code, variant.code)
                                   }
-                                  className="rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100"
+                                  className="rounded border border-indigo-200 bg-indigo-50 px-1 py-0.5 text-indigo-700 hover:bg-indigo-100"
                                 >
-                                  수정
+                                  <svg
+                                    aria-hidden="true"
+                                    viewBox="0 0 16 16"
+                                    className="h-3 w-3 fill-current"
+                                  >
+                                    <path d="M11.8 1.8a1.4 1.4 0 0 1 2 2l-7.6 7.6-2.7.6.6-2.7 7.7-7.5ZM10.4 3.2 4.9 8.7l-.2 1 1-.2 5.5-5.5-1-1Z" />
+                                  </svg>
                                 </button>
                                 <button
                                   type="button"
@@ -193,9 +199,15 @@ export function AdminUhpInventoryProductCard({
                                   onClick={() =>
                                     handleDeleteVariant(product.name, item.code, variant.code)
                                   }
-                                  className="rounded border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 hover:bg-red-100"
+                                  className="rounded border border-red-200 bg-red-50 px-1 py-0.5 text-red-700 hover:bg-red-100"
                                 >
-                                  삭제
+                                  <svg
+                                    aria-hidden="true"
+                                    viewBox="0 0 16 16"
+                                    className="h-3 w-3 fill-current"
+                                  >
+                                    <path d="M6 1h4l.6 1H13v1H3V2h2.4L6 1Zm-1 4h1v7H5V5Zm3 0h1v7H8V5Zm3 0h1v7h-1V5ZM4 13h8a1 1 0 0 0 1-1V4H3v8a1 1 0 0 0 1 1Z" />
+                                  </svg>
                                 </button>
                               </div>
                             </div>
@@ -279,8 +291,8 @@ export function AdminUhpInventoryProductCard({
   );
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <div className="rounded-lg border border-gray-200 bg-white px-5 py-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           {dragHandle}
           <div className="flex min-w-0 items-center gap-3">
@@ -316,7 +328,7 @@ export function AdminUhpInventoryProductCard({
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 self-center">
           <button
             type="button"
             onClick={() => handleRenameProductLine(product.name)}

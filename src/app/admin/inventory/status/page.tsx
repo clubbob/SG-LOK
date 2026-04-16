@@ -2225,7 +2225,7 @@ export default function AdminInventoryStatusPage() {
                 key={tab.id}
                 className={`inline-flex flex-wrap items-center gap-1 rounded-md border p-1 ${
                   activeTabId === tab.id
-                    ? 'border-blue-600 bg-blue-50'
+                    ? 'border-blue-200 bg-white'
                     : 'border-gray-200 bg-gray-50'
                 }`}
               >
@@ -2237,8 +2237,10 @@ export default function AdminInventoryStatusPage() {
                       setTabSelectionLockedByUser(true);
                     }
                   }}
-                  className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-                    activeTabId === tab.id ? 'text-blue-800' : 'text-gray-800 hover:bg-gray-100'
+                  className={`rounded-md border px-4 py-2.5 text-sm font-medium transition-colors ${
+                    activeTabId === tab.id
+                      ? 'border-blue-600 bg-blue-600 text-white'
+                      : 'border-transparent text-gray-800 hover:bg-gray-100'
                   }`}
                 >
                   {tab.label}

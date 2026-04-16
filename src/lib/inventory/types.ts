@@ -34,6 +34,7 @@ export type ProductionPlanHistory = {
 
 export type InventoryVariant = {
   code: string;
+  hasQuoteRequest?: boolean;
   currentStock: number;
   unit: string;
 };

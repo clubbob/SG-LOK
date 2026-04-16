@@ -10,6 +10,7 @@ export function createEmptyInventoryItem(
 ): InventoryItem {
   const variants: InventoryVariant[] = VARIANT_SUFFIXES.map((suffix) => ({
     code: `${codeBase}-${suffix}`,
+    hasQuoteRequest: false,
     currentStock: 0,
     unit,
   }));

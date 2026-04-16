@@ -520,24 +520,6 @@ function InventoryStatusPageContent() {
                                 >
                                   전체이력
                                 </button>
-                                <span
-                                  className={`rounded-md px-2.5 py-1 text-sm font-bold shadow-sm ${
-                                    (item.variants && item.variants.length > 0
-                                      ? item.variants.reduce((sum, variant) => sum + variant.currentStock, 0)
-                                      : item.currentStock) > 0
-                                      ? 'border-2 border-emerald-600 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300'
-                                      : 'border border-blue-300 bg-blue-100 text-blue-900'
-                                  }`}
-                                >
-                                  총 현재고{' '}
-                                  {item.variants && item.variants.length > 0
-                                    ? item.variants.reduce(
-                                        (sum, variant) => sum + variant.currentStock,
-                                        0
-                                      )
-                                    : item.currentStock}{' '}
-                                  {item.unit}
-                                </span>
                               </div>
                             </div>
                             {item.variants && getVisibleVariants(item).length > 0 && (
@@ -556,7 +538,13 @@ function InventoryStatusPageContent() {
                                         className="rounded border border-gray-200 bg-white px-2 py-1.5 text-[11px]"
                                       >
                                         <div className="flex items-center justify-between gap-1.5">
-                                          <span className="rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-slate-800">
+                                          <span
+                                            className={`rounded border px-1.5 py-0.5 text-xs font-semibold tracking-wide ${
+                                              variant.hasQuoteRequest
+                                                ? 'border-rose-500 bg-rose-100 text-rose-900'
+                                                : 'border-slate-300 bg-slate-50 text-slate-800'
+                                            }`}
+                                          >
                                             {variant.code}
                                           </span>
                                           <span

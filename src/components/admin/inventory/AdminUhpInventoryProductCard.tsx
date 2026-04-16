@@ -22,6 +22,7 @@ type VariantPlanInfo = {
 type Props = {
   product: AdminUhpProductListRow;
   dragHandle: ReactNode | null;
+  canToggleQuoteRequest?: boolean;
   brokenImageKeys: Set<string>;
   setBrokenImageKeys: React.Dispatch<React.SetStateAction<Set<string>>>;
   getCurrentStock: (item: InventoryItem) => number;
@@ -31,6 +32,11 @@ type Props = {
   handleDeleteProductLine: (productName: string) => void;
   handleRenameItem: (productName: string, itemCode: string) => void;
   handleDeleteItem: (productName: string, itemCode: string) => void;
+  handleToggleQuoteRequest: (
+    productName: string,
+    itemCode: string,
+    variantCode: string
+  ) => void;
   handleRenameVariant: (productName: string, itemCode: string, variantCode: string) => void;
   handleDeleteVariant: (productName: string, itemCode: string, variantCode: string) => void;
   handleAddVariant: (productName: string, itemCode: string) => void;
@@ -55,6 +61,7 @@ export type AdminUhpProductCardHandlers = Omit<Props, 'product' | 'dragHandle'>;
 export function AdminUhpInventoryProductCard({
   product,
   dragHandle,
+  canToggleQuoteRequest = false,
   brokenImageKeys,
   setBrokenImageKeys,
   getCurrentStock,
@@ -64,6 +71,7 @@ export function AdminUhpInventoryProductCard({
   handleDeleteProductLine,
   handleRenameItem,
   handleDeleteItem,
+  handleToggleQuoteRequest,
   handleRenameVariant,
   handleDeleteVariant,
   handleAddVariant,
@@ -92,21 +100,11 @@ export function AdminUhpInventoryProductCard({
           onClick={(e) => e.stopPropagation()}
         >
           {(() => {
-            const currentStock = getCurrentStock(item);
             return (
               <>
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-gray-800">{item.code}</p>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`rounded-md px-2.5 py-1 text-sm font-bold shadow-sm ${
-                        currentStock > 0
-                          ? 'border-2 border-emerald-600 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-300'
-                          : 'border border-blue-300 bg-blue-100 text-blue-900'
-                      }`}
-                    >
-                      총 현재고 {currentStock} {item.unit}
-                    </span>
                     <button
                       type="button"
                       onClick={() => handleRenameItem(product.name, item.code)}
@@ -136,10 +134,40 @@ export function AdminUhpInventoryProductCard({
                             className="rounded border border-gray-200 bg-white px-2 py-1 text-[11px]"
                           >
                             <div className="flex items-center justify-between gap-1.5">
-                              <span className="rounded border border-slate-300 bg-slate-50 px-1.5 py-0.5 text-xs font-semibold tracking-wide text-slate-800">
+                              <span
+                                className={`rounded border px-1.5 py-0.5 text-xs font-semibold tracking-wide ${
+                                  variant.hasQuoteRequest
+                                    ? 'border-rose-500 bg-rose-100 text-rose-900'
+                                    : 'border-slate-300 bg-slate-50 text-slate-800'
+                                }`}
+                              >
                                 {variant.code}
                               </span>
                               <div className="flex items-center gap-1">
+                                {canToggleQuoteRequest && (
+                                  <button
+                                    type="button"
+                                    title={
+                                      variant.hasQuoteRequest
+                                        ? '견적요청 표시 해제'
+                                        : '견적요청 표시'
+                                    }
+                                    onClick={() =>
+                                      handleToggleQuoteRequest(
+                                        product.name,
+                                        item.code,
+                                        variant.code
+                                      )
+                                    }
+                                    className={`rounded border px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                                      variant.hasQuoteRequest
+                                        ? 'border-rose-400 bg-rose-100 text-rose-900 hover:bg-rose-200'
+                                        : 'border-slate-300 bg-slate-50 text-slate-500 hover:bg-slate-100'
+                                    }`}
+                                  >
+                                    Q
+                                  </button>
+                                )}
                               <span
                                 className={`rounded-md px-2 py-0.5 text-xs font-bold shadow-sm ${
                                   variant.currentStock > 0

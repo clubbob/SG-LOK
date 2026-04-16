@@ -6,7 +6,8 @@ import {
   AdminUhpInventoryProductCard,
   type AdminUhpProductCardHandlers,
 } from '@/components/admin/inventory/AdminUhpInventoryProductCard';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
+import { isBootstrapAdminEmail } from '@/lib/auth/adminBootstrap';
 import {
   INITIAL_METAL_FACE_SEAL_PRODUCTS,
   INITIAL_MICRO_WELD_PRODUCTS,
@@ -229,6 +230,7 @@ export default function AdminInventoryStatusPage() {
   const [tabSelectionLockedByUser, setTabSelectionLockedByUser] = useState(false);
   const [brokenImageKeys, setBrokenImageKeys] = useState<Set<string>>(new Set());
   const [productListPage, setProductListPage] = useState(1);
+  const [canToggleQuoteRequest, setCanToggleQuoteRequest] = useState(false);
   /** 제품 줄 DnD 시 현재 페이지 내 인덱스를 전체 슬라이스 인덱스로 바꿀 때 사용 */
   const productListSliceOffsetRef = useRef(0);
   const [uhpInventory, setUhpInventory] = useState<UhpInventoryState>(
@@ -298,6 +300,17 @@ export default function AdminInventoryStatusPage() {
   const pendingPersistStateRef = useRef<UhpInventoryState | null>(null);
   const lastPersistAtRef = useRef(0);
   const persistScheduleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const syncTogglePermission = () => {
+      setCanToggleQuoteRequest(isBootstrapAdminEmail(auth.currentUser?.email));
+    };
+    syncTogglePermission();
+    const unsubscribe = auth.onAuthStateChanged(() => {
+      syncTogglePermission();
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     setProductListPage(1);
@@ -934,6 +947,57 @@ export default function AdminInventoryStatusPage() {
     }
 
     const updated = setTabSliceProducts(nextState, tab, nextSlice);
+    setUhpInventory(updated);
+    void persistUhpInventory(updated);
+  };
+
+  const handleToggleQuoteRequest = (
+    productName: string,
+    itemCode: string,
+    variantCode: string
+  ) => {
+    if (!canToggleQuoteRequest) {
+      setSyncError('이 표시는 고형석 관리자만 변경할 수 있습니다.');
+      return;
+    }
+    const inv = uhpInventoryRef.current;
+    const tab = findUhpTabDefByProductName(inv, productName);
+    if (!tab) {
+      setSyncError('품목을 찾을 수 없습니다.');
+      return;
+    }
+
+    const nextState: UhpInventoryState = JSON.parse(JSON.stringify(inv)) as UhpInventoryState;
+    let updatedItem = false;
+    const nextSlice = getTabSliceProducts(nextState, tab).map((line) => {
+      if (line.name !== productName) return line;
+      return {
+        ...line,
+        items: line.items.map((item) => {
+          if (item.code !== itemCode) return item;
+          const nextVariants = (item.variants ?? []).map((variant) => {
+            if (variant.code !== variantCode) return variant;
+            updatedItem = true;
+            return {
+              ...variant,
+              hasQuoteRequest: !variant.hasQuoteRequest,
+            };
+          });
+          return {
+            ...item,
+            variants: nextVariants,
+          };
+        }),
+      };
+    });
+
+    if (!updatedItem) {
+      setSyncError('품목을 찾을 수 없습니다.');
+      return;
+    }
+
+    const updated = setTabSliceProducts(nextState, tab, nextSlice);
+    setSyncError('');
     setUhpInventory(updated);
     void persistUhpInventory(updated);
   };
@@ -2031,6 +2095,7 @@ export default function AdminInventoryStatusPage() {
   };
 
   const productCardHandlers: AdminUhpProductCardHandlers = {
+    canToggleQuoteRequest,
     brokenImageKeys,
     setBrokenImageKeys,
     getCurrentStock,
@@ -2040,6 +2105,7 @@ export default function AdminInventoryStatusPage() {
     handleDeleteProductLine,
     handleRenameItem,
     handleDeleteItem,
+    handleToggleQuoteRequest,
     handleRenameVariant,
     handleDeleteVariant,
     handleAddVariant,

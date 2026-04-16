@@ -134,15 +134,22 @@ export function AdminUhpInventoryProductCard({
                             className="rounded border border-gray-200 bg-white px-1.5 py-1 text-[10px]"
                           >
                             <div className="flex flex-nowrap items-center gap-1">
-                              <span
-                                className={`min-w-0 flex-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide ${
-                                  variant.hasQuoteRequest
-                                    ? 'border-2 border-rose-500 bg-rose-100 text-rose-900 ring-1 ring-rose-300 shadow-sm'
-                                    : 'border border-slate-300 bg-slate-50 text-slate-800'
-                                }`}
-                              >
-                                {variant.code}
-                              </span>
+                              <div className="group/quote relative min-w-0 flex-1">
+                                <span
+                                  className={`block min-w-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide ${
+                                    variant.hasQuoteRequest
+                                      ? 'border-2 border-rose-500 bg-rose-100 text-rose-900 ring-1 ring-rose-300 shadow-sm'
+                                      : 'border border-slate-300 bg-slate-50 text-slate-800'
+                                  }`}
+                                >
+                                  {variant.code}
+                                </span>
+                                {variant.hasQuoteRequest && (
+                                  <span className="pointer-events-none absolute bottom-full left-0 z-10 mb-1 hidden whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-[10px] font-medium text-white shadow-md group-hover/quote:block">
+                                    견적요청 있음
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex shrink-0 items-center gap-0.5">
                                 {canToggleQuoteRequest && (
                                   <button

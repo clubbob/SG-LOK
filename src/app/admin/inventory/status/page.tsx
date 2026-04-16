@@ -966,6 +966,18 @@ export default function AdminInventoryStatusPage() {
       setSyncError('품목을 찾을 수 없습니다.');
       return;
     }
+    const targetVariant = getTabSliceProducts(inv, tab)
+      .find((line) => line.name === productName)
+      ?.items.find((item) => item.code === itemCode)
+      ?.variants?.find((variant) => variant.code === variantCode);
+    if (!targetVariant) {
+      setSyncError('서브 품목을 찾을 수 없습니다.');
+      return;
+    }
+    const nextActionLabel = targetVariant.hasQuoteRequest ? '해제' : '설정';
+    if (!confirm(`"${variantCode}" 품목의 견적요청 표시를 ${nextActionLabel}할까요?`)) {
+      return;
+    }
 
     const nextState: UhpInventoryState = JSON.parse(JSON.stringify(inv)) as UhpInventoryState;
     let updatedItem = false;

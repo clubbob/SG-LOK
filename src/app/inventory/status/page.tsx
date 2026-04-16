@@ -480,9 +480,9 @@ function InventoryStatusPageContent() {
                       </span>
                     )}
                   </h3>
-                  <div className="grid grid-cols-1 gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-[180px_minmax(0,1fr)]">
                     <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-                      <div className="h-[180px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
+                      <div className="h-[150px] w-full overflow-hidden rounded-md border border-gray-200 bg-white">
                         {product.imageSrc?.trim() && !brokenImageKeys.has(product.listKey) ? (
                           <img
                             src={product.imageSrc}
@@ -559,13 +559,15 @@ function InventoryStatusPageContent() {
                                           </span>
                                         </div>
                                         {variantPlanInfo && (
-                                          <div className="mt-2.5 flex items-center justify-between gap-2">
-                                            <span className="text-xs font-medium text-gray-600">
-                                              {variantPlanInfo.nearestDueDate ?? '-'}
+                                          <div className="mt-2.5 flex flex-nowrap items-center justify-between gap-1">
+                                            <span className="min-w-0 whitespace-nowrap text-[11px] font-medium tracking-tight text-gray-600">
+                                              완료예정 {variantPlanInfo.nearestDueDate ?? '-'}
                                             </span>
-                                            <span className="rounded-md border-2 border-purple-600 bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-900 ring-1 ring-purple-300 shadow-sm">
-                                              예상 {variantExpectedStock} {variant.unit}
-                                            </span>
+                                            <div className="flex shrink-0 items-center gap-1">
+                                              <span className="whitespace-nowrap rounded-md border-2 border-purple-600 bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-900 ring-1 ring-purple-300 shadow-sm">
+                                                예상재고 {variantExpectedStock} {variant.unit}
+                                              </span>
+                                            </div>
                                           </div>
                                         )}
                                       </div>

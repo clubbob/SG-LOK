@@ -214,11 +214,11 @@ export function AdminUhpInventoryProductCard({
                             {variantPlanInfo && (
                               <div className="mt-2.5 flex items-center justify-between gap-2">
                                 <span className="text-xs font-medium text-gray-600">
-                                  {variantPlanInfo.nearestDueDate ?? '-'}
+                                  완료예정 {variantPlanInfo.nearestDueDate ?? '-'}
                                 </span>
                                 <div className="flex shrink-0 items-center gap-1">
                                   <span className="rounded-md border-2 border-purple-600 bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-900 ring-1 ring-purple-300 shadow-sm">
-                                    예상 {variantExpectedStock} {variant.unit}
+                                    예상재고 {variantExpectedStock} {variant.unit}
                                   </span>
                                 </div>
                               </div>

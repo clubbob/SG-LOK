@@ -72,28 +72,10 @@ if (!AUTO_PORT && !NO_KILL) {
   await freeListeningPort(port);
 }
 
-const baseUrl = `http://localhost:${port}`;
-console.log(`\n  [dev] ${baseUrl}`);
 if (AUTO_PORT && port !== START_PORT) {
+  const baseUrl = `http://localhost:${port}`;
   console.log(
     `\n  [warn] 포트 ${START_PORT} 사용 중. 아래 주소로 접속하세요.\n        ${baseUrl}\n`
-  );
-} else if (!AUTO_PORT) {
-  console.log(
-    `  [info] 고정 포트 ${port}. 변경: set PORT=3001 후 npm run dev / 자동 포트: npm run dev:auto\n`
-  );
-} else {
-  console.log('');
-}
-console.log(
-  '  [tip] 저장 후 Internal Server Error·접속 불가 시:\n' +
-    '        ① 터미널에 빨간 스택이 있는지 확인  ② npm run dev:refresh (.next 초기화)\n' +
-    '        ③ 그래도면 npm run dev:3000 (포트 강제 종료 없이 순수 next dev)\n' +
-    '        ④ 포트 충돌 시: set DEV_NO_KILL=1 후 npm run dev\n'
-);
-if (!AUTO_PORT && !NO_KILL) {
-  console.log(
-    '  [info] 기동 전 Listen 포트 점유 프로세스 종료 시도함. 끄려면: set DEV_NO_KILL=1 후 npm run dev\n'
   );
 }
 

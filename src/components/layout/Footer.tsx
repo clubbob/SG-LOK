@@ -46,7 +46,7 @@ export default function Footer() {
                 <li>이메일: Nodemailer</li>
                 <li>개발 도구: Cursor (AI IDE)</li>
                 <li>배포: Vercel</li>
-                <li>형상관리: GitHub</li>
+                <li>버전 관리: GitHub</li>
               </ul>
             </div>
             <div className="flex justify-end border-t border-gray-200 px-5 py-4">

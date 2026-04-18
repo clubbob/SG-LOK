@@ -73,3 +73,10 @@ export const SLOK_CATALOG_URL =
 
 export const SLOK_UHP_CATALOG_URL =
   process.env.NEXT_PUBLIC_SLOK_UHP_CATALOG_URL?.trim() || '/catalogs/S-LOK_UHP_Fittings.pdf';
+
+/** SG-LOK 브랜드 카탈로그 (`public/catalogs/SG-LOK Tube Fittings.pdf` 등, 공백은 URL 인코딩) */
+export const SG_LOK_CATALOG_URL =
+  process.env.NEXT_PUBLIC_SG_LOK_CATALOG_URL?.trim() || '/catalogs/SG-LOK%20Tube%20Fittings.pdf';
+
+export const SG_LOK_UHP_CATALOG_URL =
+  process.env.NEXT_PUBLIC_SG_LOK_UHP_CATALOG_URL?.trim() || '/catalogs/SG-LOK%20UHP%20Fittings.pdf';

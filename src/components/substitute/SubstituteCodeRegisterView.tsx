@@ -17,6 +17,8 @@ import {
   SOURCE_TYPE,
   SLOK_CATALOG_URL,
   SLOK_UHP_CATALOG_URL,
+  SG_LOK_CATALOG_URL,
+  SG_LOK_UHP_CATALOG_URL,
   SWAGELOK_CATALOG_URL,
   SWAGELOK_UHP_CATALOG_URL,
 } from '@/lib/substitute/constants';
@@ -607,80 +609,93 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
           </div>
 
           {lastNormalized && (
-            <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:relative">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold text-gray-900">Swagelok 제품 참고</h2>
-              </div>
-              <div className="mt-2 flex flex-col gap-2 items-start sm:mt-0 sm:absolute sm:right-4 sm:top-4 sm:items-end">
-                  <button
-                    type="button"
-                    onClick={() => openCatalogPopup(SWAGELOK_CATALOG_URL, 'swagelok_catalog')}
-                    className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    Swagelok Tube Fitting
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openCatalogPopup(SWAGELOK_UHP_CATALOG_URL, 'swagelok_uhp_catalog')}
-                    className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    Swagelok UHP Fitting
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openCatalogPopup(SLOK_CATALOG_URL, 'slok_catalog')}
-                    className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    S-Lok Tube Fitting
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openCatalogPopup(SLOK_UHP_CATALOG_URL, 'slok_uhp_catalog')}
-                    className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
-                  >
-                    S-Lok UHP Fitting
-                  </button>
-              </div>
-              {officialRef.productPageUrl ? (
-                <p className="mt-2 text-sm sm:pr-[340px]">
-                  <a
-                    href={officialRef.productPageUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 font-medium hover:underline break-all"
-                  >
-                    {officialRef.productPageUrl}
-                  </a>
+            <div className="mt-6 space-y-3">
+              <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-semibold text-gray-900">Swagelok 제품 참고</h2>
+                </div>
+                {officialRef.productPageUrl ? (
+                  <p className="mt-2 text-sm">
+                    <a
+                      href={officialRef.productPageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 font-medium hover:underline break-all"
+                    >
+                      {officialRef.productPageUrl}
+                    </a>
+                  </p>
+                ) : null}
+                <div className="mt-4 flex flex-col justify-center rounded-md bg-gray-50 p-4 min-h-[140px] items-center gap-2">
+                  {officialRef.loading && !displaySwagelokImageUrl ? (
+                    <p className="text-sm text-gray-500">Swagelok 공식 페이지에서 이미지를 불러오는 중…</p>
+                  ) : null}
+                  {displaySwagelokImageUrl && !swagelokImageFailed ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={displaySwagelokImageUrl}
+                      alt={`Swagelok ${lastNormalized} 참고 이미지`}
+                      className="max-h-56 w-auto max-w-full object-contain rounded border border-gray-200 bg-white shadow-sm"
+                      onError={() => setSwagelokImageFailed(true)}
+                    />
+                  ) : null}
+                  {!officialRef.loading && !displaySwagelokImageUrl ? (
+                    <p className="text-sm text-gray-500 text-center px-2">이미지 URL을 찾지 못했습니다.</p>
+                  ) : null}
+                  {!officialRef.loading && displaySwagelokImageUrl && swagelokImageFailed ? (
+                    <p className="text-sm text-amber-800 text-center px-2">
+                      이미지 표시에 실패했습니다. 링크로 공식 페이지에서 확인하거나, 다른 이미지 URL을 등록해 보세요.
+                    </p>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-[11px] text-gray-400">
+                  Swagelok® 제품·이미지는 Swagelok 사의 자산입니다. 참고용으로만 사용하세요.
                 </p>
-              ) : null}
-              <div className="mt-4 flex flex-col justify-center rounded-md bg-gray-50 p-4 min-h-[140px] items-center gap-2">
-                {officialRef.loading && !displaySwagelokImageUrl ? (
-                  <p className="text-sm text-gray-500">Swagelok 공식 페이지에서 이미지를 불러오는 중…</p>
-                ) : null}
-                {displaySwagelokImageUrl && !swagelokImageFailed ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={displaySwagelokImageUrl}
-                    alt={`Swagelok ${lastNormalized} 참고 이미지`}
-                    className="max-h-56 w-auto max-w-full object-contain rounded border border-gray-200 bg-white shadow-sm"
-                    onError={() => setSwagelokImageFailed(true)}
-                  />
-                ) : null}
-                {!officialRef.loading && !displaySwagelokImageUrl ? (
-                  <p className="text-sm text-gray-500 text-center px-2">
-                    공식 페이지에서 이미지 URL을 찾지 못했습니다. 품번이 없거나 페이지 구조가 바뀌었을 수 있습니다.
-                    매핑 수정에서 이미지 URL을 직접 넣을 수 있습니다.
-                  </p>
-                ) : null}
-                {!officialRef.loading && displaySwagelokImageUrl && swagelokImageFailed ? (
-                  <p className="text-sm text-amber-800 text-center px-2">
-                    이미지 표시에 실패했습니다. 링크로 공식 페이지에서 확인하거나, 다른 이미지 URL을 등록해 보세요.
-                  </p>
-                ) : null}
               </div>
-              <p className="mt-2 text-[11px] text-gray-400">
-                Swagelok® 제품·이미지는 Swagelok 사의 자산입니다. 참고용으로만 사용하세요.
-              </p>
+              <div className="flex flex-wrap gap-2 items-center justify-start">
+                <button
+                  type="button"
+                  onClick={() => openCatalogPopup(SWAGELOK_CATALOG_URL, 'swagelok_catalog')}
+                  className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                >
+                  Swagelok Tube Fitting
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openCatalogPopup(SWAGELOK_UHP_CATALOG_URL, 'swagelok_uhp_catalog')}
+                  className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                >
+                  Swagelok UHP Fitting
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openCatalogPopup(SLOK_CATALOG_URL, 'slok_catalog')}
+                  className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                >
+                  S-Lok Tube Fitting
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openCatalogPopup(SLOK_UHP_CATALOG_URL, 'slok_uhp_catalog')}
+                  className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                >
+                  S-Lok UHP Fitting
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openCatalogPopup(SG_LOK_CATALOG_URL, 'sglok_tube_catalog')}
+                  className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                >
+                  SG-Lok Tube Fitting
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openCatalogPopup(SG_LOK_UHP_CATALOG_URL, 'sglok_uhp_catalog')}
+                  className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-800 text-xs sm:text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+                >
+                  SG-Lok UHP Fittings
+                </button>
+              </div>
             </div>
           )}
 

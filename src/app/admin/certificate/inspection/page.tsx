@@ -406,7 +406,7 @@ export default function InspectionCertiPage() {
     <div className="p-8">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">제품별 소재 사이즈 관리</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">소재 사이즈 관리</h1>
           <p className="text-sm text-gray-600 sm:text-base">제품별 소재와 사이즈를 관리할 수 있습니다.</p>
         </div>
         <Button

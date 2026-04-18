@@ -108,7 +108,7 @@ const adminMenuItems: MenuItem[] = [
     subItems: [
       { id: 'certificate-request', label: '성적서요청 등록', path: '/admin/certificate/request' },
       { id: 'certificate-list', label: '성적서 목록', path: '/admin/certificate' },
-      { id: 'inspection-certi', label: '제품별 소재 사이즈 관리', path: '/admin/certificate/inspection' },
+      { id: 'inspection-certi', label: '소재 사이즈 관리', path: '/admin/certificate/inspection' },
     ],
   },
   {
@@ -365,7 +365,7 @@ export default function AdminLayout({
         <aside
           className={[
             'flex flex-col border-r border-gray-200 bg-white shadow-sm pb-12',
-            'w-52 md:w-56 shrink-0 overflow-y-auto overscroll-contain',
+            'w-48 md:w-52 shrink-0 overflow-y-auto overscroll-contain',
             'fixed left-0 top-0 z-50 h-dvh transition-transform duration-200 ease-out',
             'md:sticky md:top-0 md:z-auto md:h-screen md:translate-x-0 md:shadow-sm',
             mobileNavOpen

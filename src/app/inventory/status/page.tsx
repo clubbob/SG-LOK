@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Header, Footer } from '@/components/layout';
+import { ScrollToTopFab } from '@/components/ui/ScrollToTopFab';
 import { useAuth } from '@/hooks/useAuth';
 import { db } from '@/lib/firebase';
 import {
@@ -809,6 +810,7 @@ function InventoryStatusPageContent() {
           </div>
         )}
       </main>
+      <ScrollToTopFab />
       <Footer />
     </div>
   );

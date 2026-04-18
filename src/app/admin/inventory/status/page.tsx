@@ -6,6 +6,7 @@ import {
   AdminUhpInventoryProductCard,
   type AdminUhpProductCardHandlers,
 } from '@/components/admin/inventory/AdminUhpInventoryProductCard';
+import { ScrollToTopFab } from '@/components/ui/ScrollToTopFab';
 import { auth, db } from '@/lib/firebase';
 import { isBootstrapAdminEmail } from '@/lib/auth/adminBootstrap';
 import {
@@ -2084,8 +2085,12 @@ export default function AdminInventoryStatusPage() {
     productListEffectivePage * PRODUCT_LIST_PAGE_SIZE
   );
 
+  /** 제품 줄 DnD: 검색·필터 시 탭별 인덱스와 맞지 않아 비활성 */
   const canDragReorderProducts =
     !isSearching && stockFilter === null && !hasPlanFilter;
+
+  /** 품목 순서: 제품명·검색어 기준으로 전체 품목이 보일 때만 카드에서 DnD 사용 */
+  const canReorderItems = stockFilter === null && !hasPlanFilter;
 
   const getCurrentStock = (item: InventoryItem): number => getItemCurrentStock(item);
 
@@ -2128,7 +2133,7 @@ export default function AdminInventoryStatusPage() {
     openHistoryModal,
     openHistoryViewModal,
     openProductionPlanEditModal,
-    itemReorderEnabled: canDragReorderProducts,
+    itemReorderEnabled: canReorderItems,
     onItemReorder: handleItemOrderReorder,
   };
 
@@ -3119,6 +3124,7 @@ export default function AdminInventoryStatusPage() {
           </div>
         </div>
       )}
+      <ScrollToTopFab />
     </div>
   );
 }

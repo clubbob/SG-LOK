@@ -51,7 +51,7 @@ type Props = {
     itemCode: string,
     history: ProductionPlanHistory
   ) => void;
-  /** 검색·재고/생산 필터 없을 때만 true — 품목 순서 드래그 저장 */
+  /** 재고/생산 필터 없을 때 true. 검색 중이면 카드에서 전체 품목이 보일 때만 DnD 적용 */
   itemReorderEnabled?: boolean;
   onItemReorder?: (productName: string, oldIndex: number, newIndex: number) => void;
 };
@@ -220,7 +220,7 @@ export function AdminUhpInventoryProductCard({
                             </div>
                             {variantPlanInfo && (
                               <div className="mt-2.5 flex items-center justify-between gap-2">
-                                <span className="text-xs font-medium text-gray-600">
+                                <span className="whitespace-nowrap text-xs font-medium text-gray-600">
                                   완료예정 {variantPlanInfo.nearestDueDate ?? '-'}
                                 </span>
                                 <div className="flex shrink-0 items-center gap-1">
@@ -367,7 +367,10 @@ export function AdminUhpInventoryProductCard({
             등록된 품목이 없습니다. 「품목 추가」로 품목 코드를 등록하면 SL-BA 등 6종 세부코드가 자동
             생성됩니다.
           </p>
-        ) : itemReorderEnabled && onItemReorder && product.items.length > 0 ? (
+        ) : itemReorderEnabled &&
+          onItemReorder &&
+          product.items.length > 0 &&
+          product.filteredItems.length === product.items.length ? (
           <InventoryItemDndGrid
             items={product.items}
             sortableIds={sortableItemIds}

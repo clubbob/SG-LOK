@@ -87,7 +87,8 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
     }
   }, [loading, canAccessPage, embedded, router]);
 
-  const loadRows = async () => {
+  const loadRows = async (options?: { afterMutation?: boolean }) => {
+    const afterMutation = options?.afterMutation === true;
     setIsLoadingRows(true);
     setListError(null);
     try {
@@ -117,16 +118,25 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
           m.manufacturer_from === MANUFACTURER.SWAGELOK &&
           m.manufacturer_to === MANUFACTURER.SLOK
       );
+      // 코드 목록 페이지네이션: 1페이지 = 가장 먼저 등록한 항목부터 10건, 마지막 페이지 = 최근 등록.
       onlySwToSlok.sort((a, b) => {
         const aCreated = toMillis(a.created_at);
         const bCreated = toMillis(b.created_at);
-        if (bCreated !== aCreated) return bCreated - aCreated;
+        if (aCreated !== bCreated) return aCreated - bCreated;
         const aUpdated = toMillis(a.updated_at);
         const bUpdated = toMillis(b.updated_at);
-        if (bUpdated !== aUpdated) return bUpdated - aUpdated;
-        return b.id.localeCompare(a.id, "en", { sensitivity: "base" });
+        if (aUpdated !== bUpdated) return aUpdated - bUpdated;
+        return a.id.localeCompare(b.id, "en", { sensitivity: "base" });
       });
       setRows(onlySwToSlok);
+      const newTotalPages = Math.max(1, Math.ceil(onlySwToSlok.length / PAGE_SIZE));
+      if (afterMutation) {
+        // 저장·삭제 후에는 보고 있던 페이지 유지(삭제 등으로 페이지 수가 줄면 범위 안으로만 조정)
+        setPage((p) => Math.min(Math.max(1, p), newTotalPages));
+      } else {
+        // 최초 로드·새로고침·목록 진입 시에는 최근 등록 구간(마지막 페이지)
+        setPage(newTotalPages);
+      }
     } catch (e) {
       console.error(e);
       setListError("코드 목록을 불러오지 못했습니다.");
@@ -158,13 +168,16 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
 
   const saveEdit = async (row: SubstituteMappingDoc) => {
     const nextFromName = editFromName.trim();
-    const nextFromCode = normalizeInstrumentCode(editFromCode);
     const nextToName = editToName.trim();
-    const nextToCode = normalizeInstrumentCode(editToCode);
-    if (!nextFromName || !nextFromCode || !nextToName || !nextToCode) {
+    const displayFrom = editFromCode.trim();
+    const displayTo = editToCode.trim();
+    if (!nextFromName || !displayFrom || !nextToName || !displayTo) {
       alert("제품명/제품코드는 비워둘 수 없습니다.");
       return;
     }
+
+    const normFrom = normalizeInstrumentCode(displayFrom);
+    const normTo = normalizeInstrumentCode(displayTo);
 
     const changedBy = user?.uid ?? "admin";
     setSavingId(row.id);
@@ -174,16 +187,16 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
         row.id,
         {
           product_name_from: nextFromName,
-          code_from: nextFromCode,
-          normalized_code_from: normalizeInstrumentCode(nextFromCode),
+          code_from: displayFrom,
+          normalized_code_from: normFrom,
           product_name_to: nextToName,
-          code_to: nextToCode,
-          normalized_code_to: normalizeInstrumentCode(nextToCode),
+          code_to: displayTo,
+          normalized_code_to: normTo,
         },
         changedBy
       );
       cancelEdit();
-      await loadRows();
+      await loadRows({ afterMutation: true });
     } catch (error) {
       console.error(error);
       alert("수정에 실패했습니다.");
@@ -198,7 +211,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
     try {
       await deleteMapping(db, row.id, user?.uid ?? "admin");
       if (editingId === row.id) cancelEdit();
-      await loadRows();
+      await loadRows({ afterMutation: true });
     } catch (error) {
       console.error(error);
       alert("삭제에 실패했습니다.");
@@ -219,13 +232,16 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
   }, [rows, normalized]);
 
   useEffect(() => {
-    setPage(1);
+    // 검색어만 바뀔 때 검색 결과의 마지막(최근) 페이지로 (저장으로 rows 길이만 바뀌는 경우는 제외)
+    const tp = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+    setPage(tp);
   }, [query]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const effectivePage = Math.min(page, totalPages);
-  const displayPage = totalPages - effectivePage + 1;
   const pagedRows = filteredRows.slice((effectivePage - 1) * PAGE_SIZE, effectivePage * PAGE_SIZE);
+  /** 페이지 안에서는 번호가 큰 행이 위, 낮은 번호가 아래(같은 페이지 내 등록일은 위쪽이 더 최근) */
+  const pagedRowsDisplay = [...pagedRows].reverse();
   const rangeStart = filteredRows.length === 0 ? 0 : (effectivePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(filteredRows.length, effectivePage * PAGE_SIZE);
 
@@ -339,10 +355,10 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
-                  {pagedRows.map((row, index) => (
+                  {pagedRowsDisplay.map((row, index) => (
                     <tr key={row.id} className="hover:bg-gray-50/60">
                       <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-800">
-                        {filteredRows.length - ((effectivePage - 1) * PAGE_SIZE + index)}
+                        {(effectivePage - 1) * PAGE_SIZE + (pagedRows.length - index)}
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 text-sm text-gray-900">
                         {canEditRows && editingId === row.id ? (
@@ -493,24 +509,30 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
               <p className="text-xs text-gray-500">
                 {rangeStart}-{rangeEnd} / 총 {filteredRows.length}건
                 {normalized ? ` (전체 ${rows.length}건 중 검색 결과)` : ""}
+                {totalPages > 1 ? (
+                  <span className="hidden sm:inline">
+                    {" "}
+                    · 1페이지는 가장 먼저 등록된 순(10건), 마지막 페이지는 최근 등록
+                  </span>
+                ) : null}
               </p>
               {totalPages > 1 && (
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={displayPage <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={effectivePage <= 1}
                     className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                   >
                     이전
                   </button>
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => {
-                    const isActive = n === displayPage;
+                    const isActive = n === effectivePage;
                     return (
                       <button
                         key={n}
                         type="button"
-                        onClick={() => setPage(totalPages - n + 1)}
+                        onClick={() => setPage(n)}
                         className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
                           isActive
                             ? "border-blue-500 bg-blue-500 text-white"
@@ -524,8 +546,8 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                   })}
                   <button
                     type="button"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={displayPage >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={effectivePage >= totalPages}
                     className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                   >
                     다음

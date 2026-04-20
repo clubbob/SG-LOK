@@ -103,7 +103,7 @@ export function AdminUhpInventoryProductCard({
             return (
               <>
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-gray-800">{item.code}</p>
+                  <p className="text-base font-semibold text-gray-800">{item.code}</p>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
@@ -133,14 +133,15 @@ export function AdminUhpInventoryProductCard({
                             key={variant.code}
                             className="rounded border border-gray-200 bg-white px-1.5 py-1 text-[10px]"
                           >
-                            <div className="flex flex-nowrap items-center gap-1">
-                              <div className="group/quote relative min-w-0 flex-1">
+                            <div className="flex flex-nowrap items-center justify-between gap-2">
+                              <div className="group/quote relative min-w-0">
                                 <span
-                                  className={`block min-w-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold tracking-wide ${
+                                  className={`inline-flex max-w-[170px] items-center truncate whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold tracking-wide ${
                                     variant.hasQuoteRequest
                                       ? 'border-2 border-rose-500 bg-rose-100 text-rose-900 ring-1 ring-rose-300 shadow-sm'
                                       : 'border border-slate-300 bg-slate-50 text-slate-800'
                                   }`}
+                                  title={variant.code}
                                 >
                                   {variant.code}
                                 </span>
@@ -150,7 +151,7 @@ export function AdminUhpInventoryProductCard({
                                   </span>
                                 )}
                               </div>
-                              <div className="flex shrink-0 items-center gap-0.5">
+                              <div className="ml-auto flex shrink-0 items-center gap-2.5">
                                 {canToggleQuoteRequest && (
                                   <button
                                     type="button"
@@ -166,7 +167,7 @@ export function AdminUhpInventoryProductCard({
                                         variant.code
                                       )
                                     }
-                                    className={`rounded border px-1 py-0.5 text-[9px] font-bold leading-none ${
+                                    className={`rounded-md border px-1.5 py-1 text-xs font-bold leading-none ${
                                       variant.hasQuoteRequest
                                         ? 'border-rose-400 bg-rose-100 text-rose-900 hover:bg-rose-200'
                                         : 'border-slate-300 bg-slate-50 text-slate-500 hover:bg-slate-100'
@@ -190,7 +191,7 @@ export function AdminUhpInventoryProductCard({
                                   onClick={() =>
                                     handleRenameVariant(product.name, item.code, variant.code)
                                   }
-                                  className="rounded border border-indigo-200 bg-indigo-50 px-1 py-0.5 text-indigo-700 hover:bg-indigo-100"
+                                  className="rounded-md border border-indigo-200 bg-indigo-50 px-1.5 py-1 text-indigo-700 hover:bg-indigo-100"
                                 >
                                   <svg
                                     aria-hidden="true"
@@ -206,7 +207,7 @@ export function AdminUhpInventoryProductCard({
                                   onClick={() =>
                                     handleDeleteVariant(product.name, item.code, variant.code)
                                   }
-                                  className="rounded border border-red-200 bg-red-50 px-1 py-0.5 text-red-700 hover:bg-red-100"
+                                  className="rounded-md border border-red-200 bg-red-50 px-1.5 py-1 text-red-700 hover:bg-red-100"
                                 >
                                   <svg
                                     aria-hidden="true"

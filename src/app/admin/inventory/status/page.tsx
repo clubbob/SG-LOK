@@ -2870,7 +2870,7 @@ export default function AdminInventoryStatusPage() {
                           <td className="px-3 py-2 text-right font-medium text-gray-800 whitespace-nowrap">
                             {row.kind === 'adjustment' && row.quantity > 0 ? `+${row.quantity}` : row.quantity}
                           </td>
-                          <td className="px-3 py-2 text-gray-600 text-xs max-w-xs break-words">
+                          <td className="px-3 py-2 text-sm text-gray-700 max-w-xs break-words">
                             {combinedHistoryRowMemo(row)}
                           </td>
                         </tr>

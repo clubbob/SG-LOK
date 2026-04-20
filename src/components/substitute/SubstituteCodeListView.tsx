@@ -346,7 +346,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                     <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">Swagelok 제품코드</th>
                     <th className="whitespace-nowrap px-3 py-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-600">제품 이미지</th>
                     <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">S-LOK 제품명</th>
-                    <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">S-LOK 제품코드</th>
+                    <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">S-LOK 제품코드 (SG-LOK)</th>
                     <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록일</th>
                     <th className="whitespace-nowrap px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">등록자</th>
                     {canEditRows && (

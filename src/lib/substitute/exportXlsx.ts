@@ -35,7 +35,7 @@ export function downloadSubstituteAdminTableXlsx(rows: SubstituteMappingDoc[], f
     'SWAGELOK 제품명': m.product_name_from ?? '',
     'SWAGELOK 제품코드': m.normalized_code_from ?? '',
     'S-LOK 제품명': m.product_name_to ?? '',
-    'S-LOK 제품코드': m.normalized_code_to ?? '',
+    'S-LOK 제품코드 (SG-LOK)': m.normalized_code_to ?? '',
     비고: m.remarks ?? '',
     '최근 수정일': formatUpdatedAtForXlsx(m.updated_at),
   }));
@@ -55,7 +55,7 @@ export function downloadSubstituteListXlsx(
     'Swagelok 제품명': m.product_name_from ?? '',
     'Swagelok 제품코드': m.code_from ?? '',
     'S-LOK 제품명': m.product_name_to ?? '',
-    'S-LOK 제품코드': m.code_to ?? '',
+    'S-LOK 제품코드 (SG-LOK)': m.code_to ?? '',
     등록일: formatUpdatedAtForXlsx(m.created_at),
     등록자: resolveSubstituteRegistrantLabel(m.created_by, userNameById),
   }));

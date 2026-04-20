@@ -402,7 +402,7 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
     try {
       const codeTo = quickSlokCode.trim();
       if (!codeTo) {
-        setError('S-LOK 제품코드를 입력하세요.');
+        setError('S-LOK (SG-LOK) 제품코드를 입력하세요.');
         return;
       }
       await createMapping(db, {
@@ -443,7 +443,7 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
     try {
       const codeTo = quickSlokCode.trim();
       if (!codeTo) {
-        setError('S-LOK 제품코드를 입력하세요.');
+        setError('S-LOK (SG-LOK) 제품코드를 입력하세요.');
         return;
       }
       await updateMapping(
@@ -539,7 +539,7 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">코드 등록</h1>
               <p className="text-gray-600 mt-2 text-sm sm:text-base">
-                Swagelok 품번을 정확히 입력하면 S-LOK 대체 품번을 표시합니다.
+                Swagelok 품번을 정확히 입력하면 S-LOK (SG-LOK) 대체 품번을 표시합니다.
               </p>
             </div>
           </div>
@@ -736,7 +736,7 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
 
                 <div className="border-t border-gray-100 pt-4">
                   <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">
-                    S-LOK
+                    S-LOK (SG-LOK)
                   </h3>
                   <div className="space-y-3 sm:grid sm:grid-cols-2 sm:gap-4 sm:space-y-0">
                     <label className="block text-sm">
@@ -756,7 +756,7 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
                         value={quickSlokCode}
                         onChange={(e) => setQuickSlokCode(e.target.value.toUpperCase())}
                         className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="S-LOK 품번"
+                        placeholder="S-LOK (SG-LOK) 품번"
                       />
                     </label>
                   </div>
@@ -805,7 +805,7 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
             <>
               <div className="mt-6 rounded-xl border-2 border-blue-200 bg-blue-50/90 px-4 py-4 shadow-sm">
                 <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide">
-                  S-LOK 대체 품번
+                  S-LOK (SG-LOK) 대체 품번
                 </p>
                 <ul className="mt-3 space-y-3">
                   {results.map((m) => {
@@ -842,7 +842,7 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
                   <tr>
                     <th className="px-3 py-2 font-medium">상태</th>
                     <th className="px-3 py-2 font-medium">Swagelok</th>
-                    <th className="px-3 py-2 font-medium">S-LOK</th>
+                    <th className="px-3 py-2 font-medium">S-LOK (SG-LOK)</th>
                     <th className="px-3 py-2 font-medium">confidence</th>
                     <th className="px-3 py-2 font-medium">출처</th>
                     <th className="px-3 py-2 font-medium w-[200px]">파서(보조)</th>
@@ -939,7 +939,7 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto p-5 space-y-3">
             <h2 className="text-lg font-semibold text-gray-900">매핑 수정</h2>
             <p className="text-xs text-gray-500">
-              Swagelok 측 품번·상태는 변경할 수 없습니다. S-LOK·이미지 URL·설명 필드를 저장할 수 있습니다.
+              Swagelok 측 품번·상태는 변경할 수 없습니다. S-LOK (SG-LOK)·이미지 URL·설명 필드를 저장할 수 있습니다.
             </p>
             <p className="text-xs font-mono bg-gray-50 px-2 py-1 rounded">{editing.normalized_code_from}</p>
             <label className="block text-sm">
@@ -952,7 +952,7 @@ export function SubstituteCodeRegisterView({ embedded = false }: { embedded?: bo
               />
             </label>
             <label className="block text-sm">
-              <span className="text-gray-600 text-xs">S-LOK 코드</span>
+              <span className="text-gray-600 text-xs">S-LOK (SG-LOK) 코드</span>
               <input
                 value={editForm.code_to}
                 onChange={(e) => setEditForm((f) => ({ ...f, code_to: e.target.value }))}

@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { collection, doc, getDoc, updateDoc, addDoc, Timestamp, getDocs, query, where, QuerySnapshot, DocumentData } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, getBytes } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, getBlob } from 'firebase/storage';
 import { db, storage, auth } from '@/lib/firebase';
 import { getProductMappingByCode, getAllProductMappings, addProductMapping, updateProductMapping, deleteProductMapping, DuplicateProductMappingError } from '@/lib/productMappings';
 import { CertificateAttachment, MaterialTestCertificate, CertificateProduct, ProductMapping } from '@/types';
+import { buildV2MaterialTestCertificateForFirestore } from '@/lib/certificate/v2SaveValidation';
 import { signInAnonymously } from 'firebase/auth';
 
 const ADMIN_SESSION_KEY = 'admin_session';
@@ -131,7 +132,7 @@ const renderKoreanText = (
 };
 
 // PDF를 Blob으로 생성하는 함수 (여러 제품 지원)
-const generatePDFBlobWithProducts = async (
+export const generatePDFBlobWithProducts = async (
   formData: {
     certificateNo: string;
     dateOfIssue: string;
@@ -139,7 +140,10 @@ const generatePDFBlobWithProducts = async (
     poNo: string;
     testResult: string;
   },
-  products: CertificateProduct[]
+  products: CertificateProduct[],
+  options?: {
+    preferUrlFetch?: boolean;
+  }
 ): Promise<{ 
   blob: Blob; 
   failedImageCount: number;
@@ -153,6 +157,7 @@ const generatePDFBlobWithProducts = async (
     }>;
   }>;
 }> => {
+  const preferUrlFetch = options?.preferUrlFetch === true;
   // ESM 번들(jsPDF.es.min.js)에서 chunk 로딩 실패가 날 수 있어 UMD로 로드
   type JsPDFClass = (typeof import('jspdf'))['jsPDF'];
   const jspdfModule = (await import('jspdf/dist/jspdf.umd.min.js')) as unknown as Partial<{
@@ -185,6 +190,98 @@ const generatePDFBlobWithProducts = async (
   const fontUrls = [
     'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosanskr/NotoSansKR-Regular.ttf',
   ];
+
+  const withTimeout = async <T,>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
+    return await new Promise<T>((resolve, reject) => {
+      let settled = false;
+      const timeoutId = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        reject(new Error(timeoutMessage));
+      }, ms);
+
+      promise
+        .then((value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          resolve(value);
+        })
+        .catch((error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeoutId);
+          reject(error);
+        });
+    });
+  };
+
+  // 브라우저 Image onload 타임아웃 이슈를 줄이기 위해 createImageBitmap 경로를 우선 사용
+  const blobToBase64Png = async (
+    blob: Blob
+  ): Promise<{ base64ImageData: string; width: number; height: number }> => {
+    if (typeof window !== 'undefined' && typeof createImageBitmap === 'function') {
+      const bitmap = await createImageBitmap(blob);
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Canvas context를 가져올 수 없습니다.');
+        ctx.drawImage(bitmap, 0, 0);
+        const base64ImageData = canvas.toDataURL('image/png').split(',')[1];
+        return { base64ImageData, width: bitmap.width, height: bitmap.height };
+      } finally {
+        if (typeof bitmap.close === 'function') bitmap.close();
+      }
+    }
+
+    const blobUrl = URL.createObjectURL(blob);
+    try {
+      const loadedImg = new Image();
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('이미지 로드 타임아웃 (20초)')), 20000);
+        loadedImg.onload = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        loadedImg.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error('이미지 로드 실패'));
+        };
+        loadedImg.src = blobUrl;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = loadedImg.width;
+      canvas.height = loadedImg.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas context를 가져올 수 없습니다.');
+      ctx.drawImage(loadedImg, 0, 0);
+      const base64ImageData = canvas.toDataURL('image/png').split(',')[1];
+      return { base64ImageData, width: loadedImg.width, height: loadedImg.height };
+    } finally {
+      URL.revokeObjectURL(blobUrl);
+    }
+  };
+
+  const fetchStorageBlobViaProxy = async (storagePath: string): Promise<Blob> => {
+    const encodedPath = encodeURIComponent(storagePath);
+    const res = await fetch(`/api/certificates/storage-proxy?path=${encodedPath}`, {
+      method: 'GET',
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      let detail = '';
+      try {
+        detail = await res.text();
+      } catch {
+        // ignore
+      }
+      throw new Error(`storage-proxy HTTP ${res.status}${detail ? `: ${detail}` : ''}`);
+    }
+    return await res.blob();
+  };
 
   for (const fontUrl of fontUrls) {
     try {
@@ -918,8 +1015,23 @@ const generatePDFBlobWithProducts = async (
       const hasUrl = inspectionCert.url && inspectionCert.url.trim().length > 0;
       const hasBase64 = inspectionCert.base64 && inspectionCert.base64.trim().length > 0;
       const hasStoragePath = inspectionCert.storagePath && inspectionCert.storagePath.trim().length > 0;
+
+      // storagePath가 있으면 매번 최신 downloadURL로 보정
+      // (만료/스테일 URL 때문에 fetch/Image 로드가 실패하는 경우 방지)
+      if (hasStoragePath) {
+        try {
+          const refreshedUrl = await getDownloadURL(ref(storage, inspectionCert.storagePath!));
+          inspectionCert.url = refreshedUrl;
+        } catch (refreshErr) {
+          console.warn(
+            `[PDF 생성] storagePath URL 갱신 실패(계속 진행): ${inspectionCert.storagePath}`,
+            refreshErr
+          );
+        }
+      }
       
-      if (!hasUrl && !hasBase64 && !hasStoragePath) {
+      const hasUrlAfterRefresh = inspectionCert.url && inspectionCert.url.trim().length > 0;
+      if (!hasUrlAfterRefresh && !hasBase64 && !hasStoragePath) {
         console.warn(`[PDF 생성] 제품 ${index + 1} 파일 ${certIndex + 1}의 URL, base64, storagePath가 모두 없습니다. 건너뜀.`);
         failedImageCount++;
         
@@ -934,7 +1046,7 @@ const generatePDFBlobWithProducts = async (
       }
       
       // URL, base64, 또는 storagePath가 있으면 처리
-      if (hasUrl || hasBase64 || hasStoragePath) {
+      if (hasUrlAfterRefresh || hasBase64 || hasStoragePath) {
       try {
         // Inspection Certificate는 이미지 파일이므로 바로 처리
         const fileType = inspectionCert.type || '';
@@ -995,6 +1107,15 @@ const generatePDFBlobWithProducts = async (
           console.log('[PDF 생성] 이미지 다운로드 시작, URL:', inspectionCert.url, 'storagePath:', inspectionCert.storagePath);
           
           let downloadSuccess = false;
+          let downloadFailureReason = '';
+          const appendFailureReason = (nextReason: string) => {
+            if (!nextReason) return;
+            if (!downloadFailureReason) {
+              downloadFailureReason = nextReason;
+            } else {
+              downloadFailureReason = `${downloadFailureReason} -> ${nextReason}`;
+            }
+          };
           
           // 방법 1: URL이 있으면 Image 객체로 로드하고 Canvas로 base64 변환 (타임아웃 5초로 단축)
           if (inspectionCert.url && inspectionCert.url.trim().length > 0) {
@@ -1002,7 +1123,7 @@ const generatePDFBlobWithProducts = async (
               console.log('[PDF 생성] 기존 URL로 Image 객체 로드 시도:', inspectionCert.url);
               
               // Image 객체로 로드 (타임아웃 5초로 단축 - 빠른 실패)
-              const imageUrl = await Promise.race([
+              const imageUrl = await withTimeout(
                 new Promise<string>((resolve, reject) => {
                   const testImg = new Image();
                   testImg.crossOrigin = 'anonymous';
@@ -1010,17 +1131,16 @@ const generatePDFBlobWithProducts = async (
                   testImg.onerror = () => reject(new Error('Image 로드 실패'));
                   testImg.src = inspectionCert.url;
                 }),
-                new Promise<string>((_, reject) => 
-                  setTimeout(() => reject(new Error('Image 로드 타임아웃 (5초)')), 5000)
-                )
-              ]);
+                5000,
+                'Image 로드 타임아웃 (5초)'
+              );
               
               // Image 객체 생성 및 로드
               const loadedImg = new Image();
               loadedImg.crossOrigin = 'anonymous';
               
               await new Promise<void>((resolve, reject) => {
-                const timeout = setTimeout(() => reject(new Error('이미지 로드 타임아웃 (5초)')), 5000);
+                const timeout = setTimeout(() => reject(new Error('이미지 로드 타임아웃 (20초)')), 20000);
                 loadedImg.onload = () => {
                   clearTimeout(timeout);
                   resolve();
@@ -1048,82 +1168,165 @@ const generatePDFBlobWithProducts = async (
               console.log('[PDF 생성] Image 객체 로드 및 base64 변환 완료');
             } catch (imageError) {
               console.warn('[PDF 생성] Image 객체 로드 실패, storagePath로 재시도:', imageError);
+              appendFailureReason(
+                `Image 객체 로드 실패: ${imageError instanceof Error ? imageError.message : String(imageError)}`
+              );
               // Image 객체 로드 실패 시 storagePath로 바로 재시도 (fetch 생략)
             }
           }
           
-          // 방법 2: URL 다운로드 실패했거나 URL이 없고 storagePath가 있으면 storagePath로 시도
-          // 타임아웃 10초로 단축하여 빠른 실패
-          if (!downloadSuccess && inspectionCert.storagePath && inspectionCert.storagePath.trim().length > 0) {
+          // v2 목록 다운로드에서는 지연을 줄이기 위해 storagePath getBlob을 먼저 짧게 시도하고,
+          // 실패 시 URL fetch로 빠르게 fallback
+          if (!downloadSuccess && preferUrlFetch && inspectionCert.storagePath && inspectionCert.storagePath.trim().length > 0) {
             try {
-              console.log(`[PDF 생성] storagePath로 직접 다운로드 시도 (getBytes):`, inspectionCert.storagePath);
               const storageRef = ref(storage, inspectionCert.storagePath);
-              
-              // getBytes로 직접 다운로드 (타임아웃 10초로 단축 - 빠른 실패)
-              const bytesResult = await Promise.race([
-                getBytes(storageRef),
-                new Promise<never>((_, reject) => 
-                  setTimeout(() => reject(new Error('getBytes 타임아웃 (10초)')), 10000)
-                )
-              ]) as ArrayBuffer | Uint8Array;
-              
-              // 항상 Uint8Array로 변환
-              const bytesArray: Uint8Array = bytesResult instanceof Uint8Array 
-                ? bytesResult 
-                : new Uint8Array(bytesResult);
-              
-              console.log('[PDF 생성] getBytes 다운로드 완료, 크기:', bytesArray.length);
-              const blob = new Blob([bytesArray as BlobPart], { type: inspectionCert.type || 'image/png' });
-              const blobUrl = URL.createObjectURL(blob);
-              
-              // Image 객체로 로드
-              const loadedImg = new Image();
-              await new Promise<void>((resolve, reject) => {
-                const timeout = setTimeout(() => reject(new Error('이미지 로드 타임아웃 (5초)')), 5000);
-                loadedImg.onload = () => {
-                  clearTimeout(timeout);
-                  resolve();
-                };
-                loadedImg.onerror = () => {
-                  clearTimeout(timeout);
-                  reject(new Error('이미지 로드 실패'));
-                };
-                loadedImg.src = blobUrl;
-              });
-              
-              // Canvas로 base64 변환
-              const canvas = document.createElement('canvas');
-              canvas.width = loadedImg.width;
-              canvas.height = loadedImg.height;
-              const ctx = canvas.getContext('2d');
-              if (ctx) {
+              let fallbackBlob: Blob;
+              try {
+                fallbackBlob = await withTimeout(
+                  fetchStorageBlobViaProxy(inspectionCert.storagePath),
+                  30000,
+                  'storage-proxy 타임아웃 (30초)'
+                );
+              } catch (blobError) {
+                try {
+                  fallbackBlob = await withTimeout(
+                    getBlob(storageRef),
+                    12000,
+                    'getBlob 타임아웃 (12초)'
+                  );
+                } catch {
+                  // fetch(downloadURL) 경로는 환경에 따라 Failed to fetch가 반복되어 사용하지 않음
+                  const fallbackUrl = await getDownloadURL(storageRef);
+                  const loadedImg = new Image();
+                  loadedImg.crossOrigin = 'anonymous';
+                  await new Promise<void>((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error('fallback 이미지 로드 타임아웃 (20초)')), 20000);
+                    loadedImg.onload = () => {
+                      clearTimeout(timeout);
+                      resolve();
+                    };
+                    loadedImg.onerror = () => {
+                      clearTimeout(timeout);
+                      reject(new Error('fallback 이미지 로드 실패'));
+                    };
+                    loadedImg.src = fallbackUrl;
+                  });
+                  const canvas = document.createElement('canvas');
+                  canvas.width = loadedImg.width;
+                  canvas.height = loadedImg.height;
+                  const ctx = canvas.getContext('2d');
+                  if (!ctx) {
+                    throw new Error('Canvas context를 가져올 수 없습니다.');
+                  }
+                  ctx.drawImage(loadedImg, 0, 0);
+                  base64ImageData = canvas.toDataURL('image/png').split(',')[1];
+                  img = loadedImg;
+                  downloadSuccess = true;
+                  console.log('[PDF 생성] preferUrlFetch 모드: getDownloadURL+Image fallback 성공');
+                  continue;
+                }
+                const proxyMsg = blobError instanceof Error ? blobError.message : String(blobError);
+                console.warn('[PDF 생성] preferUrlFetch 모드: storage-proxy 실패 후 fallback 사용', proxyMsg);
+                appendFailureReason(`storage-proxy 실패: ${proxyMsg}`);
+              }
+
+              const converted = await blobToBase64Png(fallbackBlob);
+              base64ImageData = converted.base64ImageData;
+              img = { width: converted.width, height: converted.height } as HTMLImageElement;
+              downloadSuccess = true;
+              console.log('[PDF 생성] preferUrlFetch 모드: getDownloadURL+fetch 성공');
+            } catch (urlFetchError) {
+              const msg = urlFetchError instanceof Error ? urlFetchError.message : String(urlFetchError);
+              console.warn(`[PDF 생성] preferUrlFetch 모드 실패: ${msg}`);
+              appendFailureReason(`preferUrlFetch 실패: ${msg}`);
+            }
+          }
+
+          // 방법 2: URL 다운로드 실패했거나 URL이 없고 storagePath가 있으면 storagePath로 시도
+          // 네트워크 환경 편차를 고려해 타임아웃을 완화
+          if (!downloadSuccess && !preferUrlFetch && inspectionCert.storagePath && inspectionCert.storagePath.trim().length > 0) {
+            try {
+              console.log(`[PDF 생성] storagePath로 직접 다운로드 시도 (getBlob 우선):`, inspectionCert.storagePath);
+              const storageRef = ref(storage, inspectionCert.storagePath);
+              let blob: Blob;
+              try {
+                blob = await withTimeout(
+                  fetchStorageBlobViaProxy(inspectionCert.storagePath),
+                  30000,
+                  'storage-proxy 타임아웃 (30초)'
+                );
+              } catch (proxyError) {
+                console.warn('[PDF 생성] storage-proxy 실패, getBlob으로 재시도:', proxyError);
+                const proxyMsg = proxyError instanceof Error ? proxyError.message : String(proxyError);
+                appendFailureReason(`storage-proxy 실패: ${proxyMsg}`);
+                blob = await withTimeout(
+                  getBlob(storageRef),
+                  20000,
+                  'getBlob 타임아웃 (20초)'
+                );
+              }
+              console.log('[PDF 생성] getBlob 다운로드 완료, 크기:', blob.size);
+
+              const converted = await blobToBase64Png(blob);
+              base64ImageData = converted.base64ImageData;
+              img = { width: converted.width, height: converted.height } as HTMLImageElement;
+              downloadSuccess = true;
+              console.log('[PDF 생성] storagePath를 통한 다운로드 및 base64 변환 완료');
+            } catch (bytesError) {
+              console.error(`[PDF 생성] getBlob 실패:`, bytesError);
+              const errorMsg = bytesError instanceof Error ? bytesError.message : String(bytesError);
+              console.warn(`[PDF 생성] getBlob 실패, getDownloadURL+Image fallback 시도: ${errorMsg}`);
+              appendFailureReason(`getBlob 실패: ${errorMsg}`);
+              try {
+                const storageRef = ref(storage, inspectionCert.storagePath);
+                const fallbackUrl = await getDownloadURL(storageRef);
+                const loadedImg = new Image();
+                loadedImg.crossOrigin = 'anonymous';
+                await new Promise<void>((resolve, reject) => {
+                  const timeout = setTimeout(() => reject(new Error('fallback 이미지 로드 타임아웃 (20초)')), 20000);
+                  loadedImg.onload = () => {
+                    clearTimeout(timeout);
+                    resolve();
+                  };
+                  loadedImg.onerror = () => {
+                    clearTimeout(timeout);
+                    reject(new Error('fallback 이미지 로드 실패'));
+                  };
+                  loadedImg.src = fallbackUrl;
+                });
+
+                const canvas = document.createElement('canvas');
+                canvas.width = loadedImg.width;
+                canvas.height = loadedImg.height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                  throw new Error('Canvas context를 가져올 수 없습니다.');
+                }
                 ctx.drawImage(loadedImg, 0, 0);
                 base64ImageData = canvas.toDataURL('image/png').split(',')[1];
                 img = loadedImg;
                 downloadSuccess = true;
-                URL.revokeObjectURL(blobUrl);
-                console.log('[PDF 생성] storagePath를 통한 다운로드 및 base64 변환 완료');
+                console.log('[PDF 생성] getDownloadURL+Image fallback 성공');
+              } catch (fallbackError) {
+                downloadSuccess = false;
+                const fallbackMsg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+                console.warn(`[PDF 생성] fallback 실패, 파일 건너뜀: ${fallbackMsg}`);
+                appendFailureReason(`fallback 실패: ${fallbackMsg}`);
+                failedImageCount++;
+                productValidationResult.files.push({
+                  fileName: inspectionCert.name || '이름 없음',
+                  included: false,
+                  error: `storagePath 다운로드 실패: ${errorMsg}, fallback 실패: ${fallbackMsg}`,
+                });
+                continue;
               }
-            } catch (bytesError) {
-              console.error(`[PDF 생성] getBytes 실패:`, bytesError);
-              downloadSuccess = false;
-              const errorMsg = bytesError instanceof Error ? bytesError.message : String(bytesError);
-              console.warn(`[PDF 생성] storagePath 다운로드 실패, 파일 건너뜀: ${errorMsg}`);
-              // 에러를 throw하지 않고 continue로 다음 파일로 넘어감
-              failedImageCount++;
-              productValidationResult.files.push({
-                fileName: inspectionCert.name || '이름 없음',
-                included: false,
-                error: `storagePath 다운로드 실패: ${errorMsg}`,
-              });
-              continue;
             }
           }
           
           if (!downloadSuccess) {
             // 에러 발생 시 해당 이미지를 건너뛰고 계속 진행
             failedImageCount++;
-            const errorMsg = `이미지 다운로드에 실패했습니다. storagePath와 URL 모두 사용할 수 없습니다.`;
+            const errorMsg = `이미지 다운로드에 실패했습니다. storagePath와 URL 모두 사용할 수 없습니다. 상세: ${downloadFailureReason || '원인 미상'}`;
             console.warn(`⚠️ 제품 ${index + 1}의 Inspection Certificate 파일 ${certIndex + 1} (${inspectionCert.name || '이름 없음'}) ${errorMsg} (실패한 이미지: ${failedImageCount}개)`);
             
             // 검증 결과: 다운로드 실패
@@ -1522,9 +1725,16 @@ const collectMaterialAndHeatNo = (
 
 function MaterialTestCertificateContent() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const certificateId = searchParams.get('id'); // 기존 성적서 요청 ID
   const copyFromId = searchParams.get('copyFrom'); // 복사할 성적서 ID
+  const isV2Flow =
+    searchParams.get('flow') === 'v2' ||
+    pathname === '/admin/certificate/create2' ||
+    pathname?.startsWith('/admin/certificate/create2/') ||
+    pathname === '/admin/certificate/edit2' ||
+    pathname?.startsWith('/admin/certificate/edit2/');
   const [isEditMode, setIsEditMode] = useState(false);
   const [isCopyMode, setIsCopyMode] = useState(false);
   const [loadingCertificate, setLoadingCertificate] = useState(false);
@@ -2289,7 +2499,7 @@ function MaterialTestCertificateContent() {
       if (!targetId) {
         setError('성적서 요청 ID가 필요합니다. 성적서 목록에서 성적서 작성 버튼을 클릭해주세요.');
         setTimeout(() => {
-          router.push('/admin/certificate');
+          router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
         }, 3000);
         return;
       }
@@ -3319,7 +3529,12 @@ function MaterialTestCertificateContent() {
         const inspectionCertificatesForFirestore: CertificateAttachment[] = [];
         const inspectionCertificatesForPDF: CertificateAttachment[] = [];
         
-        // 기존 파일은 Firestore에 저장하지 않음 (과거 이력 제거, 새 파일만 저장)
+        // v1: 기존 파일 제외(기존 동작 유지)
+        // v2: 기존 파일 보존(첨부 누락 방지)
+        if (isV2Flow && product.existingInspectionCertis && product.existingInspectionCertis.length > 0) {
+          inspectionCertificatesForFirestore.push(...product.existingInspectionCertis.map((cert) => ({ ...cert })));
+          inspectionCertificatesForPDF.push(...product.existingInspectionCertis.map((cert) => ({ ...cert })));
+        }
         
         // 새 파일은 병렬로 업로드 및 base64 변환 (속도 향상)
         if (product.inspectionCertiFiles && product.inspectionCertiFiles.length > 0) {
@@ -3445,6 +3660,122 @@ function MaterialTestCertificateContent() {
         updatedAt: new Date(),
         createdBy: createdBy,
       };
+
+      if (isV2Flow) {
+        let targetCertificateId: string;
+        if (certificateId) {
+          targetCertificateId = certificateId;
+        } else if (isCopyMode && copyFromId) {
+          const sourceDoc = await getDoc(doc(db, 'certificates', copyFromId));
+          if (!sourceDoc.exists()) {
+            setError('원본 성적서를 찾을 수 없습니다.');
+            setSaving(false);
+            return;
+          }
+          const sourceData = sourceDoc.data();
+          const newCertificateData: Record<string, unknown> = {
+            userId: sourceData.userId || 'admin',
+            userName: sourceData.userName || '관리자',
+            userEmail: sourceData.userEmail || 'admin@sglok.com',
+            customerName: formData.customer.trim(),
+            orderNumber: formData.poNo.trim() || null,
+            products: productsData,
+            certificateType: sourceData.certificateType || 'quality',
+            requestDate: Timestamp.now(),
+            requestedCompletionDate: sourceData.requestedCompletionDate || Timestamp.now(),
+            status: 'completed',
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+            createdBy: 'admin',
+          };
+          if (sourceData.memo) newCertificateData.memo = sourceData.memo;
+          if (sourceData.attachments) newCertificateData.attachments = sourceData.attachments;
+          const newDocRef = await addDoc(collection(db, 'certificates'), newCertificateData);
+          targetCertificateId = newDocRef.id;
+        } else {
+          setError('성적서 ID가 없습니다.');
+          setSaving(false);
+          return;
+        }
+
+        // v2 저장 안전장치: 모든 첨부 storagePath 접근 가능 여부 선검증
+        const attachmentStoragePaths = productsData.flatMap((p) => {
+          const withCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          const certs =
+            withCerts.inspectionCertificates && Array.isArray(withCerts.inspectionCertificates)
+              ? withCerts.inspectionCertificates
+              : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
+          return certs
+            .map((cert) => (typeof cert.storagePath === 'string' ? cert.storagePath.trim() : ''))
+            .filter((v) => v.length > 0);
+        });
+        const uniqueStoragePaths = Array.from(new Set(attachmentStoragePaths));
+        for (const storagePath of uniqueStoragePaths) {
+          try {
+            await getDownloadURL(ref(storage, storagePath));
+          } catch (accessError) {
+            const code =
+              accessError && typeof accessError === 'object' && 'code' in accessError
+                ? String((accessError as { code?: string }).code || '')
+                : '';
+            const message = accessError instanceof Error ? accessError.message : String(accessError);
+            throw new Error(`첨부 접근 검증 실패: ${storagePath} (${code || 'no-code'} / ${message})`);
+          }
+        }
+
+        const materialTestCertificateForFirestore = buildV2MaterialTestCertificateForFirestore(
+          materialTestCertificate,
+          productsData
+        );
+
+        const flattenedAttachments = productsData.flatMap((p) => {
+          const pWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          const certs = pWithCerts.inspectionCertificates && Array.isArray(pWithCerts.inspectionCertificates)
+            ? pWithCerts.inspectionCertificates
+            : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
+          return certs;
+        });
+        const dedupedRootAttachments = flattenedAttachments.filter((cert, index, arr) => {
+          const storagePath = cert.storagePath?.trim();
+          const key = storagePath && storagePath.length > 0
+            ? `sp:${storagePath}`
+            : `nu:${cert.name || ''}::${cert.url || ''}`;
+          return arr.findIndex((x) => {
+            const xStoragePath = x.storagePath?.trim();
+            const xKey = xStoragePath && xStoragePath.length > 0
+              ? `sp:${xStoragePath}`
+              : `nu:${x.name || ''}::${x.url || ''}`;
+            return xKey === key;
+          }) === index;
+        });
+        const rootAttachmentsForFirestore = dedupedRootAttachments.map((cert) => ({
+          name: cert.name || '',
+          url: cert.url || '',
+          storagePath: cert.storagePath || null,
+          size: typeof cert.size === 'number' ? cert.size : 0,
+          type: cert.type || '',
+          uploadedAt:
+            cert.uploadedAt instanceof Date && !Number.isNaN(cert.uploadedAt.getTime())
+              ? Timestamp.fromDate(cert.uploadedAt)
+              : Timestamp.now(),
+          uploadedBy: cert.uploadedBy || 'admin',
+        }));
+
+        await updateDoc(doc(db, 'certificates', targetCertificateId), {
+          materialTestCertificate: materialTestCertificateForFirestore,
+          attachments: rootAttachmentsForFirestore,
+          certificateFile: null,
+          status: 'completed',
+          completedAt: Timestamp.now(),
+          completedBy: 'admin',
+          updatedAt: Timestamp.now(),
+          updatedBy: 'admin',
+        });
+
+        setSuccess('✅ 성적서 내용이 저장되었습니다. PDF는 다운로드 시 생성됩니다.');
+        router.push('/admin/certificate/list2');
+        return;
+      }
 
       // PDF 생성용 데이터 준비 (새 파일만 포함, 기존 파일 제외)
       const productsDataForPDF: CertificateProduct[] = [];
@@ -3845,7 +4176,7 @@ function MaterialTestCertificateContent() {
       
       setSuccess(successMessage);
       // 작성 완료 시 수정 화면 상태로 전환하지 않고 바로 목록으로 이동
-      router.push('/admin/certificate');
+      router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
     } catch (error) {
       console.error('저장 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
@@ -4387,8 +4718,18 @@ function MaterialTestCertificateContent() {
   return (
     <div className="p-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{isEditMode ? '성적서 수정' : '성적서 작성'}</h1>
-        <p className="text-gray-600 mt-2">{isEditMode ? '성적서 내용을 수정하고 PDF로 재생성할 수 있습니다' : '성적서 내용을 입력하고 PDF로 생성할 수 있습니다'}</p>
+        <h1 className="text-2xl font-bold text-gray-900">
+          {isEditMode ? (isV2Flow ? '성적서 수정2' : '성적서 수정') : (isV2Flow ? '성적서 작성2' : '성적서 작성')}
+        </h1>
+        <p className="text-gray-600 mt-2">
+          {isV2Flow
+            ? (isEditMode
+              ? '신규(v2) 수정 흐름입니다. 저장 후 목록2에서 다운로드 시 PDF가 생성됩니다.'
+              : '신규(v2) 작성 흐름입니다. 저장 후 목록2에서 다운로드 시 PDF가 생성됩니다.')
+            : (isEditMode
+              ? '성적서 내용을 수정하고 PDF로 재생성할 수 있습니다'
+              : '성적서 내용을 입력하고 PDF로 생성할 수 있습니다')}
+        </p>
       </div>
 
       {error && (
@@ -4774,20 +5115,22 @@ function MaterialTestCertificateContent() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push('/admin/certificate')}
+                onClick={() => router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate')}
                 disabled={saving || generatingPDF}
               >
                 취소
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handlePreviewPDF}
-                disabled={saving || generatingPDF}
-                loading={generatingPDF}
-              >
-                PDF 미리보기
-              </Button>
+              {!isV2Flow && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePreviewPDF}
+                  disabled={saving || generatingPDF}
+                  loading={generatingPDF}
+                >
+                  PDF 미리보기
+                </Button>
+              )}
               <Button
                 type="button"
                 variant="outline"

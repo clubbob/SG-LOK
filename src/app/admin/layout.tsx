@@ -108,6 +108,7 @@ const adminMenuItems: MenuItem[] = [
     subItems: [
       { id: 'certificate-request', label: '성적서요청 등록', path: '/admin/certificate/request' },
       { id: 'certificate-list', label: '성적서 목록', path: '/admin/certificate' },
+      { id: 'certificate-manage-2', label: '성적서목록2', path: '/admin/certificate/list2' },
       { id: 'inspection-certi', label: '소재 사이즈 관리', path: '/admin/certificate/inspection' },
     ],
   },
@@ -485,9 +486,15 @@ export default function AdminLayout({
                             if (subItem.path && pathname) {
                               const normalizedSubPath = normalizePath(subItem.path);
                               const normalizedPathname = normalizePath(pathname);
+                              const isCertificateV2WritePath =
+                                normalizedPathname.startsWith('/admin/certificate/create2') ||
+                                normalizedPathname.startsWith('/admin/certificate/edit2');
                               
                               // 정확히 일치하는 경우
                               if (normalizedPathname === normalizedSubPath) {
+                                isSubActive = true;
+                              } else if (subItem.path === '/admin/certificate/list2' && isCertificateV2WritePath) {
+                                // 작성2/수정2에서는 목록2 메뉴를 활성화해 컨텍스트를 유지
                                 isSubActive = true;
                               } else if (subItem.path === '/admin/production' || subItem.path === '/admin/certificate') {
                                 // /admin/production 또는 /admin/certificate의 경우, 정확히 일치하거나 하위 경로로 시작하되
@@ -498,6 +505,10 @@ export default function AdminLayout({
                                 const isOtherSubPath = otherSubPaths.some(otherPath => 
                                   normalizedPathname === otherPath || normalizedPathname.startsWith(`${otherPath}/`)
                                 );
+                                // v2 작성/수정 화면에서는 기존 '성적서 목록'을 활성화하지 않음
+                                if (subItem.path === '/admin/certificate' && isCertificateV2WritePath) {
+                                  isSubActive = false;
+                                } else
                                 if (normalizedPathname.startsWith(`${normalizedSubPath}/`) && !isOtherSubPath) {
                                   isSubActive = true;
                                 }

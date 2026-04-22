@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, getBlob, deleteObject, listAll, getMetadata } from 'firebase/storage';
 import { db, storage, auth } from '@/lib/firebase';
 import { getProductMappingByCode, getAllProductMappings, addProductMapping, updateProductMapping, deleteProductMapping } from '@/lib/productMappings';
 import { CertificateAttachment, MaterialTestCertificate, CertificateProduct, ProductMapping } from '@/types';
+import { buildV2MaterialTestCertificateForFirestore } from '@/lib/certificate/v2SaveValidation';
 import { signInAnonymously } from 'firebase/auth';
 
 const ADMIN_SESSION_KEY = 'admin_session';
@@ -1740,6 +1741,8 @@ const collectMaterialAndHeatNo = (
 function MaterialTestCertificateEditContent() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
+  const isV2Flow = searchParams.get('flow') === 'v2';
   const certificateId = params?.id as string; // 동적 라우트에서 id 가져오기
   const [loadingCertificate, setLoadingCertificate] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1868,7 +1871,7 @@ function MaterialTestCertificateEditContent() {
       if (!certificateId) {
         setError('성적서 ID가 필요합니다. 성적서 목록에서 수정 버튼을 클릭해주세요.');
         setTimeout(() => {
-          router.push('/admin/certificate');
+          router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
         }, 3000);
         return;
       }
@@ -1883,7 +1886,7 @@ function MaterialTestCertificateEditContent() {
         if (!certDoc.exists()) {
           setError('성적서를 찾을 수 없습니다.');
           setTimeout(() => {
-            router.push('/admin/certificate');
+            router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
           }, 3000);
           setLoadingCertificate(false);
           return;
@@ -2133,7 +2136,7 @@ function MaterialTestCertificateEditContent() {
             // 수정 페이지에서는 materialTestCertificate가 필수입니다
             setError('성적서 데이터가 없습니다. 성적서를 먼저 작성해주세요.');
             setTimeout(() => {
-              router.push('/admin/certificate');
+              router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
             }, 3000);
             setLoadingCertificate(false);
             return;
@@ -2973,7 +2976,7 @@ function MaterialTestCertificateEditContent() {
         touchedAttachmentProductIndexes.size === 0
       ) {
         setSuccess('변경사항이 없어 기존 PDF/첨부를 그대로 유지했습니다. 목록으로 이동합니다.');
-        router.push('/admin/certificate');
+        router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
         return;
       }
 
@@ -3650,6 +3653,86 @@ function MaterialTestCertificateEditContent() {
         updatedAt: new Date(),
         createdBy: createdBy,
       };
+
+      if (isV2Flow) {
+        // v2 저장 안전장치: 모든 첨부 storagePath 접근 가능 여부 선검증
+        const attachmentStoragePaths = productsDataForFirestore.flatMap((p) => {
+          const withCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          const certs =
+            withCerts.inspectionCertificates && Array.isArray(withCerts.inspectionCertificates)
+              ? withCerts.inspectionCertificates
+              : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
+          return certs
+            .map((cert) => (typeof cert.storagePath === 'string' ? cert.storagePath.trim() : ''))
+            .filter((v) => v.length > 0);
+        });
+        const uniqueStoragePaths = Array.from(new Set(attachmentStoragePaths));
+        for (const storagePath of uniqueStoragePaths) {
+          try {
+            await getDownloadURL(ref(storage, storagePath));
+          } catch (accessError) {
+            const code =
+              accessError && typeof accessError === 'object' && 'code' in accessError
+                ? String((accessError as { code?: string }).code || '')
+                : '';
+            const message = accessError instanceof Error ? accessError.message : String(accessError);
+            throw new Error(`첨부 접근 검증 실패: ${storagePath} (${code || 'no-code'} / ${message})`);
+          }
+        }
+
+        const materialTestCertificateForFirestore = buildV2MaterialTestCertificateForFirestore(
+          materialTestCertificate,
+          productsDataForFirestore
+        );
+
+        const flattenedAttachments = productsDataForFirestore.flatMap((p) => {
+          const pWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          const certs = pWithCerts.inspectionCertificates && Array.isArray(pWithCerts.inspectionCertificates)
+            ? pWithCerts.inspectionCertificates
+            : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
+          return certs;
+        });
+        const dedupedRootAttachments = flattenedAttachments.filter((cert, index, arr) => {
+          const storagePath = cert.storagePath?.trim();
+          const key = storagePath && storagePath.length > 0
+            ? `sp:${storagePath}`
+            : `nu:${cert.name || ''}::${cert.url || ''}`;
+          return arr.findIndex((x) => {
+            const xStoragePath = x.storagePath?.trim();
+            const xKey = xStoragePath && xStoragePath.length > 0
+              ? `sp:${xStoragePath}`
+              : `nu:${x.name || ''}::${x.url || ''}`;
+            return xKey === key;
+          }) === index;
+        });
+        const rootAttachmentsForFirestore = dedupedRootAttachments.map((cert) => ({
+          name: cert.name || '',
+          url: cert.url || '',
+          storagePath: cert.storagePath || null,
+          size: typeof cert.size === 'number' ? cert.size : 0,
+          type: cert.type || '',
+          uploadedAt:
+            cert.uploadedAt instanceof Date && !Number.isNaN(cert.uploadedAt.getTime())
+              ? Timestamp.fromDate(cert.uploadedAt)
+              : Timestamp.now(),
+          uploadedBy: cert.uploadedBy || 'admin',
+        }));
+
+        await updateDoc(doc(db, 'certificates', certificateId), {
+          materialTestCertificate: materialTestCertificateForFirestore,
+          attachments: rootAttachmentsForFirestore,
+          certificateFile: null,
+          status: 'completed',
+          completedAt: Timestamp.now(),
+          completedBy: 'admin',
+          updatedAt: Timestamp.now(),
+          updatedBy: 'admin',
+        });
+
+        setSuccess('✅ 성적서 수정이 저장되었습니다. PDF는 다운로드 시 생성됩니다.');
+        router.push('/admin/certificate/list2');
+        return;
+      }
 
       // PDF 생성은 productsData 생성 후에 수행됨 (아래에서 처리)
       let pdfBlob: Blob | null = null;
@@ -4517,7 +4600,7 @@ function MaterialTestCertificateEditContent() {
       // 저장 후 상태 업데이트는 불필요 (저장 후 목록 페이지로 이동하므로)
       
       // 저장 완료 즉시 목록으로 이동 (체감 지연 제거)
-      router.push('/admin/certificate');
+      router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
       }
     } catch (error) {
       console.error('저장 오류:', error);
@@ -4909,7 +4992,7 @@ function MaterialTestCertificateEditContent() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push('/admin/certificate')}
+                onClick={() => router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate')}
                 disabled={saving}
               >
                 취소

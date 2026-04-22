@@ -1,14 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui';
-import { collection, query, getDocs, doc, updateDoc, Timestamp, onSnapshot, deleteDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { collection, query, getDocs, doc, updateDoc, Timestamp, onSnapshot, deleteDoc, getDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
-import { Certificate, CertificateStatus, CertificateType, CertificateAttachment } from '@/types';
+import { Certificate, CertificateStatus, CertificateType, CertificateAttachment, CertificateProduct } from '@/types';
 import { formatDateShort } from '@/lib/utils';
+import { generateV2PdfBlob as buildV2PdfBlob } from '@/lib/certificate/v2PdfPipeline';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -63,7 +64,12 @@ const checkAdminAuth = (): boolean => {
 
 export default function AdminCertificatePage() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const isV2Flow =
+    searchParams.get('flow') === 'v2' ||
+    pathname === '/admin/certificate/list2' ||
+    pathname?.startsWith('/admin/certificate/list2/');
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loadingCertificates, setLoadingCertificates] = useState(true);
   const [error, setError] = useState('');
@@ -80,6 +86,7 @@ export default function AdminCertificatePage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isDeletingMultiple, setIsDeletingMultiple] = useState(false);
+  const [downloadingCertificateId, setDownloadingCertificateId] = useState<string | null>(null);
   const [approvingCertificate, setApprovingCertificate] = useState<Certificate | null>(null);
   const [approvalForm, setApprovalForm] = useState({
     requestedCompletionDate: '',
@@ -291,10 +298,650 @@ export default function AdminCertificatePage() {
 
   const totalPages = Math.ceil(filteredCertificates.length / itemsPerPage);
 
+  const generateV2PdfBlob = async (certificate: Certificate): Promise<Blob> => {
+    return await buildV2PdfBlob(certificate, storage);
+
+    const mtc = certificate.materialTestCertificate;
+    if (!mtc) {
+      throw new Error('성적서 데이터가 없어 PDF를 생성할 수 없습니다.');
+    }
+
+    const { generatePDFBlobWithProducts } = await import('@/app/admin/certificate/create/page');
+
+    const normalizeDateValue = (value: unknown): Date | null => {
+      if (!value) return null;
+      if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+      if (typeof value === 'object' && value !== null) {
+        const maybeTimestamp = value as { toDate?: () => Date; seconds?: number };
+        if (typeof maybeTimestamp.toDate === 'function') {
+          const converted = maybeTimestamp.toDate();
+          return Number.isNaN(converted.getTime()) ? null : converted;
+        }
+        if (typeof maybeTimestamp.seconds === 'number') {
+          const converted = new Date(maybeTimestamp.seconds * 1000);
+          return Number.isNaN(converted.getTime()) ? null : converted;
+        }
+      }
+      if (typeof value === 'string' || typeof value === 'number') {
+        const converted = new Date(value);
+        return Number.isNaN(converted.getTime()) ? null : converted;
+      }
+      return null;
+    };
+
+    const normalizedDate = normalizeDateValue(mtc.dateOfIssue);
+    const dateOfIssue = normalizedDate
+      ? `${normalizedDate.getFullYear()}-${String(normalizedDate.getMonth() + 1).padStart(2, '0')}-${String(normalizedDate.getDate()).padStart(2, '0')}`
+      : '';
+
+    const toText = (value: unknown): string => (typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '');
+    const normalizeNameKey = (value: string): string =>
+      (value || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+    const isImageAttachment = (name: string, type: string): boolean => {
+      const lowerName = (name || '').toLowerCase();
+      const lowerType = (type || '').toLowerCase();
+      return (
+        lowerType.startsWith('image/') ||
+        lowerName.endsWith('.png') ||
+        lowerName.endsWith('.jpg') ||
+        lowerName.endsWith('.jpeg') ||
+        lowerName.endsWith('.webp') ||
+        lowerName.endsWith('.gif')
+      );
+    };
+    const fetchBlobWithTimeout = async (url: string, ms: number): Promise<Blob> => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), ms);
+      try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.blob();
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    };
+
+    const rootAttachmentMap = new Map<string, CertificateAttachment>();
+    if (Array.isArray(certificate.attachments)) {
+      for (const att of certificate.attachments) {
+        const key = normalizeNameKey(toText(att.name));
+        if (!key) continue;
+        rootAttachmentMap.set(key, {
+          name: toText(att.name),
+          url: toText(att.url),
+          storagePath: toText(att.storagePath) || undefined,
+          size: typeof att.size === 'number' ? att.size : 0,
+          type: toText(att.type),
+          uploadedAt: att.uploadedAt instanceof Date ? att.uploadedAt : new Date(),
+          uploadedBy: toText(att.uploadedBy) || 'admin',
+        });
+      }
+    }
+
+    const storageAttachmentMap = new Map<string, { fullPath: string; url: string; type: string }>();
+    if (certificate.id) {
+      try {
+        const listed = await listAll(ref(storage, `certificates/${certificate.id}/inspection_certi`));
+        for (const item of listed.items) {
+          const lower = item.name.toLowerCase();
+          const isImage =
+            lower.endsWith('.png') ||
+            lower.endsWith('.jpg') ||
+            lower.endsWith('.jpeg') ||
+            lower.endsWith('.webp') ||
+            lower.endsWith('.gif');
+          if (!isImage) continue;
+          const url = await getDownloadURL(item);
+          const key = normalizeNameKey(item.name);
+          storageAttachmentMap.set(key, {
+            fullPath: item.fullPath,
+            url,
+            type: lower.endsWith('.png') ? 'image/png' : lower.endsWith('.webp') ? 'image/webp' : 'image/jpeg',
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const productsRaw = Array.isArray(mtc.products) ? mtc.products : [];
+    const normalizedProducts: CertificateProduct[] = [];
+    for (const product of productsRaw) {
+      const p = product as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+      const certs = Array.isArray(p.inspectionCertificates)
+        ? p.inspectionCertificates
+        : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
+      const normalizedCerts: CertificateAttachment[] = [];
+      for (const cert of certs) {
+        const certName = toText(cert.name);
+        const certNameKey = normalizeNameKey(certName);
+        const rootMatch = certNameKey ? rootAttachmentMap.get(certNameKey) : undefined;
+        const storageMatch = certNameKey ? storageAttachmentMap.get(certNameKey) : undefined;
+
+        let normalizedUrl = toText(cert.url) || rootMatch?.url || storageMatch?.url || '';
+        let normalizedStoragePath = toText(cert.storagePath) || rootMatch?.storagePath || storageMatch?.fullPath || undefined;
+        if ((!normalizedUrl || normalizedUrl.trim().length === 0) && normalizedStoragePath) {
+          try {
+            normalizedUrl = await getDownloadURL(ref(storage, normalizedStoragePath));
+          } catch {
+            // URL 복구 실패 시 storagePath fallback 유지
+          }
+        }
+        normalizedCerts.push({
+          ...cert,
+          name: certName,
+          url: normalizedUrl,
+          storagePath: normalizedStoragePath,
+          type: toText(cert.type) || rootMatch?.type || storageMatch?.type || '',
+        });
+      }
+      const nextProduct: CertificateProduct & { inspectionCertificates?: CertificateAttachment[] } = {
+        productName: toText(p.productName),
+        productCode: toText(p.productCode) || undefined,
+        quantity: typeof p.quantity === 'number' ? p.quantity : (typeof p.quantity === 'string' ? Number(p.quantity) : undefined),
+        heatNo: toText(p.heatNo) || undefined,
+        material: toText(p.material) || undefined,
+        remark: toText(p.remark) || undefined,
+        inspectionCertificate: normalizedCerts[0],
+      };
+      nextProduct.inspectionCertificates = normalizedCerts;
+      normalizedProducts.push(nextProduct);
+    }
+
+    if (normalizedProducts.length > 0) {
+      const first = normalizedProducts[0] as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+      const hasAny = normalizedProducts.some((p) => {
+        const x = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+        return Array.isArray(x.inspectionCertificates) && x.inspectionCertificates.length > 0;
+      });
+      if (!hasAny && Array.isArray(certificate.attachments)) {
+        const fallbackCerts = certificate.attachments.map((att) => ({
+          name: toText(att.name),
+          url: toText(att.url),
+          storagePath: toText(att.storagePath) || undefined,
+          size: typeof att.size === 'number' ? att.size : 0,
+          type: toText(att.type),
+          uploadedAt: att.uploadedAt instanceof Date ? att.uploadedAt : new Date(),
+          uploadedBy: toText(att.uploadedBy) || 'admin',
+        }));
+        first.inspectionCertificates = fallbackCerts;
+        first.inspectionCertificate = fallbackCerts[0];
+      }
+    }
+
+    if (normalizedProducts.length > 0) {
+      const first = normalizedProducts[0] as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+      const hasAny = normalizedProducts.some((p) => {
+        const x = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+        return Array.isArray(x.inspectionCertificates) && x.inspectionCertificates.length > 0;
+      });
+      if (!hasAny && certificate.id) {
+        try {
+          const listed = await listAll(ref(storage, `certificates/${certificate.id}/inspection_certi`));
+          const storageFallback: CertificateAttachment[] = [];
+          for (const item of listed.items) {
+            const lower = item.name.toLowerCase();
+            const isImage =
+              lower.endsWith('.png') ||
+              lower.endsWith('.jpg') ||
+              lower.endsWith('.jpeg') ||
+              lower.endsWith('.webp') ||
+              lower.endsWith('.gif');
+            if (!isImage) continue;
+            const url = await getDownloadURL(item);
+            storageFallback.push({
+              name: item.name,
+              url,
+              storagePath: item.fullPath,
+              size: 0,
+              type: lower.endsWith('.png') ? 'image/png' : 'image/jpeg',
+              uploadedAt: new Date(),
+              uploadedBy: 'admin',
+            });
+          }
+          if (storageFallback.length > 0) {
+            first.inspectionCertificates = storageFallback;
+            first.inspectionCertificate = storageFallback[0];
+          }
+        } catch {
+          // fallback 실패 시 기존 데이터 사용
+        }
+      }
+    }
+
+    // v2 안전장치: Storage에서 확인된 첨부 이미지는 반드시 PDF 입력 첨부 목록에 병합
+    if (normalizedProducts.length > 0 && storageAttachmentMap.size > 0) {
+      const first = normalizedProducts[0] as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+      const existing = Array.isArray(first.inspectionCertificates) ? [...first.inspectionCertificates] : [];
+      const existingKeySet = new Set(
+        existing.map((cert) => {
+          const sp = toText(cert.storagePath);
+          if (sp) return `sp:${sp}`;
+          return `nu:${toText(cert.name)}::${toText(cert.url)}`;
+        })
+      );
+
+      for (const [nameKey, storageMeta] of storageAttachmentMap.entries()) {
+        const key = storageMeta.fullPath ? `sp:${storageMeta.fullPath}` : `nu:${nameKey}::${storageMeta.url}`;
+        if (existingKeySet.has(key)) continue;
+        existing.push({
+          name: nameKey || 'inspection_certi',
+          url: storageMeta.url,
+          storagePath: storageMeta.fullPath,
+          size: 0,
+          type: storageMeta.type || 'image/png',
+          uploadedAt: new Date(),
+          uploadedBy: 'admin',
+        });
+        existingKeySet.add(key);
+      }
+
+      first.inspectionCertificates = existing;
+      first.inspectionCertificate = existing[0];
+    }
+
+    const basePdfBlob = await (async () => {
+      const jspdfModule = (await import('jspdf/dist/jspdf.umd.min.js')) as unknown as Partial<{
+        jsPDF: new (opts: { orientation: 'landscape'; unit: 'mm'; format: 'a4' }) => {
+          setFont: (font: string, style?: string) => void;
+          setFontSize: (size: number) => void;
+          text: (text: string, x: number, y: number, opts?: { align?: 'left' | 'center' | 'right' }) => void;
+          line: (x1: number, y1: number, x2: number, y2: number) => void;
+          addImage: (imgData: string, format: string, x: number, y: number, width: number, height: number) => void;
+          output: (type: 'blob') => Blob;
+        };
+        default: new (opts: { orientation: 'landscape'; unit: 'mm'; format: 'a4' }) => {
+          setFont: (font: string, style?: string) => void;
+          setFontSize: (size: number) => void;
+          text: (text: string, x: number, y: number, opts?: { align?: 'left' | 'center' | 'right' }) => void;
+          line: (x1: number, y1: number, x2: number, y2: number) => void;
+          addImage: (imgData: string, format: string, x: number, y: number, width: number, height: number) => void;
+          output: (type: 'blob') => Blob;
+        };
+      }>;
+      const jsPDF = jspdfModule.jsPDF ?? jspdfModule.default;
+      if (!jsPDF) throw new Error('jsPDF 로드 실패');
+
+      const docPdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+      const drawText = (text: string, x: number, y: number, size = 10, bold = false, align: 'left' | 'center' | 'right' = 'left') => {
+        const hasKorean = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(text || '');
+        if (!hasKorean || typeof document === 'undefined') {
+          docPdf.setFont('helvetica', bold ? 'bold' : 'normal');
+          docPdf.setFontSize(size);
+          docPdf.text(text, x, y, { align });
+          return;
+        }
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          docPdf.setFont('helvetica', bold ? 'bold' : 'normal');
+          docPdf.setFontSize(size);
+          docPdf.text(text, x, y, { align });
+          return;
+        }
+        const fontPx = Math.max(16, size * 2);
+        ctx.font = `${fontPx}px Arial, "Malgun Gothic", sans-serif`;
+        const w = Math.max(32, Math.ceil(ctx.measureText(text).width + 12));
+        const h = Math.max(24, Math.ceil(fontPx + 8));
+        canvas.width = w;
+        canvas.height = h;
+        ctx.clearRect(0, 0, w, h);
+        ctx.font = `${fontPx}px Arial, "Malgun Gothic", sans-serif`;
+        ctx.fillStyle = '#111';
+        ctx.textBaseline = 'top';
+        ctx.fillText(text, 6, 4);
+        const imgData = canvas.toDataURL('image/png');
+        const mmH = size * 0.42;
+        const mmW = (w / h) * mmH;
+        const drawX = align === 'center' ? x - mmW / 2 : align === 'right' ? x - mmW : x;
+        docPdf.addImage(imgData, 'PNG', drawX, y - mmH + 1, mmW, mmH);
+      };
+
+      try {
+        const logo = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const image = new Image();
+          image.onload = () => resolve(image);
+          image.onerror = () => reject(new Error('로고 로드 실패'));
+          image.src = `${window.location.origin}/samwon-green-logo.png`;
+        });
+        docPdf.addImage(logo, 'PNG', 14, 14, 36, 12);
+      } catch {
+        // 로고 실패 허용
+      }
+
+      drawText('MATERIAL TEST CERTIFICATE', 148.5, 23, 18, true, 'center');
+      drawText('Samwongreen Corporation', 148.5, 31, 8, false, 'center');
+      drawText('101, Mayu-ro 20beon-gil, Siheung-si, Gyeonggi-do, Korea (Zip 15115)', 148.5, 35, 7, false, 'center');
+      drawText('Tel. +82 31 431 3452 / Fax. +82 31 431 3460 / E-Mail. sglok@sglok.com', 148.5, 39, 7, false, 'center');
+      docPdf.line(14, 44, 283, 44);
+
+      const certificateNo = toText(mtc.certificateNo) || '-';
+      const customer = toText(mtc.customer) || '-';
+      const poNo = toText(mtc.poNo) || '-';
+      const issueText = (() => {
+        if (!normalizedDate) return '-';
+        return normalizedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      })();
+      drawText('CERTIFICATE NO.:', 14, 52, 10, true);
+      drawText(certificateNo, 54, 52, 10, false);
+      drawText('DATE OF ISSUE:', 156, 52, 10, true);
+      drawText(issueText, 196, 52, 10, false);
+      drawText('CUSTOMER:', 14, 60, 10, true);
+      drawText(customer, 54, 60, 10, false);
+      drawText('PO NO.:', 156, 60, 10, true);
+      drawText(poNo, 196, 60, 10, false);
+
+      drawText('PRODUCT INFORMATION:', 14, 74, 11, true);
+      const columns = [
+        { key: 'no', label: 'No.', x: 14 },
+        { key: 'description', label: 'DESCRIPTION', x: 24 },
+        { key: 'code', label: 'CODE', x: 78 },
+        { key: 'qty', label: "Q'TY", x: 114 },
+        { key: 'material', label: 'MATERIAL', x: 130 },
+        { key: 'result', label: 'RESULT', x: 156 },
+        { key: 'heatNo', label: 'HEAT NO.', x: 182 },
+        { key: 'remark', label: 'REMARK', x: 224 },
+      ] as const;
+      columns.forEach((c) => drawText(c.label, c.x, 82, 9, true));
+      docPdf.line(14, 85, 283, 85);
+
+      const rows = normalizedProducts.length > 0 ? normalizedProducts : [];
+      rows.slice(0, 12).forEach((p, idx) => {
+        const y = 93 + idx * 8;
+        drawText(String(idx + 1), 14, y, 9);
+        drawText(toText(p.productName) || '-', 24, y, 9);
+        drawText(toText(p.productCode) || '-', 78, y, 9);
+        drawText(p.quantity != null ? String(p.quantity) : '-', 114, y, 9);
+        drawText(toText(p.material) || '-', 130, y, 9);
+        drawText('GOOD', 156, y, 9);
+        drawText(toText(p.heatNo) || '-', 182, y, 9);
+        drawText(toText(p.remark) || '-', 224, y, 9);
+      });
+
+      drawText('We hereby certify that all items are strictly complied with the purchase order, purchase specification, contractual requirement and applicable code & standard, and are supplied', 14, 124, 7);
+      drawText('with all qualified verification documents hear with.', 14, 128, 7);
+      drawText('INSPECTION POINTS', 14, 140, 9, true);
+      drawText('- Raw Material   : Dimension, Chemical Composition', 14, 148, 7);
+      drawText('- Manufactured Products : Dimension, Go/No Gauge', 14, 154, 7);
+      drawText('- Marking : Code, Others', 14, 160, 7);
+      drawText('- Packaging : Labeling, Q\'ty', 14, 166, 7);
+      drawText('- Valve Leak Test', 136, 148, 7);
+      drawText('- Air Test (1.0kg/cm²) : 100% full test', 136, 154, 7);
+      drawText('- Hydraulic Test (320kg/cm²) : Upon request', 136, 160, 7);
+      drawText('- N2 Test (70kg/cm²) : Upon request', 136, 166, 7);
+      drawText('Approved by', 270, 148, 8, false, 'right');
+      drawText('Quality Representative', 270, 154, 8, false, 'right');
+      drawText('Date:', 264, 174, 7, false, 'right');
+      drawText(issueText, 285, 174, 7, false, 'right');
+
+      return docPdf.output('blob');
+    })();
+
+    let finalBlob = basePdfBlob;
+    try {
+      const { PDFDocument } = await import('pdf-lib');
+      const baseDoc = await PDFDocument.load(await finalBlob.arrayBuffer());
+
+      const attachmentCandidates: CertificateAttachment[] = [];
+      for (const product of normalizedProducts) {
+        const p = product as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+        const certs = Array.isArray(p.inspectionCertificates)
+          ? p.inspectionCertificates
+          : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
+        for (const cert of certs) {
+          if (!cert) continue;
+          if (!isImageAttachment(toText(cert.name), toText(cert.type))) continue;
+          attachmentCandidates.push(cert);
+        }
+      }
+      for (const storageMeta of storageAttachmentMap.values()) {
+        attachmentCandidates.push({
+          name: 'inspection_certi',
+          url: storageMeta.url,
+          storagePath: storageMeta.fullPath,
+          size: 0,
+          type: storageMeta.type,
+          uploadedAt: new Date(),
+          uploadedBy: 'admin',
+        });
+      }
+
+      const deduped = attachmentCandidates.filter((cert, idx, arr) => {
+        const key = cert.storagePath && cert.storagePath.trim().length > 0
+          ? `sp:${cert.storagePath.trim()}`
+          : `nu:${toText(cert.name)}::${toText(cert.url)}`;
+        return arr.findIndex((x) => {
+          const xKey = x.storagePath && x.storagePath.trim().length > 0
+            ? `sp:${x.storagePath.trim()}`
+            : `nu:${toText(x.name)}::${toText(x.url)}`;
+          return xKey === key;
+        }) === idx;
+      });
+
+      const blobToPngBytes = async (blob: Blob): Promise<Uint8Array> => {
+        const objectUrl = URL.createObjectURL(blob);
+        try {
+          const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error('이미지 로드 실패'));
+            img.src = objectUrl;
+          });
+          const canvas = document.createElement('canvas');
+          canvas.width = image.width;
+          canvas.height = image.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Canvas context를 가져올 수 없습니다.');
+          ctx.drawImage(image, 0, 0);
+          const pngBlob = await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob((value) => {
+              if (!value) reject(new Error('PNG 변환 실패'));
+              else resolve(value);
+            }, 'image/png');
+          });
+          return new Uint8Array(await pngBlob.arrayBuffer());
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      };
+
+      for (const cert of deduped) {
+        const url = toText(cert.url).trim();
+        if (!url) continue;
+        try {
+          const blob = await fetchBlobWithTimeout(url, 30000);
+          const pngBytes = await blobToPngBytes(blob);
+          const embeddedImage = await baseDoc.embedPng(pngBytes);
+          const page = baseDoc.addPage([841.89, 595.28]); // A4 landscape (pt)
+          const pageWidth = page.getWidth();
+          const pageHeight = page.getHeight();
+          const maxWidth = pageWidth - 60;
+          const maxHeight = pageHeight - 60;
+          const ratio = Math.min(maxWidth / embeddedImage.width, maxHeight / embeddedImage.height);
+          const drawWidth = embeddedImage.width * ratio;
+          const drawHeight = embeddedImage.height * ratio;
+          const x = (pageWidth - drawWidth) / 2;
+          const y = (pageHeight - drawHeight) / 2;
+          page.drawImage(embeddedImage, { x, y, width: drawWidth, height: drawHeight });
+        } catch (attachErr) {
+          console.warn('[v2 병합] 첨부 이미지 병합 실패:', cert.name, attachErr);
+        }
+      }
+
+      const mergedBytes = await baseDoc.save();
+      finalBlob = new Blob([mergedBytes], { type: 'application/pdf' });
+    } catch (mergeErr) {
+      console.warn('[v2 병합] 첨부 병합 단계 실패, 기본 PDF 사용:', mergeErr);
+    }
+
+    return finalBlob;
+  };
+
   const handleDownload = async (certificate: Certificate) => {
-    if (!certificate.certificateFile?.url) {
+    if (isV2Flow) {
+      const withTimeout = async <T,>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        const timeoutPromise = new Promise<T>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+        });
+        try {
+          return await Promise.race([promise, timeoutPromise]);
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
+        }
+      };
+
+      const previewWindow = window.open('', '_blank');
+      const popupBlocked = !previewWindow;
+      if (previewWindow) {
+        try {
+          previewWindow.opener = null;
+        } catch {
+          // no-op
+        }
+        previewWindow.document.write('<!doctype html><title>PDF 생성 중</title><p style="font-family:sans-serif;padding:16px;">PDF 생성 중입니다...</p>');
+        previewWindow.document.close();
+      }
+
+      setDownloadingCertificateId(certificate.id);
+      setError('');
+      setSuccess(
+        popupBlocked
+          ? 'PDF 생성 중입니다. 완료 후 파일 다운로드를 시도합니다. 새 탭이 안 열리면 팝업 허용 후 다시 시도해주세요.'
+          : 'PDF 생성 중입니다. 완료되면 새 탭에서 열립니다.'
+      );
+      try {
+        // v2는 목록 상태값(캐시/부분 데이터) 대신 Firestore 최신 문서를 기준으로 PDF 생성
+        const latestDocSnap = await getDoc(doc(db, 'certificates', certificate.id));
+        const latestCertificate: Certificate = latestDocSnap.exists()
+          ? ({
+              id: latestDocSnap.id,
+              ...(latestDocSnap.data() as Omit<Certificate, 'id'>),
+            } as Certificate)
+          : certificate;
+
+        const latestProducts = Array.isArray(latestCertificate.materialTestCertificate?.products)
+          ? latestCertificate.materialTestCertificate?.products
+          : [];
+        const latestRootAttachments = Array.isArray(latestCertificate.attachments)
+          ? latestCertificate.attachments
+          : [];
+        const latestAttachmentCandidates: CertificateAttachment[] = [];
+        for (const p of latestProducts) {
+          const withCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          const certs =
+            withCerts.inspectionCertificates && Array.isArray(withCerts.inspectionCertificates)
+              ? withCerts.inspectionCertificates
+              : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
+          latestAttachmentCandidates.push(...certs);
+        }
+        latestAttachmentCandidates.push(...latestRootAttachments);
+        const latestProductAttachmentCount = latestProducts.reduce((sum, p) => {
+          const withCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
+          const certs =
+            withCerts.inspectionCertificates && Array.isArray(withCerts.inspectionCertificates)
+              ? withCerts.inspectionCertificates
+              : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
+          return sum + certs.length;
+        }, 0);
+        console.log('[v2 다운로드] Firestore 최신 문서 기준 첨부 개수', {
+          certificateId: certificate.id,
+          productAttachmentCount: latestProductAttachmentCount,
+          rootAttachmentCount: latestRootAttachments.length,
+        });
+
+        // 진단: storagePath 기반 getDownloadURL 접근 가능 여부 확인
+        const uniqueStoragePaths = Array.from(
+          new Set(
+            latestAttachmentCandidates
+              .map((a) => (typeof a.storagePath === 'string' ? a.storagePath.trim() : ''))
+              .filter((v) => v.length > 0)
+          )
+        );
+        for (const storagePath of uniqueStoragePaths.slice(0, 5)) {
+          try {
+            const resolvedUrl = await getDownloadURL(ref(storage, storagePath));
+            console.log('[v2 진단] getDownloadURL 성공', {
+              certificateId: certificate.id,
+              storagePath,
+              urlHost: (() => {
+                try {
+                  return new URL(resolvedUrl).host;
+                } catch {
+                  return 'invalid-url';
+                }
+              })(),
+            });
+          } catch (diagErr) {
+            const code =
+              diagErr && typeof diagErr === 'object' && 'code' in diagErr
+                ? String((diagErr as { code?: string }).code || '')
+                : '';
+            const message = diagErr instanceof Error ? diagErr.message : String(diagErr);
+            console.warn('[v2 진단] getDownloadURL 실패', {
+              certificateId: certificate.id,
+              storagePath,
+              code,
+              message,
+            });
+          }
+        }
+
+        const pdfBlob = await withTimeout(
+          generateV2PdfBlob(latestCertificate),
+          60000,
+          'PDF 생성 타임아웃(60초): 첨부 파일 읽기 또는 병합이 지연되고 있습니다.'
+        );
+        const blobUrl = URL.createObjectURL(pdfBlob);
+        if (previewWindow) {
+          previewWindow.location.href = blobUrl;
+        } else {
+          const downloadLink = document.createElement('a');
+          downloadLink.href = blobUrl;
+          downloadLink.target = '_blank';
+          downloadLink.rel = 'noopener noreferrer';
+          downloadLink.download = `MATERIAL_TEST_CERTIFICATE_${certificate.id}.pdf`;
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+        }
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+
+        const certificateNo = certificate.materialTestCertificate?.certificateNo || 'CERT';
+        const sanitizedCertificateNo = certificateNo.replace(/[^a-zA-Z0-9]/g, '_');
+        const fileName = `MATERIAL_TEST_CERTIFICATE_${sanitizedCertificateNo}.pdf`;
+        const filePath = `certificates/${certificate.id}/certificate_v2_${sanitizedCertificateNo}.pdf`;
+        const storageRef = ref(storage, filePath);
+        await uploadBytes(storageRef, pdfBlob);
+        const downloadURL = await getDownloadURL(storageRef);
+        await updateDoc(doc(db, 'certificates', certificate.id), {
+          certificateFile: {
+            name: fileName,
+            url: downloadURL,
+            storagePath: filePath,
+            size: pdfBlob.size,
+            type: 'application/pdf',
+            uploadedAt: Timestamp.now(),
+            uploadedBy: 'admin',
+          },
+          updatedAt: Timestamp.now(),
+          updatedBy: 'admin',
+        });
+        setSuccess('PDF 생성이 완료되었습니다.');
+      } catch (error) {
+        console.error('v2 PDF 생성/열기 오류:', error);
+        const message = error instanceof Error ? error.message : '알 수 없는 오류';
+        setError(`PDF 생성에 실패했습니다: ${message}`);
+        if (previewWindow) {
+          previewWindow.close();
+        }
+      } finally {
+        setDownloadingCertificateId(null);
+      }
       return;
     }
+
+    if (!certificate.certificateFile?.url) return;
 
     try {
       // CERTIFICATE NO. 가져오기
@@ -609,7 +1256,7 @@ export default function AdminCertificatePage() {
     <div className="p-8">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900">성적서 목록</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{isV2Flow ? '성적서 목록2' : '성적서 목록'}</h1>
           <p className="text-gray-600 mt-2 text-sm sm:text-base">
             전체 성적서 요청을 확인하고 관리할 수 있습니다
           </p>
@@ -838,15 +1485,20 @@ export default function AdminCertificatePage() {
                                 <span className="text-gray-300 text-xs">|</span>
                               </>
                             )}
-                            {certificate.certificateFile && (
+                            {(isV2Flow ? !!certificate.materialTestCertificate : !!certificate.certificateFile) && (
                               <>
                                 <button
                                   onClick={() => handleDownload(certificate)}
                                   className="text-green-600 hover:text-green-800 text-xs font-medium"
-                                  disabled={deletingId === certificate.id || updatingStatus || approving}
+                                  disabled={
+                                    deletingId === certificate.id ||
+                                    updatingStatus ||
+                                    approving ||
+                                    downloadingCertificateId === certificate.id
+                                  }
                                   title="다운로드"
                                 >
-                                  다운로드
+                                  {downloadingCertificateId === certificate.id ? 'PDF 생성 중...' : '다운로드'}
                                 </button>
                                 <span className="text-gray-300 text-xs">|</span>
                                 <button
@@ -865,7 +1517,9 @@ export default function AdminCertificatePage() {
                                       alert('성적서 ID가 없습니다. 페이지를 새로고침해주세요.');
                                       return;
                                     }
-                                    const url = `/admin/certificate/edit/${certificate.id}`;
+                                    const url = isV2Flow
+                                      ? `/admin/certificate/edit2/${certificate.id}`
+                                      : `/admin/certificate/edit/${certificate.id}`;
                                     console.log('이동할 URL:', url);
                                     try {
                                       router.push(url);
@@ -884,10 +1538,10 @@ export default function AdminCertificatePage() {
                                 <span className="text-gray-300 text-xs">|</span>
                               </>
                             )}
-                            {certificate.status !== 'pending' && !certificate.certificateFile && (
+                            {certificate.status !== 'pending' && !(isV2Flow ? !!certificate.materialTestCertificate : !!certificate.certificateFile) && (
                               <>
                                 <button
-                                  onClick={() => router.push(`/admin/certificate/create?id=${certificate.id}`)}
+                                  onClick={() => router.push(`/admin/certificate/${isV2Flow ? 'create2' : 'create'}?id=${certificate.id}`)}
                                   className="text-purple-600 hover:text-purple-800 text-xs font-medium"
                                   disabled={deletingId === certificate.id || updatingStatus || approving}
                                   title="성적서 작성"
@@ -897,10 +1551,10 @@ export default function AdminCertificatePage() {
                                 <span className="text-gray-300 text-xs">|</span>
                               </>
                             )}
-                            {!certificate.certificateFile && (
+                            {!(isV2Flow ? !!certificate.materialTestCertificate : !!certificate.certificateFile) && (
                               <>
                                 <button
-                                  onClick={() => router.push(`/admin/certificate/request?id=${certificate.id}`)}
+                                  onClick={() => router.push(`/admin/certificate/request?id=${certificate.id}${isV2Flow ? '&flow=v2' : ''}`)}
                                   className="text-blue-600 hover:text-blue-800 text-xs font-medium"
                                   disabled={deletingId === certificate.id || updatingStatus || approving}
                                   title="수정"

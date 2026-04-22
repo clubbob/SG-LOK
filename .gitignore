@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.sglok-next-dev/
 /.next-alt/
 /out/
 

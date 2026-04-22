@@ -3,6 +3,7 @@ import { getAdminStorage } from '@/lib/firebaseAdmin';
 
 export async function GET(request: NextRequest) {
   try {
+    // Keep this route active for fresh redeploys.
     const storagePath = request.nextUrl.searchParams.get('path') || '';
     if (!storagePath || !storagePath.startsWith('certificates/')) {
       return NextResponse.json({ error: '유효하지 않은 path 입니다.' }, { status: 400 });

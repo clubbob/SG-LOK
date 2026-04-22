@@ -219,8 +219,9 @@ export async function generateV2PdfBlob(certificate: Certificate, storage: Fireb
       )
       .slice(0, 3)
       .join(' | ');
-    throw new Error(
-      `Inspection 첨부 PNG를 읽지 못해 PDF에 병합하지 못했습니다. 실패=${baseResult.failedImageCount}. ${failedMessages || '상세 로그를 확인해주세요.'}`
+    console.warn(
+      `[v2 PDF] Inspection 첨부 병합 일부 실패 (실패=${baseResult.failedImageCount})`,
+      failedMessages || '상세 로그 없음'
     );
   }
 

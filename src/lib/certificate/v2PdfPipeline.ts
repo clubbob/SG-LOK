@@ -206,9 +206,15 @@ export async function generateV2PdfBlob(certificate: Certificate, storage: Fireb
 
   const hasAnyProductAttachment = normalizedProducts.some((p) => (p.inspectionCertificates?.length || 0) > 0);
   if (!hasAnyProductAttachment && normalizedProducts.length > 0) {
-    const fallbackAttachments: CertificateAttachment[] = [
-      ...(Array.isArray(certificate.attachments) ? certificate.attachments : []),
-    ];
+    const fallbackAttachments: CertificateAttachment[] = (Array.isArray(certificate.attachments) ? certificate.attachments : []).map((att) => ({
+      name: toText(att.name),
+      url: toText(att.url),
+      storagePath: toText((att as { storagePath?: unknown }).storagePath) || undefined,
+      type: toText(att.type),
+      size: typeof att.size === 'number' ? att.size : 0,
+      uploadedAt: att.uploadedAt instanceof Date ? att.uploadedAt : new Date(),
+      uploadedBy: toText(att.uploadedBy) || 'admin',
+    }));
     const dedupedFallback = fallbackAttachments.filter((cert, index, arr) => {
       const storagePath = toText(cert.storagePath).trim();
       const url = toText(cert.url).trim();

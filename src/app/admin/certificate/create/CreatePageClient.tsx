@@ -157,7 +157,10 @@ export const generatePDFBlobWithProducts = async (
     }>;
   }>;
 }> => {
-  const preferUrlFetch = options?.preferUrlFetch === true;
+  const isLocalHost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const preferUrlFetch = options?.preferUrlFetch === true || !isLocalHost;
   // ESM 번들(jsPDF.es.min.js)에서 chunk 로딩 실패가 날 수 있어 UMD로 로드
   type JsPDFClass = (typeof import('jspdf'))['jsPDF'];
   const jspdfModule = (await import('jspdf/dist/jspdf.umd.min.js')) as unknown as Partial<{

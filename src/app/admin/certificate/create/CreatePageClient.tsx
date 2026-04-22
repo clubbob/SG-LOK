@@ -998,6 +998,19 @@ export const generatePDFBlobWithProducts = async (
       })),
     });
     
+    const extractStoragePathFromUrl = (url: string): string => {
+      if (!url) return '';
+      try {
+        const marker = '/o/';
+        const idx = url.indexOf(marker);
+        if (idx < 0) return '';
+        const encoded = url.slice(idx + marker.length).split('?')[0] || '';
+        return decodeURIComponent(encoded);
+      } catch {
+        return '';
+      }
+    };
+
     // 각 Inspection Certificate 파일을 순회하며 추가
     for (let certIndex = 0; certIndex < inspectionCerts.length; certIndex++) {
       const inspectionCert = inspectionCerts[certIndex];
@@ -1034,7 +1047,12 @@ export const generatePDFBlobWithProducts = async (
       }
       
       const hasUrlAfterRefresh = inspectionCert.url && inspectionCert.url.trim().length > 0;
-      if (!hasUrlAfterRefresh && !hasBase64 && !hasStoragePath) {
+      const derivedStoragePath = hasUrlAfterRefresh ? extractStoragePathFromUrl(inspectionCert.url || '') : '';
+      const effectiveStoragePath = (inspectionCert.storagePath || derivedStoragePath || '').trim();
+      if (!inspectionCert.storagePath && derivedStoragePath) {
+        inspectionCert.storagePath = derivedStoragePath;
+      }
+      if (!hasUrlAfterRefresh && !hasBase64 && !effectiveStoragePath) {
         console.warn(`[PDF 생성] 제품 ${index + 1} 파일 ${certIndex + 1}의 URL, base64, storagePath가 모두 없습니다. 건너뜀.`);
         failedImageCount++;
         
@@ -1049,7 +1067,7 @@ export const generatePDFBlobWithProducts = async (
       }
       
       // URL, base64, 또는 storagePath가 있으면 처리
-      if (hasUrlAfterRefresh || hasBase64 || hasStoragePath) {
+      if (hasUrlAfterRefresh || hasBase64 || effectiveStoragePath) {
       try {
         // Inspection Certificate는 이미지 파일이므로 바로 처리
         const fileType = inspectionCert.type || '';
@@ -1107,7 +1125,7 @@ export const generatePDFBlobWithProducts = async (
         // base64 데이터가 없거나 base64 로드가 실패한 경우 URL 또는 storagePath로 다운로드
         if (!base64ImageData || base64ImageData.length === 0) {
           // 이미지 다운로드
-          console.log('[PDF 생성] 이미지 다운로드 시작, URL:', inspectionCert.url, 'storagePath:', inspectionCert.storagePath);
+          console.log('[PDF 생성] 이미지 다운로드 시작, URL:', inspectionCert.url, 'storagePath:', effectiveStoragePath);
           
           let downloadSuccess = false;
           let downloadFailureReason = '';
@@ -1180,13 +1198,13 @@ export const generatePDFBlobWithProducts = async (
           
           // v2 목록 다운로드에서는 지연을 줄이기 위해 storagePath getBlob을 먼저 짧게 시도하고,
           // 실패 시 URL fetch로 빠르게 fallback
-          if (!downloadSuccess && preferUrlFetch && inspectionCert.storagePath && inspectionCert.storagePath.trim().length > 0) {
+          if (!downloadSuccess && preferUrlFetch && effectiveStoragePath.length > 0) {
             try {
-              const storageRef = ref(storage, inspectionCert.storagePath);
+              const storageRef = ref(storage, effectiveStoragePath);
               let fallbackBlob: Blob;
               try {
                 fallbackBlob = await withTimeout(
-                  fetchStorageBlobViaProxy(inspectionCert.storagePath),
+                  fetchStorageBlobViaProxy(effectiveStoragePath),
                   30000,
                   'storage-proxy 타임아웃 (30초)'
                 );
@@ -1247,14 +1265,14 @@ export const generatePDFBlobWithProducts = async (
 
           // 방법 2: URL 다운로드 실패했거나 URL이 없고 storagePath가 있으면 storagePath로 시도
           // 네트워크 환경 편차를 고려해 타임아웃을 완화
-          if (!downloadSuccess && !preferUrlFetch && inspectionCert.storagePath && inspectionCert.storagePath.trim().length > 0) {
+          if (!downloadSuccess && !preferUrlFetch && effectiveStoragePath.length > 0) {
             try {
-              console.log(`[PDF 생성] storagePath로 직접 다운로드 시도 (getBlob 우선):`, inspectionCert.storagePath);
-              const storageRef = ref(storage, inspectionCert.storagePath);
+              console.log(`[PDF 생성] storagePath로 직접 다운로드 시도 (getBlob 우선):`, effectiveStoragePath);
+              const storageRef = ref(storage, effectiveStoragePath);
               let blob: Blob;
               try {
                 blob = await withTimeout(
-                  fetchStorageBlobViaProxy(inspectionCert.storagePath),
+                  fetchStorageBlobViaProxy(effectiveStoragePath),
                   30000,
                   'storage-proxy 타임아웃 (30초)'
                 );
@@ -1281,7 +1299,7 @@ export const generatePDFBlobWithProducts = async (
               console.warn(`[PDF 생성] getBlob 실패, getDownloadURL+Image fallback 시도: ${errorMsg}`);
               appendFailureReason(`getBlob 실패: ${errorMsg}`);
               try {
-                const storageRef = ref(storage, inspectionCert.storagePath);
+                const storageRef = ref(storage, effectiveStoragePath);
                 const fallbackUrl = await getDownloadURL(storageRef);
                 const loadedImg = new Image();
                 loadedImg.crossOrigin = 'anonymous';

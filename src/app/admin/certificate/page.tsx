@@ -300,41 +300,10 @@ export default function AdminCertificatePage() {
 
   const generateV2PdfBlob = async (certificate: Certificate): Promise<Blob> => {
     return await buildV2PdfBlob(certificate, storage);
-
-    const mtc = certificate.materialTestCertificate;
-    if (!mtc) {
-      throw new Error('성적서 데이터가 없어 PDF를 생성할 수 없습니다.');
-    }
-
-    const { generatePDFBlobWithProducts } = await import('@/app/admin/certificate/create/page');
-
-    const normalizeDateValue = (value: unknown): Date | null => {
-      if (!value) return null;
-      if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
-      if (typeof value === 'object' && value !== null) {
-        const maybeTimestamp = value as { toDate?: () => Date; seconds?: number };
-        if (typeof maybeTimestamp.toDate === 'function') {
-          const converted = maybeTimestamp.toDate();
-          return Number.isNaN(converted.getTime()) ? null : converted;
-        }
-        if (typeof maybeTimestamp.seconds === 'number') {
-          const converted = new Date(maybeTimestamp.seconds * 1000);
-          return Number.isNaN(converted.getTime()) ? null : converted;
-        }
-      }
-      if (typeof value === 'string' || typeof value === 'number') {
-        const converted = new Date(value);
-        return Number.isNaN(converted.getTime()) ? null : converted;
-      }
-      return null;
-    };
-
-    const normalizedDate = normalizeDateValue(mtc.dateOfIssue);
-    const dateOfIssue = normalizedDate
-      ? `${normalizedDate.getFullYear()}-${String(normalizedDate.getMonth() + 1).padStart(2, '0')}-${String(normalizedDate.getDate()).padStart(2, '0')}`
-      : '';
-
-    const toText = (value: unknown): string => (typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '');
+    /*
+    const mtc = certificate.materialTestCertificate ?? ({ products: [] } as { products?: unknown[] });
+    const toText = (value: unknown): string =>
+      typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
     const normalizeNameKey = (value: string): string =>
       (value || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
     const isImageAttachment = (name: string, type: string): boolean => {
@@ -362,20 +331,21 @@ export default function AdminCertificatePage() {
     };
 
     const rootAttachmentMap = new Map<string, CertificateAttachment>();
-    if (Array.isArray(certificate.attachments)) {
-      for (const att of certificate.attachments) {
-        const key = normalizeNameKey(toText(att.name));
-        if (!key) continue;
-        rootAttachmentMap.set(key, {
-          name: toText(att.name),
-          url: toText(att.url),
-          storagePath: toText(att.storagePath) || undefined,
-          size: typeof att.size === 'number' ? att.size : 0,
-          type: toText(att.type),
-          uploadedAt: att.uploadedAt instanceof Date ? att.uploadedAt : new Date(),
-          uploadedBy: toText(att.uploadedBy) || 'admin',
-        });
-      }
+    const rootAttachments: CertificateAttachment[] = Array.isArray(certificate.attachments)
+      ? (certificate.attachments as CertificateAttachment[])
+      : [];
+    for (const att of rootAttachments) {
+      const key = normalizeNameKey(toText(att.name));
+      if (!key) continue;
+      rootAttachmentMap.set(key, {
+        name: toText(att.name),
+        url: toText(att.url),
+        storagePath: toText(att.storagePath) || undefined,
+        size: typeof att.size === 'number' ? att.size : 0,
+        type: toText(att.type),
+        uploadedAt: att.uploadedAt instanceof Date ? att.uploadedAt : new Date(),
+        uploadedBy: toText(att.uploadedBy) || 'admin',
+      });
     }
 
     const storageAttachmentMap = new Map<string, { fullPath: string; url: string; type: string }>();
@@ -404,7 +374,7 @@ export default function AdminCertificatePage() {
       }
     }
 
-    const productsRaw = Array.isArray(mtc.products) ? mtc.products : [];
+    const productsRaw: unknown[] = Array.isArray(mtc.products) ? (mtc.products as unknown[]) : [];
     const normalizedProducts: CertificateProduct[] = [];
     for (const product of productsRaw) {
       const p = product as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
@@ -775,6 +745,7 @@ export default function AdminCertificatePage() {
     }
 
     return finalBlob;
+    */
   };
 
   const handleDownload = async (certificate: Certificate) => {
@@ -835,7 +806,7 @@ export default function AdminCertificatePage() {
               : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
           latestAttachmentCandidates.push(...certs);
         }
-        latestAttachmentCandidates.push(...latestRootAttachments);
+        latestAttachmentCandidates.push(...(latestRootAttachments as unknown as CertificateAttachment[]));
         const latestProductAttachmentCount = latestProducts.reduce((sum, p) => {
           const withCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
           const certs =

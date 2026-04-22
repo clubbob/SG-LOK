@@ -132,7 +132,7 @@ const renderKoreanText = (
 };
 
 // PDF를 Blob으로 생성하는 함수 (여러 제품 지원)
-export const generatePDFBlobWithProducts = async (
+const generatePDFBlobWithProducts = async (
   formData: {
     certificateNo: string;
     dateOfIssue: string;

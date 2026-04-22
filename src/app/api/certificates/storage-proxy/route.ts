@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
     const [metadata] = await file.getMetadata();
     const contentType = metadata.contentType || 'application/octet-stream';
 
-    return new NextResponse(buffer, {
+    const body = new Uint8Array(buffer);
+    return new NextResponse(body, {
       status: 200,
       headers: {
         'Content-Type': contentType,

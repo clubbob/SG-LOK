@@ -55,6 +55,76 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
   }
 };
 
+type PdfComposeResult = {
+  blob: Blob;
+  failedImageCount: number;
+  fileValidationResults: Array<{
+    productIndex: number;
+    productName: string;
+    files: Array<{
+      fileName: string;
+      included: boolean;
+      error?: string;
+    }>;
+  }>;
+};
+
+const generatePDFBlobWithProducts = async (
+  formData: {
+    certificateNo: string;
+    dateOfIssue: string;
+    customer: string;
+    poNo: string;
+    testResult: string;
+  },
+  products: RichProduct[]
+): Promise<PdfComposeResult> => {
+  type JsPDFClass = (typeof import('jspdf'))['jsPDF'];
+  const jspdfModule = (await import('jspdf/dist/jspdf.umd.min.js')) as unknown as Partial<{
+    jsPDF: JsPDFClass;
+    default: JsPDFClass;
+  }>;
+  const jsPDF = jspdfModule.jsPDF ?? jspdfModule.default;
+  if (!jsPDF) throw new Error('jsPDF 로드 실패');
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.text('MATERIAL TEST CERTIFICATE', 148.5, 20, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  doc.text(`CERTIFICATE NO: ${formData.certificateNo || '-'}`, 14, 35);
+  doc.text(`DATE OF ISSUE: ${formData.dateOfIssue || '-'}`, 14, 42);
+  doc.text(`CUSTOMER: ${formData.customer || '-'}`, 14, 49);
+  doc.text(`PO NO: ${formData.poNo || '-'}`, 14, 56);
+  doc.text(`RESULT: ${formData.testResult || '-'}`, 14, 63);
+
+  let y = 78;
+  doc.setFont('helvetica', 'bold');
+  doc.text('NO.', 14, y);
+  doc.text('DESCRIPTION', 28, y);
+  doc.text('CODE', 120, y);
+  doc.text('QTY', 150, y);
+  doc.text('MATERIAL', 170, y);
+  doc.text('HEAT NO.', 220, y);
+  y += 6;
+  doc.setFont('helvetica', 'normal');
+
+  products.forEach((product, index) => {
+    doc.text(String(index + 1), 14, y);
+    doc.text(toText(product.productName) || '-', 28, y);
+    doc.text(toText(product.productCode) || '-', 120, y);
+    doc.text(toText(product.quantity) || '-', 150, y);
+    doc.text(toText(product.material) || '-', 170, y);
+    doc.text(toText(product.heatNo) || '-', 220, y);
+    y += 6;
+  });
+
+  const blob = doc.output('blob') as Blob;
+  return { blob, failedImageCount: 0, fileValidationResults: [] };
+};
+
 export async function generateV2PdfBlob(certificate: Certificate, storage: Storage): Promise<Blob> {
   const mtc = certificate.materialTestCertificate;
   if (!mtc) {
@@ -152,7 +222,6 @@ export async function generateV2PdfBlob(certificate: Certificate, storage: Stora
     ? `${normalizedDate.getFullYear()}-${String(normalizedDate.getMonth() + 1).padStart(2, '0')}-${String(normalizedDate.getDate()).padStart(2, '0')}`
     : '';
 
-  const { generatePDFBlobWithProducts } = await import('@/app/admin/certificate/create/page');
   const baseResult = await generatePDFBlobWithProducts(
     {
       certificateNo: toText(mtc.certificateNo),

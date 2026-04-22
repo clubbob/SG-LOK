@@ -419,7 +419,7 @@ export default function AdminCertificatePage() {
         const storageMatch = certNameKey ? storageAttachmentMap.get(certNameKey) : undefined;
 
         let normalizedUrl = toText(cert.url) || rootMatch?.url || storageMatch?.url || '';
-        let normalizedStoragePath = toText(cert.storagePath) || rootMatch?.storagePath || storageMatch?.fullPath || undefined;
+        const normalizedStoragePath = toText(cert.storagePath) || rootMatch?.storagePath || storageMatch?.fullPath || undefined;
         if ((!normalizedUrl || normalizedUrl.trim().length === 0) && normalizedStoragePath) {
           try {
             normalizedUrl = await getDownloadURL(ref(storage, normalizedStoragePath));

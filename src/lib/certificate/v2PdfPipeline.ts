@@ -153,7 +153,7 @@ export async function generateV2PdfBlob(certificate: Certificate, storage: Fireb
     rootAttachmentMap.set(key, {
       name: toText(att.name),
       url: toText(att.url),
-      storagePath: toText(att.storagePath) || undefined,
+      storagePath: toText((att as { storagePath?: unknown }).storagePath) || undefined,
       type: toText(att.type),
       size: typeof att.size === 'number' ? att.size : 0,
       uploadedAt: att.uploadedAt instanceof Date ? att.uploadedAt : new Date(),

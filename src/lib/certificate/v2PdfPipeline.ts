@@ -245,9 +245,7 @@ export async function generateV2PdfBlob(certificate: Certificate, storage: Fireb
       poNo: toText(mtc.poNo),
       testResult: toText((mtc as { testResult?: unknown }).testResult),
     },
-    normalizedProducts,
-    // v2: preferUrlFetch 분기에서 storage-proxy를 먼저 사용하도록 보강됨
-    { preferUrlFetch: true }
+    normalizedProducts
   );
   console.log('[v2 단순 모드] PDF 생성 결과', {
     failedImageCount: baseResult.failedImageCount,

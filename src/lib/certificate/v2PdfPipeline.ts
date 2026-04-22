@@ -1,4 +1,5 @@
-import { getDownloadURL, ref, Storage } from 'firebase/storage';
+import { getDownloadURL, ref } from 'firebase/storage';
+import type { FirebaseStorage } from 'firebase/storage';
 import { Certificate, CertificateAttachment, CertificateProduct } from '@/types';
 
 type RichProduct = CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
@@ -125,7 +126,7 @@ const generatePDFBlobWithProducts = async (
   return { blob, failedImageCount: 0, fileValidationResults: [] };
 };
 
-export async function generateV2PdfBlob(certificate: Certificate, storage: Storage): Promise<Blob> {
+export async function generateV2PdfBlob(certificate: Certificate, storage: FirebaseStorage): Promise<Blob> {
   const mtc = certificate.materialTestCertificate;
   if (!mtc) {
     throw new Error('성적서 데이터가 없어 PDF를 생성할 수 없습니다.');
@@ -149,7 +150,15 @@ export async function generateV2PdfBlob(certificate: Certificate, storage: Stora
   for (const att of Array.isArray(certificate.attachments) ? certificate.attachments : []) {
     const key = normalizeNameKey(toText(att.name));
     if (!key) continue;
-    rootAttachmentMap.set(key, att);
+    rootAttachmentMap.set(key, {
+      name: toText(att.name),
+      url: toText(att.url),
+      storagePath: toText(att.storagePath) || undefined,
+      type: toText(att.type),
+      size: typeof att.size === 'number' ? att.size : 0,
+      uploadedAt: att.uploadedAt instanceof Date ? att.uploadedAt : new Date(),
+      uploadedBy: toText(att.uploadedBy) || 'admin',
+    });
   }
 
   for (const product of normalizedProducts) {

@@ -1138,8 +1138,9 @@ export const generatePDFBlobWithProducts = async (
             }
           };
           
+          const shouldSkipDirectUrlAttempt = preferUrlFetch && effectiveStoragePath.length > 0;
           // 방법 1: URL이 있으면 Image 객체로 로드하고 Canvas로 base64 변환 (타임아웃 5초로 단축)
-          if (inspectionCert.url && inspectionCert.url.trim().length > 0) {
+          if (!shouldSkipDirectUrlAttempt && inspectionCert.url && inspectionCert.url.trim().length > 0) {
             try {
               console.log('[PDF 생성] 기존 URL로 Image 객체 로드 시도:', inspectionCert.url);
               

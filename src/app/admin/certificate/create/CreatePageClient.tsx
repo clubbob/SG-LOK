@@ -4758,13 +4758,13 @@ function MaterialTestCertificateContent() {
 
       {error && (
         <div className="bg-red-50 border-2 border-red-400 text-red-800 px-6 py-4 rounded-lg shadow-md mb-6">
-          <p className="font-semibold">{error}</p>
+          <p className="font-semibold whitespace-pre-wrap break-words">{error}</p>
         </div>
       )}
 
       {success && (
         <div className="bg-green-50 border-2 border-green-400 text-green-800 px-6 py-4 rounded-lg shadow-md mb-6">
-          <p className="font-semibold">{success}</p>
+          <p className="font-semibold whitespace-pre-wrap break-words">{success}</p>
         </div>
       )}
 

@@ -160,6 +160,7 @@ export const generatePDFBlobWithProducts = async (
   const isLocalHost =
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const useWebNetworkFallback = !isLocalHost;
   // 배포 환경에서 자동으로 preferUrlFetch를 강제하면 첨부 이미지가 타임아웃으로 누락될 수 있어
   // 명시적으로 옵션을 준 경우에만 활성화한다. 기본은 getBlob 중심의 안정 경로를 사용.
   const preferUrlFetch = options?.preferUrlFetch === true;
@@ -1283,20 +1284,28 @@ export const generatePDFBlobWithProducts = async (
                 console.warn('[PDF 생성] storage-proxy 실패, getBlob으로 재시도:', proxyError);
                 const proxyMsg = proxyError instanceof Error ? proxyError.message : String(proxyError);
                 appendFailureReason(`storage-proxy 실패: ${proxyMsg}`);
-                try {
+                if (!useWebNetworkFallback) {
                   blob = await withTimeout(
                     getBlob(storageRef),
-                    45000,
-                    'getBlob 타임아웃 (45초)'
+                    20000,
+                    'getBlob 타임아웃 (20초)'
                   );
-                } catch (firstBlobError) {
-                  const firstMsg = firstBlobError instanceof Error ? firstBlobError.message : String(firstBlobError);
-                  appendFailureReason(`getBlob 1차 실패: ${firstMsg}`);
-                  blob = await withTimeout(
-                    getBlob(storageRef),
-                    60000,
-                    'getBlob 타임아웃 (60초)'
-                  );
+                } else {
+                  try {
+                    blob = await withTimeout(
+                      getBlob(storageRef),
+                      45000,
+                      'getBlob 타임아웃 (45초)'
+                    );
+                  } catch (firstBlobError) {
+                    const firstMsg = firstBlobError instanceof Error ? firstBlobError.message : String(firstBlobError);
+                    appendFailureReason(`getBlob 1차 실패: ${firstMsg}`);
+                    blob = await withTimeout(
+                      getBlob(storageRef),
+                      60000,
+                      'getBlob 타임아웃 (60초)'
+                    );
+                  }
                 }
               }
               console.log('[PDF 생성] getBlob 다운로드 완료, 크기:', blob.size);
@@ -1309,28 +1318,57 @@ export const generatePDFBlobWithProducts = async (
             } catch (bytesError) {
               console.error(`[PDF 생성] getBlob 실패:`, bytesError);
               const errorMsg = bytesError instanceof Error ? bytesError.message : String(bytesError);
-              console.warn(`[PDF 생성] getBlob 실패, storage-proxy 재시도 후 fallback 시도: ${errorMsg}`);
+              console.warn(
+                useWebNetworkFallback
+                  ? `[PDF 생성] getBlob 실패, storage-proxy 재시도 후 fallback 시도: ${errorMsg}`
+                  : `[PDF 생성] getBlob 실패, Image fallback 시도: ${errorMsg}`
+              );
               appendFailureReason(`getBlob 실패: ${errorMsg}`);
-              try {
-                const retryBlob = await withTimeout(
-                  fetchStorageBlobViaProxy(effectiveStoragePath),
-                  45000,
-                  'storage-proxy 재시도 타임아웃 (45초)'
-                );
-                const converted = await blobToBase64Png(retryBlob);
-                base64ImageData = converted.base64ImageData;
-                img = { width: converted.width, height: converted.height } as HTMLImageElement;
-                downloadSuccess = true;
-                console.log('[PDF 생성] storage-proxy 재시도 성공');
-                continue;
-              } catch (retryProxyError) {
-                const retryMsg = retryProxyError instanceof Error ? retryProxyError.message : String(retryProxyError);
-                console.warn(`[PDF 생성] storage-proxy 재시도 실패, Image fallback 시도: ${retryMsg}`);
-                appendFailureReason(`storage-proxy 재시도 실패: ${retryMsg}`);
+              if (useWebNetworkFallback) {
+                try {
+                  const retryBlob = await withTimeout(
+                    fetchStorageBlobViaProxy(effectiveStoragePath),
+                    45000,
+                    'storage-proxy 재시도 타임아웃 (45초)'
+                  );
+                  const converted = await blobToBase64Png(retryBlob);
+                  base64ImageData = converted.base64ImageData;
+                  img = { width: converted.width, height: converted.height } as HTMLImageElement;
+                  downloadSuccess = true;
+                  console.log('[PDF 생성] storage-proxy 재시도 성공');
+                  continue;
+                } catch (retryProxyError) {
+                  const retryMsg = retryProxyError instanceof Error ? retryProxyError.message : String(retryProxyError);
+                  console.warn(`[PDF 생성] storage-proxy 재시도 실패, URL fetch fallback 시도: ${retryMsg}`);
+                  appendFailureReason(`storage-proxy 재시도 실패: ${retryMsg}`);
+                }
               }
               try {
                 const storageRef = ref(storage, effectiveStoragePath);
                 const fallbackUrl = await getDownloadURL(storageRef);
+                if (useWebNetworkFallback) {
+                  try {
+                    const fallbackRes = await withTimeout(
+                      fetch(fallbackUrl, { method: 'GET', cache: 'no-store' }),
+                      45000,
+                      'fallback URL fetch 타임아웃 (45초)'
+                    );
+                    if (!fallbackRes.ok) {
+                      throw new Error(`fallback URL HTTP ${fallbackRes.status}`);
+                    }
+                    const fallbackBlob = await fallbackRes.blob();
+                    const converted = await blobToBase64Png(fallbackBlob);
+                    base64ImageData = converted.base64ImageData;
+                    img = { width: converted.width, height: converted.height } as HTMLImageElement;
+                    downloadSuccess = true;
+                    console.log('[PDF 생성] getDownloadURL+fetch fallback 성공');
+                    continue;
+                  } catch (fetchFallbackError) {
+                    const fetchMsg = fetchFallbackError instanceof Error ? fetchFallbackError.message : String(fetchFallbackError);
+                    console.warn(`[PDF 생성] URL fetch fallback 실패, Image fallback 시도: ${fetchMsg}`);
+                    appendFailureReason(`URL fetch fallback 실패: ${fetchMsg}`);
+                  }
+                }
                 const loadedImg = new Image();
                 loadedImg.crossOrigin = 'anonymous';
                 await new Promise<void>((resolve, reject) => {

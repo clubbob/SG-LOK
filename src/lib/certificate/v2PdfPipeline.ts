@@ -81,7 +81,9 @@ const generatePDFBlobWithProducts = async (
   },
   products: RichProduct[]
 ): Promise<PdfComposeResult> => {
-  return await generateFromCreate(formData, products, { preferUrlFetch: true });
+  // 웹 환경에서 URL 우선 경로를 강제하면 첨부가 누락될 수 있어
+  // 생성 페이지와 동일한 기본 경로(getBlob 중심)를 사용한다.
+  return await generateFromCreate(formData, products);
 };
 
 export async function generateV2PdfBlob(certificate: Certificate, storage: FirebaseStorage): Promise<Blob> {

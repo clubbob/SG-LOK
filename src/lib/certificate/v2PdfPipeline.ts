@@ -212,6 +212,25 @@ export async function generateV2PdfBlob(certificate: Certificate, storage: Fireb
     fileValidationResults: baseResult.fileValidationResults,
   });
 
+  const expectedAttachmentCount = normalizedProducts.reduce((sum, p) => {
+    const certs = Array.isArray(p.inspectionCertificates)
+      ? p.inspectionCertificates
+      : p.inspectionCertificate
+        ? [p.inspectionCertificate]
+        : [];
+    return sum + certs.length;
+  }, 0);
+  const validatedAttachmentCount = baseResult.fileValidationResults.reduce(
+    (sum, group) => sum + group.files.length,
+    0
+  );
+
+  if (expectedAttachmentCount > 0 && validatedAttachmentCount === 0) {
+    throw new Error(
+      `첨부 파일 ${expectedAttachmentCount}개가 PDF 처리 단계에 전달되지 않았습니다. 첨부 메타데이터를 확인해주세요.`
+    );
+  }
+
   if (baseResult.failedImageCount > 0) {
     const failedMessages = baseResult.fileValidationResults
       .flatMap((group) =>
@@ -224,6 +243,9 @@ export async function generateV2PdfBlob(certificate: Certificate, storage: Fireb
     console.warn(
       `[v2 PDF] Inspection 첨부 병합 일부 실패 (실패=${baseResult.failedImageCount})`,
       failedMessages || '상세 로그 없음'
+    );
+    throw new Error(
+      `Inspection 첨부 ${baseResult.failedImageCount}개를 PDF에 포함하지 못했습니다. ${failedMessages || '브라우저 콘솔 로그를 확인해주세요.'}`
     );
   }
 

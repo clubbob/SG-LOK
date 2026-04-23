@@ -1275,10 +1275,11 @@ export const generatePDFBlobWithProducts = async (
               const storageRef = ref(storage, effectiveStoragePath);
               let blob: Blob;
               try {
+                const proxyTimeoutMs = useWebNetworkFallback ? 90000 : 30000;
                 blob = await withTimeout(
                   fetchStorageBlobViaProxy(effectiveStoragePath),
-                  30000,
-                  'storage-proxy 타임아웃 (30초)'
+                  proxyTimeoutMs,
+                  `storage-proxy 타임아웃 (${Math.floor(proxyTimeoutMs / 1000)}초)`
                 );
               } catch (proxyError) {
                 console.warn('[PDF 생성] storage-proxy 실패, getBlob으로 재시도:', proxyError);
@@ -1326,10 +1327,11 @@ export const generatePDFBlobWithProducts = async (
               appendFailureReason(`getBlob 실패: ${errorMsg}`);
               if (useWebNetworkFallback) {
                 try {
+                  const retryProxyTimeoutMs = 120000;
                   const retryBlob = await withTimeout(
                     fetchStorageBlobViaProxy(effectiveStoragePath),
-                    45000,
-                    'storage-proxy 재시도 타임아웃 (45초)'
+                    retryProxyTimeoutMs,
+                    `storage-proxy 재시도 타임아웃 (${Math.floor(retryProxyTimeoutMs / 1000)}초)`
                   );
                   const converted = await blobToBase64Png(retryBlob);
                   base64ImageData = converted.base64ImageData;

@@ -160,7 +160,9 @@ export const generatePDFBlobWithProducts = async (
   const isLocalHost =
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-  const preferUrlFetch = options?.preferUrlFetch === true || !isLocalHost;
+  // 배포 환경에서 자동으로 preferUrlFetch를 강제하면 첨부 이미지가 타임아웃으로 누락될 수 있어
+  // 명시적으로 옵션을 준 경우에만 활성화한다. 기본은 getBlob 중심의 안정 경로를 사용.
+  const preferUrlFetch = options?.preferUrlFetch === true;
   // ESM 번들(jsPDF.es.min.js)에서 chunk 로딩 실패가 날 수 있어 UMD로 로드
   type JsPDFClass = (typeof import('jspdf'))['jsPDF'];
   const jspdfModule = (await import('jspdf/dist/jspdf.umd.min.js')) as unknown as Partial<{

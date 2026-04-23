@@ -1285,28 +1285,27 @@ export const generatePDFBlobWithProducts = async (
                 console.warn('[PDF 생성] storage-proxy 실패, getBlob으로 재시도:', proxyError);
                 const proxyMsg = proxyError instanceof Error ? proxyError.message : String(proxyError);
                 appendFailureReason(`storage-proxy 실패: ${proxyMsg}`);
-                if (!useWebNetworkFallback) {
+                if (useWebNetworkFallback) {
+                  // 웹 환경은 CORS/브라우저 편차로 getBlob/Image fallback이 더 불안정할 수 있어
+                  // server proxy를 한번 더 재시도하고, 실패하면 즉시 원인을 노출한다.
+                  const retryProxyTimeoutMs = 120000;
+                  try {
+                    blob = await withTimeout(
+                      fetchStorageBlobViaProxy(effectiveStoragePath),
+                      retryProxyTimeoutMs,
+                      `storage-proxy 재시도 타임아웃 (${Math.floor(retryProxyTimeoutMs / 1000)}초)`
+                    );
+                  } catch (retryProxyError) {
+                    const retryMsg = retryProxyError instanceof Error ? retryProxyError.message : String(retryProxyError);
+                    appendFailureReason(`storage-proxy 재시도 실패: ${retryMsg}`);
+                    throw new Error(`storage-proxy 실패: ${proxyMsg}; 재시도 실패: ${retryMsg}`);
+                  }
+                } else {
                   blob = await withTimeout(
                     getBlob(storageRef),
                     20000,
                     'getBlob 타임아웃 (20초)'
                   );
-                } else {
-                  try {
-                    blob = await withTimeout(
-                      getBlob(storageRef),
-                      45000,
-                      'getBlob 타임아웃 (45초)'
-                    );
-                  } catch (firstBlobError) {
-                    const firstMsg = firstBlobError instanceof Error ? firstBlobError.message : String(firstBlobError);
-                    appendFailureReason(`getBlob 1차 실패: ${firstMsg}`);
-                    blob = await withTimeout(
-                      getBlob(storageRef),
-                      60000,
-                      'getBlob 타임아웃 (60초)'
-                    );
-                  }
                 }
               }
               console.log('[PDF 생성] getBlob 다운로드 완료, 크기:', blob.size);
@@ -1319,31 +1318,17 @@ export const generatePDFBlobWithProducts = async (
             } catch (bytesError) {
               console.error(`[PDF 생성] getBlob 실패:`, bytesError);
               const errorMsg = bytesError instanceof Error ? bytesError.message : String(bytesError);
-              console.warn(
-                useWebNetworkFallback
-                  ? `[PDF 생성] getBlob 실패, storage-proxy 재시도 후 fallback 시도: ${errorMsg}`
-                  : `[PDF 생성] getBlob 실패, Image fallback 시도: ${errorMsg}`
-              );
+              console.warn(`[PDF 생성] blob 다운로드 실패, fallback 시도: ${errorMsg}`);
               appendFailureReason(`getBlob 실패: ${errorMsg}`);
               if (useWebNetworkFallback) {
-                try {
-                  const retryProxyTimeoutMs = 120000;
-                  const retryBlob = await withTimeout(
-                    fetchStorageBlobViaProxy(effectiveStoragePath),
-                    retryProxyTimeoutMs,
-                    `storage-proxy 재시도 타임아웃 (${Math.floor(retryProxyTimeoutMs / 1000)}초)`
-                  );
-                  const converted = await blobToBase64Png(retryBlob);
-                  base64ImageData = converted.base64ImageData;
-                  img = { width: converted.width, height: converted.height } as HTMLImageElement;
-                  downloadSuccess = true;
-                  console.log('[PDF 생성] storage-proxy 재시도 성공');
-                  continue;
-                } catch (retryProxyError) {
-                  const retryMsg = retryProxyError instanceof Error ? retryProxyError.message : String(retryProxyError);
-                  console.warn(`[PDF 생성] storage-proxy 재시도 실패, URL fetch fallback 시도: ${retryMsg}`);
-                  appendFailureReason(`storage-proxy 재시도 실패: ${retryMsg}`);
-                }
+                // 웹에서는 원인 명확화를 위해 여기서 즉시 중단
+                failedImageCount++;
+                productValidationResult.files.push({
+                  fileName: inspectionCert.name || '이름 없음',
+                  included: false,
+                  error: `storagePath 다운로드 실패: ${downloadFailureReason || errorMsg}`,
+                });
+                continue;
               }
               try {
                 const storageRef = ref(storage, effectiveStoragePath);

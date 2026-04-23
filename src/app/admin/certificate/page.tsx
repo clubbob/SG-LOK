@@ -161,14 +161,23 @@ export default function AdminCertificatePage() {
               }, 0)
             : (firstProduct?.quantity || data.quantity);
           
+          const customerName =
+            data.materialTestCertificate?.customer ||
+            data.customerName ||
+            '';
+          const orderNumber =
+            data.materialTestCertificate?.poNo ||
+            data.orderNumber ||
+            '';
+
           certificatesData.push({
             id: doc.id,
             userId: data.userId,
             userName: data.userName,
             userEmail: data.userEmail,
             userCompany: data.userCompany,
-            customerName: data.customerName,
-            orderNumber: data.orderNumber,
+            customerName: customerName,
+            orderNumber: orderNumber,
             products: effectiveProducts,
             productName: summarizedProductName,
             productCode: summarizedProductCode,

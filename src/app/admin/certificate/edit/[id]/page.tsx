@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, Suspense } from 'react';
-import { useRouter, useParams, useSearchParams } from 'next/navigation';
+import { useRouter, useParams, useSearchParams, usePathname } from 'next/navigation';
 import { Button, Input } from '@/components/ui';
 import { doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, getBlob, deleteObject, listAll, getMetadata } from 'firebase/storage';
@@ -1742,7 +1742,11 @@ function MaterialTestCertificateEditContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
-  const isV2Flow = searchParams.get('flow') === 'v2';
+  const pathname = usePathname();
+  const isV2Flow =
+    searchParams.get('flow') === 'v2' ||
+    pathname === '/admin/certificate/edit2' ||
+    pathname?.startsWith('/admin/certificate/edit2/');
   const certificateId = params?.id as string; // 동적 라우트에서 id 가져오기
   const [loadingCertificate, setLoadingCertificate] = useState(false);
   const [saving, setSaving] = useState(false);

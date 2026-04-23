@@ -298,11 +298,8 @@ export default function AdminCertificatePage() {
 
   const totalPages = Math.ceil(filteredCertificates.length / itemsPerPage);
 
-  const generateV2PdfBlob = async (
-    certificate: Certificate,
-    options?: { strictMode?: boolean }
-  ): Promise<Blob> => {
-    return await buildV2PdfBlob(certificate, storage, options);
+  const generateV2PdfBlob = async (certificate: Certificate): Promise<Blob> => {
+    return await buildV2PdfBlob(certificate, storage);
     /*
     const mtc = certificate.materialTestCertificate ?? ({ products: [] } as { products?: unknown[] });
     const toText = (value: unknown): string =>
@@ -784,10 +781,7 @@ export default function AdminCertificatePage() {
           ? 'PDF 생성 중입니다. 완료 후 파일 다운로드를 시도합니다. 새 탭이 안 열리면 팝업 허용 후 다시 시도해주세요.'
           : 'PDF 생성 중입니다. 완료되면 새 탭에서 열립니다.'
       );
-      const isLocalHost =
-        typeof window !== 'undefined' &&
-        (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-      const pdfTimeoutMs = isLocalHost ? 60000 : 180000;
+      const pdfTimeoutMs = 120000;
       let downloadStage = '초기화';
       try {
         downloadStage = '최신 성적서 데이터 로드';
@@ -873,7 +867,7 @@ export default function AdminCertificatePage() {
         downloadStage = 'PDF 생성(첨부 병합)';
         setSuccess('[3/4] PDF를 생성하고 첨부를 병합하는 중입니다...');
         const pdfBlob = await withTimeout(
-          generateV2PdfBlob(latestCertificate, { strictMode: !isLocalHost }),
+          generateV2PdfBlob(latestCertificate),
           pdfTimeoutMs,
           `PDF 생성 타임아웃(${Math.floor(pdfTimeoutMs / 1000)}초): 첨부 파일 읽기 또는 병합이 지연되고 있습니다.`
         );

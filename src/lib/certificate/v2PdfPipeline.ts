@@ -83,10 +83,6 @@ type PdfComposeResult = {
   }>;
 };
 
-type GenerateV2PdfOptions = {
-  strictMode?: boolean;
-};
-
 const generatePDFBlobWithProducts = async (
   formData: {
     certificateNo: string;
@@ -104,10 +100,8 @@ const generatePDFBlobWithProducts = async (
 
 export async function generateV2PdfBlob(
   certificate: Certificate,
-  storage: FirebaseStorage,
-  options?: GenerateV2PdfOptions
+  storage: FirebaseStorage
 ): Promise<Blob> {
-  const strictMode = options?.strictMode === true;
   const mtc = certificate.materialTestCertificate;
   if (!mtc) {
     throw new Error('성적서 데이터가 없어 PDF를 생성할 수 없습니다.');
@@ -215,7 +209,7 @@ export async function generateV2PdfBlob(
     normalizedProducts[0].inspectionCertificate = dedupedFallback[0];
   }
 
-  if (strictMode && preflightFailures.length > 0) {
+  if (preflightFailures.length > 0) {
     throw new Error(
       `첨부 사전검증 실패 ${preflightFailures.length}건: ${preflightFailures.slice(0, 3).join(' | ')}`
     );
@@ -254,7 +248,7 @@ export async function generateV2PdfBlob(
     0
   );
 
-  if (strictMode && expectedAttachmentCount > 0 && validatedAttachmentCount === 0) {
+  if (expectedAttachmentCount > 0 && validatedAttachmentCount === 0) {
     throw new Error(
       `첨부 파일 ${expectedAttachmentCount}개가 PDF 처리 단계에 전달되지 않았습니다. 첨부 메타데이터를 확인해주세요.`
     );
@@ -273,11 +267,9 @@ export async function generateV2PdfBlob(
       `[v2 PDF] Inspection 첨부 병합 일부 실패 (실패=${baseResult.failedImageCount})`,
       failedMessages || '상세 로그 없음'
     );
-    if (strictMode) {
-      throw new Error(
-        `Inspection 첨부 ${baseResult.failedImageCount}개를 PDF에 포함하지 못했습니다. ${failedMessages || '브라우저 콘솔 로그를 확인해주세요.'}`
-      );
-    }
+    throw new Error(
+      `Inspection 첨부 ${baseResult.failedImageCount}개를 PDF에 포함하지 못했습니다. ${failedMessages || '브라우저 콘솔 로그를 확인해주세요.'}`
+    );
   }
 
   return baseResult.blob;

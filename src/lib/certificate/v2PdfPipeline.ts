@@ -57,6 +57,18 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, message: 
   }
 };
 
+const resolveDownloadUrl = async (
+  storage: FirebaseStorage,
+  storagePath: string,
+  timeoutMs = 15000
+): Promise<string> => {
+  return await withTimeout(
+    getDownloadURL(ref(storage, storagePath)),
+    timeoutMs,
+    `getDownloadURL 타임아웃(${timeoutMs}ms): ${storagePath}`
+  );
+};
+
 type PdfComposeResult = {
   blob: Blob;
   failedImageCount: number;
@@ -107,6 +119,7 @@ export async function generateV2PdfBlob(certificate: Certificate, storage: Fireb
   });
 
   const rootAttachmentMap = new Map<string, CertificateAttachment>();
+  const preflightFailures: string[] = [];
   for (const att of Array.isArray(certificate.attachments) ? certificate.attachments : []) {
     const key = normalizeNameKey(toText(att.name));
     if (!key) continue;
@@ -138,9 +151,10 @@ export async function generateV2PdfBlob(certificate: Certificate, storage: Fireb
         extractStoragePathFromUrl(normalizedUrl);
       if (!normalizedUrl && normalizedStoragePath) {
         try {
-          normalizedUrl = await getDownloadURL(ref(storage, normalizedStoragePath));
-        } catch {
-          // noop
+          normalizedUrl = await resolveDownloadUrl(storage, normalizedStoragePath);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          preflightFailures.push(`${toText(cert.name) || '이름 없음'}:${normalizedStoragePath}:${message}`);
         }
       }
       recovered.push({
@@ -190,6 +204,12 @@ export async function generateV2PdfBlob(certificate: Certificate, storage: Fireb
     });
     normalizedProducts[0].inspectionCertificates = dedupedFallback;
     normalizedProducts[0].inspectionCertificate = dedupedFallback[0];
+  }
+
+  if (preflightFailures.length > 0) {
+    throw new Error(
+      `첨부 사전검증 실패 ${preflightFailures.length}건: ${preflightFailures.slice(0, 3).join(' | ')}`
+    );
   }
 
   const normalizedDate = normalizeDateValue(mtc.dateOfIssue);

@@ -860,8 +860,8 @@ export default function AdminCertificatePage() {
 
         const pdfBlob = await withTimeout(
           generateV2PdfBlob(latestCertificate),
-          60000,
-          'PDF 생성 타임아웃(60초): 첨부 파일 읽기 또는 병합이 지연되고 있습니다.'
+          180000,
+          'PDF 생성 타임아웃(180초): 첨부 파일 읽기 또는 병합이 지연되고 있습니다.'
         );
         const blobUrl = URL.createObjectURL(pdfBlob);
         if (previewWindow) {

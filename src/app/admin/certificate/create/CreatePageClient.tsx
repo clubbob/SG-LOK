@@ -1298,7 +1298,31 @@ export const generatePDFBlobWithProducts = async (
                   } catch (retryProxyError) {
                     const retryMsg = retryProxyError instanceof Error ? retryProxyError.message : String(retryProxyError);
                     appendFailureReason(`storage-proxy 재시도 실패: ${retryMsg}`);
-                    throw new Error(`storage-proxy 실패: ${proxyMsg}; 재시도 실패: ${retryMsg}`);
+                    const proxyDecodeIssue =
+                      proxyMsg.includes('DECODER routines::unsupported') ||
+                      retryMsg.includes('DECODER routines::unsupported');
+                    if (proxyDecodeIssue) {
+                      // 서버 Admin 키 해석 실패로 proxy가 깨진 경우, 클라이언트 SDK 경로로 우회
+                      console.warn('[PDF 생성] storage-proxy 키 해석 오류 감지, getBlob 우회 경로 사용');
+                      appendFailureReason('storage-proxy 키 해석 오류 감지, getBlob 우회');
+                      try {
+                        blob = await withTimeout(
+                          getBlob(storageRef),
+                          45000,
+                          'getBlob 타임아웃 (45초)'
+                        );
+                      } catch (firstBlobError) {
+                        const firstMsg = firstBlobError instanceof Error ? firstBlobError.message : String(firstBlobError);
+                        appendFailureReason(`getBlob 1차 실패: ${firstMsg}`);
+                        blob = await withTimeout(
+                          getBlob(storageRef),
+                          60000,
+                          'getBlob 타임아웃 (60초)'
+                        );
+                      }
+                    } else {
+                      throw new Error(`storage-proxy 실패: ${proxyMsg}; 재시도 실패: ${retryMsg}`);
+                    }
                   }
                 } else {
                   blob = await withTimeout(

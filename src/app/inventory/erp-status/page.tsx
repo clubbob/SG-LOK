@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Header, Footer } from "@/components/layout";
 import { useAuth } from "@/hooks/useAuth";
-import { ErpInventoryStatusView } from "@/app/admin/inventory/erp-status/page";
+import ErpInventoryStatusView from "@/components/inventory/ErpInventoryStatusView";
 
 export default function UserErpInventoryStatusPage() {
   const { isAuthenticated, loading } = useAuth();

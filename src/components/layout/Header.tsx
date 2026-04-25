@@ -307,6 +307,13 @@ export default function Header() {
                           재고관리 메인
                         </Link>
                         <Link
+                          href="/inventory/erp-status"
+                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
+                          onClick={() => setIsInventoryMenuOpen(false)}
+                        >
+                          재고 현황
+                        </Link>
+                        <Link
                           href="/inventory/status"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
                           onClick={() => setIsInventoryMenuOpen(false)}
@@ -688,13 +695,26 @@ export default function Header() {
               <Link
                 href="/inventory"
                 className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
-                  isActivePath('/inventory') && !isActivePath('/inventory/status')
+                  isActivePath('/inventory') &&
+                  !isActivePath('/inventory/status') &&
+                  !isActivePath('/inventory/erp-status')
                     ? 'bg-blue-700 text-white'
                     : 'text-white/95 hover:bg-blue-600'
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 재고관리 메인
+              </Link>
+              <Link
+                href="/inventory/erp-status"
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
+                  isActivePath('/inventory/erp-status')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white/95 hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                재고 현황
               </Link>
               <Link
                 href="/inventory/status"

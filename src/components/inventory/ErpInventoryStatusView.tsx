@@ -20,12 +20,17 @@ type ErpInventoryStatusViewProps = {
 
 export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInventoryStatusViewProps) {
   const PAGE_SIZE = 100;
+  type StockStatus = "정상" | "부족" | "재고 없음" | "미집계";
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [erpData, setErpData] = useState<ErpInventoryDoc | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | StockStatus>("all");
   const [page, setPage] = useState(1);
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     const inventoryRef = doc(db, "inventory", ERP_INVENTORY_MASTER_DOC);
@@ -35,20 +40,24 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
         if (!snapshot.exists()) {
           setErpData(null);
           setLoading(false);
+          setIsRefreshing(false);
           return;
         }
         setErpData(snapshot.data() as ErpInventoryDoc);
         setLoading(false);
+        setIsRefreshing(false);
+        setLastRefreshedAt(new Date());
         setErrorMessage("");
       },
       (error) => {
         console.error("ERP 재고 현황 조회 오류:", error);
         setErrorMessage("ERP 재고 현황을 불러오지 못했습니다.");
         setLoading(false);
+        setIsRefreshing(false);
       }
     );
     return () => unsubscribe();
-  }, []);
+  }, [refreshTick]);
 
   const headers = useMemo(() => {
     if (Array.isArray(erpData?.headers) && erpData.headers.length > 0) {
@@ -59,7 +68,7 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
     return Object.keys(firstRow);
   }, [erpData]);
 
-  const previewRows = useMemo(() => {
+  const searchedRows = useMemo(() => {
     if (!Array.isArray(erpData?.rows)) return [];
     const normalizedQuery = searchQuery.trim().toLowerCase();
     if (!normalizedQuery) return erpData.rows;
@@ -68,6 +77,39 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
       headers.some((header) => String(row[header] ?? "").toLowerCase().includes(normalizedQuery))
     );
   }, [erpData, headers, searchQuery]);
+
+  const getStockStatus = (row: Record<string, string>): StockStatus => {
+    const raw = String(
+      row["현재고"] ?? row["재고"] ?? row["currentStock"] ?? row["stockQty"] ?? ""
+    ).trim();
+    if (!raw) return "미집계";
+    const parsed = Number(raw.replace(/,/g, ""));
+    if (Number.isNaN(parsed)) return "미집계";
+    if (parsed <= 0) return "재고 없음";
+    if (parsed < 10) return "부족";
+    return "정상";
+  };
+
+  const summary = useMemo(() => {
+    const all = searchedRows.length;
+    let normal = 0;
+    let low = 0;
+    let empty = 0;
+    let unknown = 0;
+    searchedRows.forEach((row) => {
+      const status = getStockStatus(row);
+      if (status === "정상") normal += 1;
+      else if (status === "부족") low += 1;
+      else if (status === "재고 없음") empty += 1;
+      else unknown += 1;
+    });
+    return { all, normal, low, empty, unknown };
+  }, [searchedRows]);
+
+  const previewRows = useMemo(() => {
+    if (statusFilter === "all") return searchedRows;
+    return searchedRows.filter((row) => getStockStatus(row) === statusFilter);
+  }, [searchedRows, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(previewRows.length / PAGE_SIZE));
   const effectivePage = Math.min(page, totalPages);
@@ -81,7 +123,7 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
 
   useEffect(() => {
     setPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, statusFilter]);
 
   useEffect(() => {
     setSelectedRowIndex(null);
@@ -126,14 +168,30 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
           : "bg-gray-100 text-gray-700";
 
   const tableHeaders = useMemo(() => {
-    if (headers.includes("현재고")) return headers;
-    return [...headers, "현재고"];
+    const base = headers.includes("현재고") ? headers : [...headers, "현재고"];
+    return base.includes("재고상태") ? base : [...base, "재고상태"];
   }, [headers]);
 
   const getCurrentStockFromRow = (row: Record<string, string>) => {
     return getRowValue(row, ["현재고", "재고", "currentStock", "stockQty"]) || "미집계";
   };
+
+  const getStatusBadgeClass = (status: StockStatus) => {
+    if (status === "정상") return "bg-emerald-100 text-emerald-700";
+    if (status === "부족") return "bg-amber-100 text-amber-700";
+    if (status === "재고 없음") return "bg-rose-100 text-rose-700";
+    return "bg-gray-100 text-gray-700";
+  };
   const showExtendedDetails = !isLimitedView;
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setRefreshTick((prev) => prev + 1);
+  };
+  const lastRefreshedLabel = lastRefreshedAt
+    ? `${String(lastRefreshedAt.getHours()).padStart(2, "0")}:${String(
+        lastRefreshedAt.getMinutes()
+      ).padStart(2, "0")}:${String(lastRefreshedAt.getSeconds()).padStart(2, "0")}`
+    : "-";
 
   if (loading) {
     return (
@@ -164,12 +222,37 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
 
   return (
     <div className="p-6 sm:p-8">
-      <div className="mb-5">
-        <h1 className="text-2xl font-bold text-gray-900">재고 현황</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          UHP와 분리된 ERP 제품 기준 전사 재고 현황 화면입니다.
-        </p>
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">재고 현황</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            UHP와 분리된 ERP 제품 기준 전사 재고 현황 화면입니다.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm transition-colors hover:bg-gray-50 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <svg
+            className={`h-4 w-4 text-gray-600 ${isRefreshing ? "animate-spin" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9M20 20v-5h-.581m-15.357-2a8.003 8.003 0 0 0 15.357 2"
+            />
+          </svg>
+          {isRefreshing ? "불러오는 중…" : "새로고침"}
+        </button>
       </div>
+      <p className="mb-3 text-xs text-gray-500">최근 새로고침: {lastRefreshedLabel}</p>
 
       <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
         <label htmlFor="erp-inventory-search" className="mb-2 block text-sm font-semibold text-blue-900">
@@ -202,6 +285,58 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
         </div>
       </div>
 
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="rounded-lg border border-gray-200 bg-white p-3">
+          <p className="text-xs text-gray-500">전체 품목</p>
+          <p className="mt-1 text-lg font-semibold text-gray-900">{summary.all}</p>
+        </div>
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+          <p className="text-xs text-emerald-700">정상</p>
+          <p className="mt-1 text-lg font-semibold text-emerald-800">{summary.normal}</p>
+        </div>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs text-amber-700">부족</p>
+          <p className="mt-1 text-lg font-semibold text-amber-800">{summary.low}</p>
+        </div>
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3">
+          <p className="text-xs text-rose-700">재고 없음</p>
+          <p className="mt-1 text-lg font-semibold text-rose-800">{summary.empty}</p>
+        </div>
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <p className="text-xs text-gray-600">미집계</p>
+          <p className="mt-1 text-lg font-semibold text-gray-800">{summary.unknown}</p>
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-gray-600">재고 상태 필터</span>
+          {[
+            { key: "all", label: "전체" },
+            { key: "정상", label: "정상" },
+            { key: "부족", label: "부족" },
+            { key: "재고 없음", label: "재고 없음" },
+            { key: "미집계", label: "미집계" },
+          ].map((filter) => {
+            const active = statusFilter === filter.key;
+            return (
+              <button
+                key={filter.key}
+                type="button"
+                onClick={() => setStatusFilter(filter.key as "all" | StockStatus)}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  active
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                {filter.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
         <div className="border-b border-gray-100 px-4 py-3">
           <p className="text-sm font-semibold text-gray-900">ERP 등록 데이터 목록</p>
@@ -228,7 +363,17 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
                   >
                     {tableHeaders.map((header) => (
                       <td key={`${index}-${header}`} className="whitespace-nowrap border-b border-gray-100 px-3 py-2 text-gray-700">
-                        {header === "현재고" ? getCurrentStockFromRow(row) : row[header] || "-"}
+                        {header === "현재고" ? getCurrentStockFromRow(row) : null}
+                        {header === "재고상태" ? (
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeClass(
+                              getStockStatus(row)
+                            )}`}
+                          >
+                            {getStockStatus(row)}
+                          </span>
+                        ) : null}
+                        {header !== "현재고" && header !== "재고상태" ? row[header] || "-" : null}
                       </td>
                     ))}
                   </tr>

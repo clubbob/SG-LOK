@@ -1,24 +1,10 @@
 "use client";
 
 import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import {
-  InventoryScannerView,
-  type ScannerMode,
-} from "@/components/inventory/InventoryScannerView";
+import { InventoryScannerView } from "@/components/inventory/InventoryScannerView";
 
 function AdminInventoryScanInner() {
-  const sp = useSearchParams();
-  const m = sp.get("mode");
-  const initial: ScannerMode | undefined =
-    m === "in"
-      ? "in"
-      : m === "out"
-        ? "out"
-      : m === "production" || m === "prod"
-        ? "production"
-        : undefined;
-  return <InventoryScannerView initialMode={initial} />;
+  return <InventoryScannerView />;
 }
 
 export default function AdminInventoryScanPage() {

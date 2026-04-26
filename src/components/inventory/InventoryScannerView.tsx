@@ -39,9 +39,9 @@ const MODE_LABELS: Record<ScannerMode, string> = {
   production: "생산",
 };
 const MODE_ACTIVE_CLASS: Record<ScannerMode, string> = {
-  in: "bg-emerald-600 text-white ring-2 ring-emerald-300 shadow-sm",
-  out: "bg-rose-600 text-white ring-2 ring-rose-300 shadow-sm",
-  production: "bg-indigo-600 text-white ring-2 ring-indigo-300 shadow-sm",
+  in: "border-emerald-700 bg-emerald-600 text-white shadow-md ring-2 ring-emerald-200",
+  out: "border-rose-700 bg-rose-600 text-white shadow-md ring-2 ring-rose-200",
+  production: "border-indigo-700 bg-indigo-600 text-white shadow-md ring-2 ring-indigo-200",
 };
 
 function escapeRegExp(s: string) {
@@ -156,12 +156,8 @@ function compareProducts(a: InventoryProduct, b: InventoryProduct) {
   return (a.code || "").localeCompare(b.code || "", "ko", { numeric: true });
 }
 
-export function InventoryScannerView({
-  initialMode,
-}: {
-  initialMode?: ScannerMode;
-}) {
-  const [mode, setMode] = useState<ScannerMode | null>(initialMode ?? null);
+export function InventoryScannerView() {
+  const [mode, setMode] = useState<ScannerMode | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [products, setProducts] = useState<InventoryProduct[]>([]);
@@ -181,10 +177,6 @@ export function InventoryScannerView({
   const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const displayedRowsRef = useRef<InventoryProduct[]>([]);
   const prevQueryRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    setMode(initialMode ?? null);
-  }, [initialMode]);
 
   useEffect(() => {
     const inventoryRef = doc(db, "inventory", ERP_INVENTORY_MASTER_DOC);
@@ -435,6 +427,46 @@ export function InventoryScannerView({
         </div>
       ) : null}
 
+      <div className="mb-4 rounded-xl border-2 border-gray-300 bg-white p-4 shadow-sm">
+        <p className="mb-3 text-base font-extrabold tracking-tight text-gray-900">처리 유형 선택</p>
+        <div className="grid grid-cols-1 gap-3 rounded-xl bg-gray-100 p-3 sm:grid-cols-3">
+          {(["in", "out", "production"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => {
+                setMode(m);
+                setSubmitError("");
+              }}
+              className={`h-16 w-full rounded-xl border-2 px-4 text-xl font-extrabold leading-none transition-all ${
+                mode === m
+                  ? MODE_ACTIVE_CLASS[m]
+                  : "border-gray-400 bg-white text-gray-900 hover:bg-gray-200"
+              }`}
+              aria-pressed={mode === m}
+            >
+              <span className="inline-flex items-center justify-center">{MODE_LABELS[m]}</span>
+            </button>
+          ))}
+        </div>
+        {mode ? (
+          <p className="mt-2 text-xs text-gray-700">
+            현재 선택:{" "}
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${
+                mode === "in"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : mode === "out"
+                    ? "bg-rose-100 text-rose-800"
+                    : "bg-indigo-100 text-indigo-800"
+              }`}
+            >
+              {MODE_LABELS[mode]}
+            </span>
+          </p>
+        ) : null}
+      </div>
+
       <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
         <label htmlFor="inventory-product-search" className="mb-2 block text-sm font-semibold text-blue-900">
           제품 검색
@@ -609,49 +641,6 @@ export function InventoryScannerView({
 
       <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="text-base font-semibold text-gray-900">처리 입력</h2>
-        <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-1">
-          <div className="flex gap-1">
-            {(["in", "out", "production"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setMode(m);
-                  setSubmitError("");
-                }}
-                className={`flex-1 rounded-md px-2 py-2 text-sm font-semibold transition-colors ${
-                  mode === m ? MODE_ACTIVE_CLASS[m] : "text-gray-600 hover:bg-white hover:text-gray-900"
-                }`}
-                aria-pressed={mode === m}
-              >
-                <span className="inline-flex items-center gap-1.5">
-                  {mode === m ? <span aria-hidden>●</span> : <span aria-hidden>○</span>}
-                  {MODE_LABELS[m]}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-        {!mode ? (
-          <p className="mt-2 text-xs text-amber-700">
-            먼저 처리 유형(입고/출고/생산)을 선택해야 처리에 추가할 수 있습니다.
-          </p>
-        ) : (
-          <p className="mt-2 text-xs text-gray-700">
-            현재 선택:{" "}
-            <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${
-                mode === "in"
-                  ? "bg-emerald-100 text-emerald-800"
-                  : mode === "out"
-                    ? "bg-rose-100 text-rose-800"
-                    : "bg-indigo-100 text-indigo-800"
-              }`}
-            >
-              {MODE_LABELS[mode]}
-            </span>
-          </p>
-        )}
         {selectedProduct ? (
           <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-700">
             <p className="text-sm font-semibold leading-snug text-gray-900">

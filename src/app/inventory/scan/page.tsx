@@ -1,26 +1,13 @@
 "use client";
 
 import { Suspense, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Header, Footer } from "@/components/layout";
 import { useAuth } from "@/hooks/useAuth";
-import {
-  InventoryScannerView,
-  type ScannerMode,
-} from "@/components/inventory/InventoryScannerView";
+import { InventoryScannerView } from "@/components/inventory/InventoryScannerView";
 
 function InventoryScanInner() {
-  const sp = useSearchParams();
-  const m = sp.get("mode");
-  const initial: ScannerMode | undefined =
-    m === "in"
-      ? "in"
-      : m === "out"
-        ? "out"
-      : m === "production" || m === "prod"
-        ? "production"
-        : undefined;
-  return <InventoryScannerView initialMode={initial} />;
+  return <InventoryScannerView />;
 }
 
 export default function InventoryScanPage() {

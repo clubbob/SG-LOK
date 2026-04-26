@@ -314,18 +314,18 @@ export default function Header() {
                           재고 현황
                         </Link>
                         <Link
-                          href="/inventory/status"
-                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsInventoryMenuOpen(false)}
-                        >
-                          UHP 재고현황
-                        </Link>
-                        <Link
                           href="/inventory/scan"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
                           onClick={() => setIsInventoryMenuOpen(false)}
                         >
                           바코드·QR 스캔
+                        </Link>
+                        <Link
+                          href="/inventory/status"
+                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
+                          onClick={() => setIsInventoryMenuOpen(false)}
+                        >
+                          UHP 재고현황
                         </Link>
                       </div>
                     </div>
@@ -725,17 +725,6 @@ export default function Header() {
                 재고 현황
               </Link>
               <Link
-                href="/inventory/status"
-                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
-                  isActivePath('/inventory/status')
-                    ? 'bg-blue-700 text-white'
-                    : 'text-white/95 hover:bg-blue-600'
-                }`}
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                UHP 재고현황
-              </Link>
-              <Link
                 href="/inventory/scan"
                 className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
                   isActivePath('/inventory/scan')
@@ -745,6 +734,17 @@ export default function Header() {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 바코드·QR 스캔
+              </Link>
+              <Link
+                href="/inventory/status"
+                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
+                  isActivePath('/inventory/status')
+                    ? 'bg-blue-700 text-white'
+                    : 'text-white/95 hover:bg-blue-600'
+                }`}
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                UHP 재고현황
               </Link>
 
               <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-blue-100/90">대리점관리</p>

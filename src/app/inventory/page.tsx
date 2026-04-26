@@ -80,6 +80,35 @@ export default function InventoryPage() {
                 </div>
               </div>
             </Link>
+
+            <Link href="/inventory/scan">
+              <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer border-2 border-transparent hover:border-emerald-500 md:col-span-2">
+                <div className="flex items-center gap-4">
+                  <div className="bg-emerald-100 rounded-lg p-3">
+                    <svg
+                      className="w-8 h-8 text-emerald-700"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">바코드·QR 스캔</h2>
+                    <p className="text-sm text-gray-600">
+                      입고·출고·생산 모드로 카메라 또는 수동 입력으로 코드를 읽습니다
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Link>
           </div>
 
           <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl shadow-lg p-8 mt-10">

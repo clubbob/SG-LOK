@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ChangeEvent, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { db } from '@/lib/firebase';
@@ -68,6 +68,9 @@ export default function AdminInventoryIndexPage() {
       .filter((row) => Object.values(row).some((value) => value.length > 0));
   };
 
+  const getItemCode = (row: Record<string, string>) =>
+    String(row['품목코드'] ?? row['제품코드'] ?? row['itemCode'] ?? row['code'] ?? '').trim();
+
   const handleUploadErpProducts = async () => {
     if (!selectedFile) {
       setExcelError('업로드할 ERP 엑셀 파일을 먼저 선택해 주세요.');
@@ -102,21 +105,82 @@ export default function AdminInventoryIndexPage() {
       });
 
       const inventoryRef = doc(db, 'inventory', ERP_INVENTORY_MASTER_DOC);
+      const existingSnap = await getDoc(inventoryRef);
+      const existingRowsRaw = existingSnap.exists()
+        ? ((existingSnap.data()?.rows as Array<Record<string, unknown>> | undefined) ?? [])
+        : [];
+      const existingRows: ExcelRow[] = existingRowsRaw.map((row) =>
+        Object.fromEntries(
+          Object.entries(row ?? {}).map(([k, v]) => [String(k), String(v ?? '').trim()])
+        )
+      );
+
+      const existingByCode = new Map<string, ExcelRow>();
+      existingRows.forEach((row) => {
+        const code = getItemCode(row);
+        if (!code) return;
+        existingByCode.set(code, row);
+      });
+
+      const uploadedByCode = new Map<string, ExcelRow>();
+      const codeLessRows: ExcelRow[] = [];
+      normalizedRows.forEach((row) => {
+        const code = getItemCode(row);
+        if (!code) {
+          codeLessRows.push(row);
+          return;
+        }
+        uploadedByCode.set(code, row);
+      });
+
+      const mergedRows: ExcelRow[] = [];
+      let updatedCount = 0;
+      let addedCount = 0;
+
+      uploadedByCode.forEach((uploadedRow, code) => {
+        const existingRow = existingByCode.get(code);
+        if (existingRow) {
+          mergedRows.push({ ...existingRow, ...uploadedRow });
+          updatedCount += 1;
+        } else {
+          mergedRows.push(uploadedRow);
+          addedCount += 1;
+        }
+      });
+
+      existingRows.forEach((row) => {
+        const code = getItemCode(row);
+        if (!code) return;
+        if (!uploadedByCode.has(code)) {
+          mergedRows.push(row);
+        }
+      });
+
+      mergedRows.push(...codeLessRows);
+
+      const mergedHeaderSet = new Set<string>();
+      mergedRows.forEach((row) => {
+        Object.keys(row).forEach((key) => mergedHeaderSet.add(key));
+      });
+
       await setDoc(
         inventoryRef,
         {
           source: 'erp_excel',
           sheetName: firstSheetName,
           fileName: selectedFile.name,
-          headers: Array.from(headerSet),
-          rows: normalizedRows,
-          rowCount: normalizedRows.length,
+          headers: Array.from(mergedHeaderSet.size > 0 ? mergedHeaderSet : headerSet),
+          rows: mergedRows,
+          rowCount: mergedRows.length,
+          uploadedRowCount: normalizedRows.length,
           updatedAt: serverTimestamp(),
         },
         { merge: true }
       );
 
-      setExcelSuccess(`ERP 품목 ${normalizedRows.length}건 등록이 완료되었습니다.`);
+      setExcelSuccess(
+        `ERP 업로드 ${normalizedRows.length}건 처리 완료 (품목코드 기준 갱신 ${updatedCount}건, 신규 ${addedCount}건).`
+      );
     } catch (error) {
       console.error('ERP 제품등록 오류:', error);
       const message = error instanceof Error ? error.message : 'ERP 제품등록 처리 중 오류가 발생했습니다.';
@@ -135,65 +199,36 @@ export default function AdminInventoryIndexPage() {
         </p>
       </div>
 
-      <div className="mb-5 rounded-lg border border-blue-100 bg-blue-50 p-4">
-        <h2 className="text-sm font-semibold text-blue-900">운영 목적</h2>
-        <p className="mt-1 text-sm text-blue-800">
-          제품군별 재고 흐름을 한 곳에서 확인하고, 품절/과재고를 예방하기 위한 기준 화면으로 사용합니다.
-        </p>
-      </div>
-
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <p className="text-xs font-medium text-gray-500">전체 제품군</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">집계 예정</p>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <p className="text-xs font-medium text-gray-500">오늘 입고</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">집계 예정</p>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <p className="text-xs font-medium text-gray-500">오늘 출고</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">집계 예정</p>
-        </div>
-        <div className="rounded-lg border border-gray-200 bg-white p-4">
-          <p className="text-xs font-medium text-gray-500">품절 위험 품목</p>
-          <p className="mt-1 text-lg font-semibold text-gray-900">집계 예정</p>
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-900">스캐너 작업 모드</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            작업자는 바코드/QR 스캔으로 입고, 출고, 생산 처리를 수행하고 수량은 실시간 반영합니다.
-          </p>
+          <h2 className="text-base font-semibold text-gray-900">스캔 처리 시작</h2>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <button
-              type="button"
-              className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 whitespace-nowrap"
+            <Link
+              href="/admin/inventory/scan?mode=in"
+              className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 whitespace-nowrap"
             >
               입고 스캔 시작
-            </button>
-            <button
-              type="button"
-              className="rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 whitespace-nowrap"
+            </Link>
+            <Link
+              href="/admin/inventory/scan?mode=out"
+              className="inline-flex items-center justify-center rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 whitespace-nowrap"
             >
               출고 스캔 시작
-            </button>
-            <button
-              type="button"
-              className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 whitespace-nowrap"
+            </Link>
+            <Link
+              href="/admin/inventory/scan?mode=production"
+              className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 whitespace-nowrap"
             >
               생산 스캔 시작
-            </button>
+            </Link>
           </div>
+          <p className="mt-3 text-xs text-gray-500">
+            버튼 클릭 시 해당 모드(입고/출고/생산)가 선택된 상태로 이동합니다.
+          </p>
         </div>
 
         <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-900">현재고/생산계획 통합 현황</h2>
-          <p className="text-sm text-gray-600 mt-1">
-            제품군, 창고, 로트 기준으로 현재고를 집계하고 웹에서 입력한 생산계획을 함께 관리합니다.
-          </p>
+          <h2 className="text-base font-semibold text-gray-900">조회/등록 바로가기</h2>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Link
               href="/admin/inventory/erp-status"
@@ -208,12 +243,7 @@ export default function AdminInventoryIndexPage() {
               생산계획 등록
             </Link>
           </div>
-          <ul className="mt-3 text-xs text-gray-600 space-y-1">
-            <li>최근 스캔 처리 순서와 작업자 이력을 함께 기록</li>
-            <li>입고/출고/생산 타입별 일일 처리량 집계</li>
-            <li>생산계획 입력은 웹 화면에서 등록/수정 후 스캔 처리와 연동</li>
-            <li>임계치 미만 품목 자동 표시(품절 위험)</li>
-          </ul>
+          <p className="mt-3 text-xs text-gray-500">재고 현황 확인 또는 생산요청 등록으로 바로 이동합니다.</p>
         </div>
       </div>
 
@@ -259,11 +289,9 @@ export default function AdminInventoryIndexPage() {
         {excelSuccess ? <p className="mt-2 text-xs text-emerald-700">{excelSuccess}</p> : null}
       </div>
 
-      <div className="mt-5 rounded-lg border border-dashed border-gray-300 bg-white p-4">
-        <p className="text-xs text-gray-600">
-          이 페이지는 UHP 재고관리 화면과 분리되며, 스캐너 기반 입고/출고 처리와 웹 기반 생산계획 입력의 기준 화면입니다.
-        </p>
-      </div>
+      <p className="mt-4 text-xs text-gray-500">
+        운영 팁: 신규 제품 업로드 후 상단 스캔 처리에서 바로 입고/출고 작업을 시작할 수 있습니다.
+      </p>
     </div>
   );
 }

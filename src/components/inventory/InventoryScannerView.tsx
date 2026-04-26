@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { db } from "@/lib/firebase";
-import { doc, onSnapshot } from "firebase/firestore";
+import { addDoc, collection, doc, onSnapshot, runTransaction, serverTimestamp } from "firebase/firestore";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 export type ScannerMode = "in" | "out" | "production";
@@ -80,6 +80,58 @@ function readFirst(row: Record<string, string>, keys: string[]) {
   return "";
 }
 
+function getRowCode(row: Record<string, string>) {
+  return readFirst(row, ["품목코드", "제품코드", "itemCode", "code"]);
+}
+
+function getStockField(row: Record<string, string>) {
+  if ("현재고" in row) return "현재고";
+  if ("재고" in row) return "재고";
+  if ("currentStock" in row) return "currentStock";
+  if ("stockQty" in row) return "stockQty";
+  return "현재고";
+}
+
+function parseStockNumber(raw: string) {
+  const parsed = Number(String(raw ?? "").replace(/,/g, "").trim());
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeSpecToken(token: string) {
+  const cleaned = token.toLowerCase().trim();
+  if (!cleaned) return "";
+  return cleaned.replace(/^0+(?=\d)/, "");
+}
+
+function parseSpecTokens(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .map(normalizeSpecToken);
+}
+
+function matchesSegmentedPrefix(value: string, queryValue: string) {
+  const valueTokens = parseSpecTokens(value);
+  const queryTokens = parseSpecTokens(queryValue);
+  if (queryTokens.length === 0) return true;
+  if (valueTokens.length < queryTokens.length) return false;
+
+  for (let i = 0; i < queryTokens.length; i += 1) {
+    const q = queryTokens[i];
+    const v = valueTokens[i] ?? "";
+    if (!q) return false;
+    const isLast = i === queryTokens.length - 1;
+    if (isLast) {
+      if (!v.startsWith(q)) return false;
+    } else if (v !== q) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function mapProducts(rows: Array<Record<string, string>>): InventoryProduct[] {
   return rows
     .map((row, index) => {
@@ -123,6 +175,8 @@ export function InventoryScannerView({
 
   const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [submitError, setSubmitError] = useState("");
+  const [submitSuccess, setSubmitSuccess] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const rowRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const displayedRowsRef = useRef<InventoryProduct[]>([]);
@@ -166,10 +220,13 @@ export function InventoryScannerView({
     if (terms.length > 0) {
       const [familyTerm, ...detailTerms] = terms;
       matched = matched.filter((product) => {
+        const nameKey = product.name.trim().toLowerCase();
+        const codeKey = product.code.trim().toLowerCase();
         const familyMatched =
           product.familyKey === familyTerm ||
           product.familyKey.startsWith(familyTerm) ||
-          product.searchText.includes(familyTerm);
+          nameKey.startsWith(familyTerm) ||
+          codeKey.startsWith(familyTerm);
         if (!familyMatched) return false;
         if (detailTerms.length === 0) return true;
         return detailTerms.every((term) => product.searchText.includes(term));
@@ -179,11 +236,8 @@ export function InventoryScannerView({
     const beforeSubFilter = [...matched];
     const sub = subQuery.trim().toLowerCase();
     if (sub) {
-      const normalizedSub = sub.replace(/\s+/g, "");
       matched = matched.filter((product) => {
-        const specKey = product.spec.replace(/\s+/g, "").toLowerCase();
-        const codeKey = product.code.replace(/\s+/g, "").toLowerCase();
-        return specKey.startsWith(normalizedSub) || codeKey.startsWith(normalizedSub);
+        return matchesSegmentedPrefix(product.spec, sub) || matchesSegmentedPrefix(product.code, sub);
       });
     }
 
@@ -194,9 +248,7 @@ export function InventoryScannerView({
           .filter(Boolean)
           .map((spec) => spec.split(/\s+/)[0])
       )
-    )
-      .sort((a, b) => a.localeCompare(b, "ko", { numeric: true }))
-      .slice(0, 18);
+    ).sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
 
     matched.sort(compareProducts);
     const totalMatched = matched.length;
@@ -253,8 +305,10 @@ export function InventoryScannerView({
     }
   }, [navIndex]);
 
-  const submitAction = () => {
+  const submitAction = async () => {
     setSubmitError("");
+    setSubmitSuccess("");
+    if (isSubmitting) return;
     if (!mode) {
       setSubmitError("처리 유형(입고/출고/생산)을 먼저 선택해 주세요.");
       return;
@@ -274,147 +328,191 @@ export function InventoryScannerView({
       return;
     }
 
-    const next: PendingAction = {
-      at: Date.now(),
-      mode,
-      quantity,
-      note: noteInput.trim(),
-      product: selectedProduct,
-    };
+    setIsSubmitting(true);
+    try {
+      const inventoryRef = doc(db, "inventory", ERP_INVENTORY_MASTER_DOC);
+      let nextStock = 0;
 
-    setPendingActions((prev) => [next, ...prev].slice(0, 30));
-    setQuantityInput("");
-    setNoteInput("");
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(inventoryRef);
+        if (!snap.exists()) {
+          throw new Error("ERP 재고 마스터 문서를 찾을 수 없습니다.");
+        }
+        const data = snap.data() as ErpInventoryDoc;
+        const rows = Array.isArray(data.rows)
+          ? data.rows.map((row) =>
+              Object.fromEntries(
+                Object.entries(row ?? {}).map(([k, v]) => [String(k), String(v ?? "").trim()])
+              )
+            )
+          : [];
+
+        const targetIndex = rows.findIndex((row) => getRowCode(row) === selectedProduct.code);
+        if (targetIndex < 0) {
+          throw new Error(`품목코드 ${selectedProduct.code || "-"} 행을 찾지 못했습니다.`);
+        }
+
+        const currentRow = rows[targetIndex];
+        const stockField = getStockField(currentRow);
+        const currentStock = parseStockNumber(currentRow[stockField] ?? "");
+        const delta = mode === "out" ? -quantity : quantity;
+        nextStock = Math.max(0, currentStock + delta);
+        rows[targetIndex] = { ...currentRow, [stockField]: String(nextStock) };
+
+        tx.set(
+          inventoryRef,
+          {
+            rows,
+            rowCount: rows.length,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      });
+
+      let transactionLogFailed = false;
+      try {
+        await addDoc(collection(db, "inventoryTransactions"), {
+          mode,
+          quantity,
+          note: noteInput.trim(),
+          code: selectedProduct.code,
+          name: selectedProduct.name,
+          spec: selectedProduct.spec,
+          createdAt: serverTimestamp(),
+        });
+      } catch (logError) {
+        transactionLogFailed = true;
+        console.warn("inventoryTransactions 이력 저장 실패(재고 반영은 완료):", logError);
+      }
+
+      const next: PendingAction = {
+        at: Date.now(),
+        mode,
+        quantity,
+        note: noteInput.trim(),
+        product: selectedProduct,
+      };
+
+      setPendingActions((prev) => [next, ...prev].slice(0, 30));
+      setQuantityInput("");
+      setNoteInput("");
+      setSubmitSuccess(
+        `${MODE_LABELS[mode]} 처리 완료: ${selectedProduct.name || "품목명 없음"} (${selectedProduct.code || "-"}) x ${quantity} · 현재고 ${nextStock}${
+          transactionLogFailed ? " (이력 저장 권한 없음)" : ""
+        }`
+      );
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "처리 중 오류가 발생했습니다.";
+      setSubmitError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-6 sm:px-6">
+      <div className="p-6 sm:p-8">
         <p className="text-sm text-gray-600">제품 목록을 불러오는 중...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 sm:px-6">
-      <h1 className="text-xl font-bold text-gray-900">제품 선택 처리</h1>
-      <p className="mt-1 text-sm text-gray-600">
-        바코드 북 없이 제품을 검색해서 선택한 뒤, 입고/출고/생산 처리 수량을 입력하세요.
-      </p>
-
-      <div className="mt-4 flex rounded-lg border border-gray-200 bg-gray-50 p-1">
-        {(["in", "out", "production"] as const).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => {
-              setMode(m);
-              setSubmitError("");
-            }}
-            className={`flex-1 rounded-md px-2 py-2 text-sm font-semibold transition-colors ${
-              mode === m ? MODE_ACTIVE_CLASS[m] : "text-gray-600 hover:text-gray-900 hover:bg-white"
-            }`}
-            aria-pressed={mode === m}
-          >
-            <span className="inline-flex items-center gap-1.5">
-              {mode === m ? <span aria-hidden>●</span> : <span aria-hidden>○</span>}
-              {MODE_LABELS[m]}
-            </span>
-          </button>
-        ))}
+    <div className="p-6 sm:p-8">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">바코드 QR 스캔</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            제품 검색 후 선택하여 입고/출고/생산 처리를 진행합니다.
+          </p>
+        </div>
       </div>
-      {!mode ? (
-        <p className="mt-2 text-xs text-amber-700">
-          먼저 처리 유형(입고/출고/생산)을 선택해야 처리에 추가할 수 있습니다.
-        </p>
-      ) : (
-        <p className="mt-2 text-xs text-gray-700">
-          현재 선택:{" "}
-          <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${
-              mode === "in"
-                ? "bg-emerald-100 text-emerald-800"
-                : mode === "out"
-                  ? "bg-rose-100 text-rose-800"
-                  : "bg-indigo-100 text-indigo-800"
-            }`}
-          >
-            {MODE_LABELS[mode]}
-          </span>
-        </p>
-      )}
 
       {loadError ? (
-        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {loadError}
         </div>
       ) : null}
 
-      <div className="mt-5 rounded-lg border border-gray-200 bg-white p-4">
-        <label htmlFor="inventory-product-search" className="text-sm font-semibold text-gray-800">
+      <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+        <label htmlFor="inventory-product-search" className="mb-2 block text-sm font-semibold text-blue-900">
           제품 검색
         </label>
-        <input
-          id="inventory-product-search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={onSearchKeyDown}
-          className="mt-2 w-full rounded-md border border-gray-300 px-3 py-2.5 text-base sm:text-sm"
-          placeholder="품목코드 / 품목명 / 규격 (예: gmc 10-08)"
-          autoComplete="off"
-        />
-        <div className="mt-2 rounded-md border border-gray-200 bg-gray-50 p-2.5">
-          <div className="flex items-center gap-2">
+        <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-[34ch_22ch_max-content] md:justify-start">
+          <div className="relative">
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-blue-500">
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.85-5.15a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+              </svg>
+            </span>
+            <input
+              id="inventory-product-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={onSearchKeyDown}
+              className="w-full rounded-md border border-blue-300 bg-white py-2.5 pl-10 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              placeholder="품목명/코드/규격 검색"
+              autoComplete="off"
+            />
+            {query.trim().length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="absolute inset-y-0 right-2 my-auto inline-flex h-7 w-7 items-center justify-center rounded text-gray-400 hover:bg-white hover:text-gray-700"
+                aria-label="검색어 지우기"
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
+          <div className="relative">
+            <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-blue-500">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h10M7 12h10M7 17h6" />
+              </svg>
+            </span>
             <input
               value={subQuery}
               onChange={(event) => setSubQuery(event.target.value)}
               disabled={!query.trim()}
-              className="w-full rounded-md border border-gray-300 bg-white px-2.5 py-2 text-sm disabled:bg-gray-100 disabled:text-gray-400"
-              placeholder="2차 필터: 규격/서브코드 (예: 06M-08R)"
+              className="w-full rounded-md border border-blue-300 bg-white py-2.5 pl-9 pr-9 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-400"
+              placeholder="규격/코드 검색"
               autoComplete="off"
             />
-            {subQuery ? (
-              <button
-                type="button"
-                onClick={() => setSubQuery("")}
-                className="shrink-0 rounded-md border border-gray-300 bg-white px-2 py-2 text-xs text-gray-700 hover:bg-gray-100"
-              >
-                초기화
-              </button>
-            ) : null}
+            <button
+              type="button"
+              onClick={() => setSubQuery("")}
+              disabled={subQuery.trim().length === 0}
+              className="absolute inset-y-0 right-2 my-auto inline-flex h-7 w-7 items-center justify-center rounded text-gray-400 hover:bg-white hover:text-gray-700 disabled:cursor-default disabled:opacity-40"
+              aria-label="코드 검색어 지우기"
+            >
+              ×
+            </button>
           </div>
-          {!query.trim() ? (
-            <p className="mt-2 text-xs text-gray-500">먼저 1단계 계열 코드(예: gmc)를 입력하세요.</p>
-          ) : subCodeHints.length > 0 ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {subCodeHints.map((hint) => (
-                <button
-                  key={hint}
-                  type="button"
-                  onClick={() => setSubQuery(hint)}
-                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                    subQuery.toLowerCase() === hint.toLowerCase()
-                      ? "border-blue-300 bg-blue-50 text-blue-700"
-                      : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
-                  }`}
-                >
-                  {hint}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setSubQuery("");
+              setSelectedProductId("");
+              setSubmitError("");
+              setSubmitSuccess("");
+            }}
+            className="inline-flex shrink-0 items-center justify-center rounded-md border border-blue-300 bg-white px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+          >
+            검색 초기화
+          </button>
         </div>
-        <p className="mt-1.5 text-xs text-gray-500">
-          1단계: 계열 코드(예: <span className="font-medium text-gray-700">gmc</span>) · 2단계: 규격(예:{" "}
-          <span className="font-medium text-gray-700">10-08</span>)으로 좁혀 주세요. 목록에서{" "}
-          <span className="font-medium text-gray-700">↑↓</span> 이동,{" "}
-          <span className="font-medium text-gray-700">Enter</span>로 선택합니다.
-        </p>
 
-        {hasPrimaryQuery && displayedRows.length > 0 ? (
-          <p className="mt-2 text-xs text-gray-600">
-            {query.trim() ? (
-              <>
+        {!query.trim() ? (
+          <div className="mt-2 rounded-md border border-dashed border-blue-300 bg-white/60 px-3 py-8 text-center text-sm text-gray-500">
+            1차 검색어를 입력하면 제품 목록이 표시됩니다.
+          </div>
+        ) : (
+          <>
+            {hasPrimaryQuery && displayedRows.length > 0 ? (
+              <p className="mt-2 text-xs text-gray-600">
                 일치 <span className="font-semibold text-gray-900">{totalMatched}</span>건
                 {subQuery.trim() ? (
                   <span className="text-blue-700"> · 2차 필터: {subQuery.trim()}</span>
@@ -422,92 +520,140 @@ export function InventoryScannerView({
                 {isTruncated ? (
                   <>
                     {" "}
-                    · 표시 <span className="font-semibold">{cap}</span>건까지 (더 좁히면 찾기 쉬워요)
+                    · 표시 <span className="font-semibold">{cap}</span>건까지
                   </>
                 ) : null}
-              </>
-            ) : (
-              <>
-                검색어 없음 · 미리보기 <span className="font-semibold">{displayedRows.length}</span>건 / 전체{" "}
-                <span className="font-semibold">{totalMatched}</span>건
-                {totalMatched > cap ? (
-                  <span className="text-amber-700"> · 전체는 검색으로 좁혀 주세요</span>
-                ) : null}
-              </>
-            )}
-          </p>
-        ) : null}
+              </p>
+            ) : null}
 
-        {!hasPrimaryQuery ? (
-          <div className="mt-2 rounded-md border border-dashed border-gray-300 bg-gray-50 px-3 py-10 text-center text-sm text-gray-500">
-            1차 검색어를 입력하면 제품 목록이 표시됩니다.
-          </div>
-        ) : (
-          <div className="mt-2 max-h-[min(58vh,520px)] overflow-y-auto rounded-md border border-gray-200">
-            {displayedRows.length === 0 ? (
-              <p className="px-3 py-8 text-center text-sm text-gray-500">검색 결과가 없습니다.</p>
-            ) : (
-            <ul className="divide-y divide-gray-100">
-              {displayedRows.map((product, index) => {
-                const selected = selectedProductId === product.id;
-                const keyboardHere = navIndex === index;
-                return (
-                  <li key={product.id}>
-                    <button
-                      type="button"
-                      id={`inv-scan-row-${index}`}
-                      ref={(el) => {
-                        rowRefs.current[index] = el;
-                      }}
-                      onClick={() => {
-                        setNavIndex(index);
-                        setSelectedProductId(product.id);
-                      }}
-                      className={[
-                        "flex w-full gap-3 px-3 py-3.5 text-left transition-colors min-h-[4.25rem] items-start",
-                        selected ? "bg-blue-50" : "bg-white hover:bg-gray-50",
-                        keyboardHere && !selected ? "ring-2 ring-inset ring-amber-300" : "",
-                        keyboardHere && selected ? "ring-2 ring-inset ring-blue-400" : "",
-                      ].join(" ")}
-                      title={`${product.code || ""} ${product.name || ""} ${product.spec || ""}`.trim()}
-                    >
-                      <span className="mt-0.5 w-7 shrink-0 text-right text-xs font-medium tabular-nums text-gray-400">
-                        {index + 1}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <p className="text-[15px] font-semibold leading-snug text-gray-900 sm:text-sm line-clamp-2">
-                          <HighlightMatch text={product.name || "(품목명 없음)"} needle={query} />
-                          {product.spec ? (
-                            <span className="text-gray-800">
-                              {" "}
-                              · <HighlightMatch text={product.spec} needle={query} />
-                            </span>
-                          ) : (
-                            <span className="text-gray-400 font-normal"> · (규격 없음)</span>
-                          )}
-                        </p>
-                        <p className="mt-1 text-xs text-gray-600 sm:text-[13px]">
-                          <span className="font-mono text-gray-800">
-                            <HighlightMatch text={product.code || "코드없음"} needle={query} />
+            {subCodeHints.length > 0 && subQuery.trim().length === 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {subCodeHints.map((hint) => (
+                  <button
+                    key={hint}
+                    type="button"
+                    onClick={() => setSubQuery(hint)}
+                    className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
+                      subQuery.toLowerCase() === hint.toLowerCase()
+                        ? "border-blue-300 bg-blue-50 text-blue-700"
+                        : "border-gray-300 bg-white text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    {hint}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="mt-2 max-h-[min(58vh,520px)] overflow-y-auto rounded-md border border-gray-200 bg-white">
+              {displayedRows.length === 0 ? (
+                <p className="px-3 py-8 text-center text-sm text-gray-500">검색 결과가 없습니다.</p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {displayedRows.map((product, index) => {
+                    const selected = selectedProductId === product.id;
+                    const keyboardHere = navIndex === index;
+                    return (
+                      <li key={product.id}>
+                        <button
+                          type="button"
+                          id={`inv-scan-row-${index}`}
+                          ref={(el) => {
+                            rowRefs.current[index] = el;
+                          }}
+                          onClick={() => {
+                            setNavIndex(index);
+                            setSelectedProductId(product.id);
+                          }}
+                          className={[
+                            "flex w-full gap-3 px-3 py-3.5 text-left transition-colors min-h-[4.25rem] items-start",
+                            selected ? "bg-blue-50" : "bg-white hover:bg-gray-50",
+                            keyboardHere && !selected ? "ring-2 ring-inset ring-amber-300" : "",
+                            keyboardHere && selected ? "ring-2 ring-inset ring-blue-400" : "",
+                          ].join(" ")}
+                          title={`${product.code || ""} ${product.name || ""} ${product.spec || ""}`.trim()}
+                        >
+                          <span className="mt-0.5 w-7 shrink-0 text-right text-xs font-medium tabular-nums text-gray-400">
+                            {index + 1}
                           </span>
-                          <span className="text-gray-400"> · 현재고 </span>
-                          <span className="font-medium text-gray-700">{product.stock || "미집계"}</span>
-                        </p>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-            )}
-          </div>
+                          <span className="min-w-0 flex-1">
+                            <p className="text-[15px] font-semibold leading-snug text-gray-900 sm:text-sm line-clamp-2">
+                              <HighlightMatch text={product.name || "(품목명 없음)"} needle={query} />
+                              {product.spec ? (
+                                <span className="text-gray-800">
+                                  {" "}
+                                  · <HighlightMatch text={product.spec} needle={query} />
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 font-normal"> · (규격 없음)</span>
+                              )}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-600 sm:text-[13px]">
+                              <span className="font-mono text-gray-800">
+                                <HighlightMatch text={product.code || "코드없음"} needle={query} />
+                              </span>
+                              <span className="text-gray-400"> · 현재고 </span>
+                              <span className="font-medium text-gray-700">{product.stock || "미집계"}</span>
+                            </p>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </>
         )}
       </div>
 
-      <div className="mt-5 rounded-lg border border-gray-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-gray-800">처리 입력</h2>
+      <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+        <h2 className="text-base font-semibold text-gray-900">처리 입력</h2>
+        <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-1">
+          <div className="flex gap-1">
+            {(["in", "out", "production"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  setMode(m);
+                  setSubmitError("");
+                }}
+                className={`flex-1 rounded-md px-2 py-2 text-sm font-semibold transition-colors ${
+                  mode === m ? MODE_ACTIVE_CLASS[m] : "text-gray-600 hover:bg-white hover:text-gray-900"
+                }`}
+                aria-pressed={mode === m}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  {mode === m ? <span aria-hidden>●</span> : <span aria-hidden>○</span>}
+                  {MODE_LABELS[m]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+        {!mode ? (
+          <p className="mt-2 text-xs text-amber-700">
+            먼저 처리 유형(입고/출고/생산)을 선택해야 처리에 추가할 수 있습니다.
+          </p>
+        ) : (
+          <p className="mt-2 text-xs text-gray-700">
+            현재 선택:{" "}
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${
+                mode === "in"
+                  ? "bg-emerald-100 text-emerald-800"
+                  : mode === "out"
+                    ? "bg-rose-100 text-rose-800"
+                    : "bg-indigo-100 text-indigo-800"
+              }`}
+            >
+              {MODE_LABELS[mode]}
+            </span>
+          </p>
+        )}
         {selectedProduct ? (
-          <div className="mt-1 rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+          <div className="mt-3 rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-700">
             <p className="text-sm font-semibold leading-snug text-gray-900">
               {selectedProduct.name || "(품목명 없음)"}
               {selectedProduct.spec ? (
@@ -526,7 +672,7 @@ export function InventoryScannerView({
             </p>
           </div>
         ) : (
-          <p className="mt-1 text-xs text-amber-700">상단에서 제품을 선택해 주세요.</p>
+          <p className="mt-3 text-xs text-amber-700">상단에서 제품을 선택해 주세요.</p>
         )}
 
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[120px_1fr]">
@@ -556,25 +702,36 @@ export function InventoryScannerView({
         </div>
 
         {submitError ? <p className="mt-2 text-sm text-red-600">{submitError}</p> : null}
+        {submitSuccess ? (
+          <p className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            {submitSuccess}
+          </p>
+        ) : null}
 
         <button
           type="button"
           onClick={submitAction}
-          disabled={!mode}
+          disabled={!mode || isSubmitting}
           className="mt-4 w-full rounded-md bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
-          {mode ? `${MODE_LABELS[mode]} 처리에 추가` : "처리 유형을 먼저 선택하세요"}
+          {!mode
+            ? "처리 유형을 먼저 선택하세요"
+            : isSubmitting
+              ? "처리 중..."
+              : `${MODE_LABELS[mode]} 처리에 추가`}
         </button>
       </div>
 
       {pendingActions.length > 0 ? (
-        <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-semibold text-gray-900">최근 처리 대기 목록</h2>
+        <div className="mt-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+          <h2 className="text-base font-semibold text-gray-900">최근 처리 대기 목록</h2>
           <ul className="mt-2 space-y-1 text-sm">
             {pendingActions.map((action, index) => (
               <li
                 key={`${action.at}-${index}`}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-gray-100 px-3 py-2"
+                className={`flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 ${
+                  index === 0 ? "border-emerald-200 bg-emerald-50/60" : "border-gray-100"
+                }`}
               >
                 <span className="text-gray-800">
                   [{MODE_LABELS[action.mode]}]{" "}
@@ -591,9 +748,7 @@ export function InventoryScannerView({
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-gray-500">
-            현재는 화면 임시 목록입니다. 원하시면 다음 단계로 Firestore 입출고 이력 저장까지 연결하겠습니다.
-          </p>
+          <p className="mt-2 text-xs text-gray-500">최근 버튼 처리 내역입니다.</p>
         </div>
       ) : null}
     </div>

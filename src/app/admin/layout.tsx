@@ -122,9 +122,9 @@ const adminMenuItems: MenuItem[] = [
       </svg>
     ),
     subItems: [
-      { id: 'inventory-main', label: '재고관리', path: '/admin/inventory' },
-      { id: 'inventory-scan', label: '바코드·QR 스캔', path: '/admin/inventory/scan' },
+      { id: 'inventory-main', label: '재고 관리', path: '/admin/inventory' },
       { id: 'inventory-erp-status', label: '재고 현황', path: '/admin/inventory/erp-status' },
+      { id: 'inventory-scan', label: '바코드 QR 스캔', path: '/admin/inventory/scan' },
       { id: 'inventory-status', label: 'UHP 재고 관리', path: '/admin/inventory/status' },
       { id: 'inventory-products', label: '제품 이미지 등록', path: '/admin/inventory/products' },
     ],

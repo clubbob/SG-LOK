@@ -122,9 +122,9 @@ const adminMenuItems: MenuItem[] = [
       </svg>
     ),
     subItems: [
-      { id: 'inventory-main', label: '재고 관리', path: '/admin/inventory' },
+      { id: 'inventory-main', label: '제품 등록', path: '/admin/inventory' },
+      { id: 'inventory-scan', label: '입출고 처리', path: '/admin/inventory/scan' },
       { id: 'inventory-erp-status', label: '재고 현황', path: '/admin/inventory/erp-status' },
-      { id: 'inventory-scan', label: '바코드 QR 스캔', path: '/admin/inventory/scan' },
       { id: 'inventory-status', label: 'UHP 재고 관리', path: '/admin/inventory/status' },
       { id: 'inventory-products', label: '제품 이미지 등록', path: '/admin/inventory/products' },
     ],
@@ -496,6 +496,9 @@ export default function AdminLayout({
                               // 정확히 일치하는 경우
                               if (normalizedPathname === normalizedSubPath) {
                                 isSubActive = true;
+                              } else if (subItem.path === '/admin/inventory') {
+                                // 재고관리 > 제품 등록은 정확히 /admin/inventory 일 때만 활성화
+                                isSubActive = false;
                               } else if (subItem.path === '/admin/certificate/list2' && isCertificateV2WritePath) {
                                 // 작성2/수정2에서는 목록2 메뉴를 활성화해 컨텍스트를 유지
                                 isSubActive = true;

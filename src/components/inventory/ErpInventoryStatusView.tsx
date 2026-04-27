@@ -65,7 +65,6 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
   const [selectedRowIndex, setSelectedRowIndex] = useState<number | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     const inventoryRef = doc(db, "inventory", ERP_INVENTORY_MASTER_DOC);
@@ -81,7 +80,6 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
         setErpData(snapshot.data() as ErpInventoryDoc);
         setLoading(false);
         setIsRefreshing(false);
-        setLastRefreshedAt(new Date());
         setErrorMessage("");
       },
       (error) => {
@@ -113,28 +111,51 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
     const normalizedCode = codeQuery.trim().toLowerCase();
 
     return erpData.rows.filter((row) => {
-      const rowText = headers.map((header) => String(row[header] ?? "")).join(" ").toLowerCase();
+      const groupValue = String(
+        row["품목그룹1명"] ??
+          row["품목그룹"] ??
+          row["품목 그룹"] ??
+          row["품목군"] ??
+          row["품목분류"] ??
+          row["품목그룹명"] ??
+          row["품목계정"] ??
+          row["그룹명"] ??
+          row["분류"] ??
+          row["대분류"] ??
+          row["중분류"] ??
+          row["소분류"] ??
+          row["제품군"] ??
+          row["계정구분"] ??
+          row["자재유형"] ??
+          row["itemGroup"] ??
+          row["itemGroupName"] ??
+          row["group"] ??
+          row["groupName"] ??
+          row["category"] ??
+          row["type"] ??
+          ""
+      )
+        .replace(/\s+/g, "")
+        .toLowerCase();
+      const itemNameValue = String(
+        row["품목명"] ?? row["제품명"] ?? row["itemName"] ?? row["name"] ?? ""
+      )
+        .replace(/\s+/g, "")
+        .toLowerCase();
+      const rowText = `${groupValue} ${itemNameValue}`;
       const textMatched =
         queryTerms.length === 0 || queryTerms.every((term) => rowText.includes(term));
       if (!textMatched) return false;
       if (!normalizedCode) return true;
-      const codeValue = String(
-        row["품목코드"] ?? row["제품코드"] ?? row["itemCode"] ?? row["code"] ?? ""
-      )
-        .replace(/\s+/g, "")
-        .toLowerCase();
       const specValue = String(
         row["규격정보"] ?? row["규격"] ?? row["spec"] ?? row["size"] ?? ""
       )
         .replace(/\s+/g, "")
         .toLowerCase();
       const normalizedCodeNoSpace = normalizedCode.replace(/\s+/g, "");
-      const specMatched = matchesSpecQuery(specValue, normalizedCodeNoSpace);
-      const codeMatched =
-        normalizedCodeNoSpace.length >= 3 && codeValue.startsWith(normalizedCodeNoSpace);
-      return specMatched || codeMatched;
+      return matchesSpecQuery(specValue, normalizedCodeNoSpace);
     });
-  }, [erpData, headers, searchQuery, codeQuery]);
+  }, [erpData, searchQuery, codeQuery]);
 
   const getStockStatus = (row: Record<string, string>): StockStatus => {
     const raw = String(
@@ -225,13 +246,49 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
           ? "bg-rose-100 text-rose-700"
           : "bg-gray-100 text-gray-700";
 
-  const tableHeaders = useMemo(() => {
-    const base = headers.includes("현재고") ? headers : [...headers, "현재고"];
-    return base.includes("재고상태") ? base : [...base, "재고상태"];
-  }, [headers]);
+  const tableHeaders = useMemo(
+    () => ["품목코드", "품목그룹", "품목명", "규격", "현재고", "상태"],
+    []
+  );
 
   const getCurrentStockFromRow = (row: Record<string, string>) => {
     return getRowValue(row, ["현재고", "재고", "currentStock", "stockQty"]) || "미집계";
+  };
+  const getItemGroupFromRow = (row: Record<string, string>) => {
+    const directGroup = getRowValue(row, [
+      "품목그룹1명",
+      "품목그룹",
+      "품목 그룹",
+      "품목군",
+      "품목분류",
+      "품목그룹명",
+      "품목계정",
+      "그룹명",
+      "분류",
+      "대분류",
+      "중분류",
+      "소분류",
+      "제품군",
+      "계정구분",
+      "자재유형",
+      "itemGroup",
+      "itemGroupName",
+      "group",
+      "groupName",
+      "category",
+      "type",
+    ]);
+    if (directGroup) return directGroup;
+
+    const itemCode = getRowValue(row, ["품목코드", "제품코드", "itemCode", "code"]);
+    const codePrefixMatch = itemCode.match(/^[A-Za-z]+/);
+    if (codePrefixMatch?.[0]) return codePrefixMatch[0].toUpperCase();
+
+    const itemName = getRowValue(row, ["품목명", "제품명", "itemName", "name"]);
+    const namePrefixMatch = itemName.match(/^[A-Za-z]+/);
+    if (namePrefixMatch?.[0]) return namePrefixMatch[0].toUpperCase();
+
+    return "-";
   };
 
   const getStatusBadgeClass = (status: StockStatus) => {
@@ -250,11 +307,6 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
     setIsRefreshing(true);
     setRefreshTick((prev) => prev + 1);
   };
-  const lastRefreshedLabel = lastRefreshedAt
-    ? `${String(lastRefreshedAt.getHours()).padStart(2, "0")}:${String(
-        lastRefreshedAt.getMinutes()
-      ).padStart(2, "0")}:${String(lastRefreshedAt.getSeconds()).padStart(2, "0")}`
-    : "-";
 
   if (loading) {
     return (
@@ -289,7 +341,7 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
         <div>
           <h1 className="text-2xl font-bold text-gray-900">재고 현황</h1>
           <p className="mt-2 text-sm text-gray-600">
-            UHP와 분리된 ERP 제품 기준 전사 재고 현황 화면입니다.
+            ERP 제품 기준 전사 재고 현황 화면입니다.
           </p>
         </div>
         <button
@@ -315,8 +367,6 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
           {isRefreshing ? "불러오는 중…" : "새로고침"}
         </button>
       </div>
-      <p className="mb-3 text-xs text-gray-500">최근 새로고침: {lastRefreshedLabel}</p>
-
       <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
         <label htmlFor="erp-inventory-search" className="mb-2 block text-sm font-semibold text-blue-900">
           재고 검색
@@ -333,13 +383,14 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
               type="text"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="품목명/코드/규격 검색"
+              placeholder="품목그룹/품목명 검색"
               className="w-full rounded-md border border-blue-300 bg-white py-2.5 pl-10 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
             {searchQuery.trim().length > 0 && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
+                tabIndex={-1}
                 className="absolute inset-y-0 right-2 my-auto inline-flex h-7 w-7 items-center justify-center rounded text-gray-400 hover:bg-white hover:text-gray-700"
                 aria-label="검색어 지우기"
               >
@@ -357,15 +408,16 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
               type="text"
               value={codeQuery}
               onChange={(event) => setCodeQuery(event.target.value)}
-              placeholder="규격/코드 검색"
+              placeholder="규격 검색"
               className="w-full rounded-md border border-blue-300 bg-white py-2.5 pl-9 pr-9 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
             <button
               type="button"
               onClick={() => setCodeQuery("")}
               disabled={codeQuery.trim().length === 0}
+              tabIndex={-1}
               className="absolute inset-y-0 right-2 my-auto inline-flex h-7 w-7 items-center justify-center rounded text-gray-400 hover:bg-white hover:text-gray-700 disabled:cursor-default disabled:opacity-40"
-              aria-label="코드 검색어 지우기"
+              aria-label="규격 검색어 지우기"
             >
               ×
             </button>
@@ -415,8 +467,18 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
                   >
                     {tableHeaders.map((header) => (
                       <td key={`${index}-${header}`} className="whitespace-nowrap border-b border-gray-100 px-3 py-2 text-gray-700">
+                        {header === "품목코드"
+                          ? getRowValue(row, ["품목코드", "제품코드", "itemCode", "code"]) || "-"
+                          : null}
+                        {header === "품목그룹" ? getItemGroupFromRow(row) : null}
+                        {header === "품목명"
+                          ? getRowValue(row, ["품목명", "제품명", "itemName", "name"]) || "-"
+                          : null}
+                        {header === "규격"
+                          ? getRowValue(row, ["규격정보", "규격", "spec", "size"]) || "-"
+                          : null}
                         {header === "현재고" ? getCurrentStockFromRow(row) : null}
-                        {header === "재고상태" ? (
+                        {header === "상태" ? (
                           <span
                             className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${getStatusBadgeClass(
                               getStockStatus(row)
@@ -425,7 +487,6 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
                             {getStockStatus(row)}
                           </span>
                         ) : null}
-                        {header !== "현재고" && header !== "재고상태" ? row[header] || "-" : null}
                       </td>
                     ))}
                   </tr>
@@ -483,47 +544,6 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
         </div>
       </div>
 
-      {showExtendedDetails && selectedRow ? (
-      <div className="mt-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">선택 제품 재고 상태</h2>
-          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${stockStatusClass}`}>
-            {stockStatusLabel}
-          </span>
-        </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">품목코드</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{selectedItemCode || "-"}</p>
-            </div>
-            <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">품목명</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{selectedItemName || "-"}</p>
-            </div>
-            <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">규격정보</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{selectedSpec || "-"}</p>
-            </div>
-            <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">현재고</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{selectedCurrentStock || "미집계"}</p>
-            </div>
-            <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">입고 수량</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{selectedInbound || "미집계"}</p>
-            </div>
-            <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-              <p className="text-xs text-gray-500">출고 수량</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{selectedOutbound || "미집계"}</p>
-            </div>
-            <div className="rounded-md border border-gray-200 bg-gray-50 p-3 sm:col-span-2 lg:col-span-2">
-              <p className="text-xs text-gray-500">보관 위치</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{selectedLocation || "미지정"}</p>
-            </div>
-          </div>
-      </div>
-      ) : null}
     </div>
   );
 }

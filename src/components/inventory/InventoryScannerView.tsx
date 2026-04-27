@@ -13,9 +13,12 @@ type ErpInventoryDoc = {
 type InventoryProduct = {
   id: string;
   code: string;
+  group: string;
   name: string;
   spec: string;
   stock: string;
+  inbound: string;
+  outbound: string;
   familyKey: string;
   searchText: string;
 };
@@ -136,14 +139,39 @@ function mapProducts(rows: Array<Record<string, string>>): InventoryProduct[] {
   return rows
     .map((row, index) => {
       const code = readFirst(row, ["품목코드", "제품코드", "itemCode", "code"]);
+      const group = readFirst(row, [
+        "품목그룹1명",
+        "품목그룹",
+        "품목 그룹",
+        "품목군",
+        "품목분류",
+        "품목그룹명",
+        "품목계정",
+        "그룹명",
+        "분류",
+        "대분류",
+        "중분류",
+        "소분류",
+        "제품군",
+        "계정구분",
+        "자재유형",
+        "itemGroup",
+        "itemGroupName",
+        "group",
+        "groupName",
+        "category",
+        "type",
+      ]);
       const name = readFirst(row, ["품목명", "제품명", "itemName", "name"]);
       const spec = readFirst(row, ["규격정보", "규격", "spec", "size"]);
       const stock = readFirst(row, ["현재고", "재고", "currentStock", "stockQty"]);
+      const inbound = readFirst(row, ["입고수량", "입고", "inboundQty", "inQty"]);
+      const outbound = readFirst(row, ["출고수량", "출고", "outboundQty", "outQty"]);
       const id = `${code || "unknown"}-${index}`;
       const familySource = `${name} ${code}`.trim();
       const familyKey = familySource.split(/[\s\-_/]+/)[0]?.toLowerCase() ?? "";
-      const searchText = `${code} ${name} ${spec}`.toLowerCase();
-      return { id, code, name, spec, stock, familyKey, searchText };
+      const searchText = `${name}`.replace(/\s+/g, "").toLowerCase();
+      return { id, code, group, name, spec, stock, inbound, outbound, familyKey, searchText };
     })
     .filter((product) => product.code || product.name);
 }
@@ -159,6 +187,8 @@ function compareProducts(a: InventoryProduct, b: InventoryProduct) {
 export function InventoryScannerView() {
   const [mode, setMode] = useState<ScannerMode | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [products, setProducts] = useState<InventoryProduct[]>([]);
 
@@ -169,7 +199,6 @@ export function InventoryScannerView() {
   const [quantityInput, setQuantityInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
 
-  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
   const [submitError, setSubmitError] = useState("");
   const [submitSuccess, setSubmitSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -186,6 +215,7 @@ export function InventoryScannerView() {
         if (!snapshot.exists()) {
           setProducts([]);
           setLoading(false);
+          setIsRefreshing(false);
           setLoadError("ERP 제품 데이터가 없습니다. 관리자에서 먼저 제품등록을 진행해 주세요.");
           return;
         }
@@ -193,35 +223,31 @@ export function InventoryScannerView() {
         const mapped = mapProducts(Array.isArray(data.rows) ? data.rows : []);
         setProducts(mapped);
         setLoading(false);
+        setIsRefreshing(false);
         setLoadError("");
       },
       (error) => {
         console.error("스캔용 제품 목록 조회 오류:", error);
         setLoading(false);
-        setLoadError("제품 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        setIsRefreshing(false);
+        const message =
+          error instanceof Error && error.message.includes("Failed to fetch")
+            ? "제품 목록 조회에 실패했습니다. 네트워크 연결 또는 Firebase 접근 권한/보안 규칙을 확인해 주세요."
+            : "제품 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
+        setLoadError(message);
       }
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [refreshTick]);
 
   const { displayedRows, totalMatched, isTruncated, cap, subCodeHints } = useMemo(() => {
     const q = query.trim().toLowerCase();
     const terms = q.split(/\s+/).filter(Boolean);
     let matched = [...products];
     if (terms.length > 0) {
-      const [familyTerm, ...detailTerms] = terms;
       matched = matched.filter((product) => {
-        const nameKey = product.name.trim().toLowerCase();
-        const codeKey = product.code.trim().toLowerCase();
-        const familyMatched =
-          product.familyKey === familyTerm ||
-          product.familyKey.startsWith(familyTerm) ||
-          nameKey.startsWith(familyTerm) ||
-          codeKey.startsWith(familyTerm);
-        if (!familyMatched) return false;
-        if (detailTerms.length === 0) return true;
-        return detailTerms.every((term) => product.searchText.includes(term));
+        return terms.every((term) => product.searchText.includes(term.replace(/\s+/g, "")));
       });
     }
 
@@ -229,7 +255,7 @@ export function InventoryScannerView() {
     const sub = subQuery.trim().toLowerCase();
     if (sub) {
       matched = matched.filter((product) => {
-        return matchesSegmentedPrefix(product.spec, sub) || matchesSegmentedPrefix(product.code, sub);
+        return matchesSegmentedPrefix(product.spec, sub);
       });
     }
 
@@ -378,28 +404,40 @@ export function InventoryScannerView() {
         console.warn("inventoryTransactions 이력 저장 실패(재고 반영은 완료):", logError);
       }
 
-      const next: PendingAction = {
-        at: Date.now(),
-        mode,
-        quantity,
-        note: noteInput.trim(),
-        product: selectedProduct,
-      };
-
-      setPendingActions((prev) => [next, ...prev].slice(0, 30));
       setQuantityInput("");
       setNoteInput("");
+      const successBaseMessage = `${MODE_LABELS[mode]} 처리가 완료되었습니다. ${selectedProduct.name || "품목명 없음"} (${selectedProduct.code || "-"}) 수량 ${quantity}, 현재고 ${nextStock}`;
       setSubmitSuccess(
-        `${MODE_LABELS[mode]} 처리 완료: ${selectedProduct.name || "품목명 없음"} (${selectedProduct.code || "-"}) x ${quantity} · 현재고 ${nextStock}${
-          transactionLogFailed ? " (이력 저장 권한 없음)" : ""
-        }`
+        transactionLogFailed
+          ? `${successBaseMessage}. 참고: 재고 반영은 완료되었지만, 거래 이력 저장 권한이 없어 이력은 기록되지 않았습니다.`
+          : successBaseMessage
       );
     } catch (e) {
-      const message = e instanceof Error ? e.message : "처리 중 오류가 발생했습니다.";
+      const message =
+        e instanceof Error && e.message.includes("Failed to fetch")
+          ? "처리 요청에 실패했습니다. 네트워크 연결 또는 Firebase 접근 권한/보안 규칙을 확인해 주세요."
+          : e instanceof Error
+            ? e.message
+            : "처리 중 오류가 발생했습니다.";
       setSubmitError(message);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleRefresh = () => {
+    setMode(null);
+    setQuery("");
+    setSubQuery("");
+    setSelectedProductId("");
+    setNavIndex(0);
+    setQuantityInput("");
+    setNoteInput("");
+    setSubmitError("");
+    setSubmitSuccess("");
+    setLoadError("");
+    setIsRefreshing(true);
+    setRefreshTick((prev) => prev + 1);
   };
 
   if (loading) {
@@ -414,11 +452,33 @@ export function InventoryScannerView() {
     <div className="p-6 sm:p-8">
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">바코드 QR 스캔</h1>
+          <h1 className="text-2xl font-bold text-gray-900">입출고 처리</h1>
           <p className="mt-2 text-sm text-gray-600">
             제품 검색 후 선택하여 입고/출고/생산 처리를 진행합니다.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm transition-colors hover:bg-gray-50 whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <svg
+            className={`h-4 w-4 text-gray-600 ${isRefreshing ? "animate-spin" : ""}`}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9M20 20v-5h-.581m-15.357-2a8.003 8.003 0 0 0 15.357 2"
+            />
+          </svg>
+          {isRefreshing ? "불러오는 중…" : "새로고침"}
+        </button>
       </div>
 
       {loadError ? (
@@ -484,13 +544,14 @@ export function InventoryScannerView() {
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={onSearchKeyDown}
               className="w-full rounded-md border border-blue-300 bg-white py-2.5 pl-10 pr-10 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-              placeholder="품목명/코드/규격 검색"
+              placeholder="품목명 검색"
               autoComplete="off"
             />
             {query.trim().length > 0 ? (
               <button
                 type="button"
                 onClick={() => setQuery("")}
+                tabIndex={-1}
                 className="absolute inset-y-0 right-2 my-auto inline-flex h-7 w-7 items-center justify-center rounded text-gray-400 hover:bg-white hover:text-gray-700"
                 aria-label="검색어 지우기"
               >
@@ -507,17 +568,17 @@ export function InventoryScannerView() {
             <input
               value={subQuery}
               onChange={(event) => setSubQuery(event.target.value)}
-              disabled={!query.trim()}
-              className="w-full rounded-md border border-blue-300 bg-white py-2.5 pl-9 pr-9 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:text-gray-400"
-              placeholder="규격/코드 검색"
+              className="w-full rounded-md border border-blue-300 bg-white py-2.5 pl-9 pr-9 text-sm text-gray-800 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              placeholder="규격 검색"
               autoComplete="off"
             />
             <button
               type="button"
               onClick={() => setSubQuery("")}
               disabled={subQuery.trim().length === 0}
+              tabIndex={-1}
               className="absolute inset-y-0 right-2 my-auto inline-flex h-7 w-7 items-center justify-center rounded text-gray-400 hover:bg-white hover:text-gray-700 disabled:cursor-default disabled:opacity-40"
-              aria-label="코드 검색어 지우기"
+              aria-label="규격 검색어 지우기"
             >
               ×
             </button>
@@ -537,11 +598,7 @@ export function InventoryScannerView() {
           </button>
         </div>
 
-        {!query.trim() ? (
-          <div className="mt-2 rounded-md border border-dashed border-blue-300 bg-white/60 px-3 py-8 text-center text-sm text-gray-500">
-            1차 검색어를 입력하면 제품 목록이 표시됩니다.
-          </div>
-        ) : (
+        {query.trim() ? (
           <>
             {hasPrimaryQuery && displayedRows.length > 0 ? (
               <p className="mt-2 text-xs text-gray-600">
@@ -621,11 +678,22 @@ export function InventoryScannerView() {
                               )}
                             </p>
                             <p className="mt-1 text-xs text-gray-600 sm:text-[13px]">
-                              <span className="font-mono text-gray-800">
+                              <span className="text-gray-700">품목코드: </span>
+                              <span className="font-mono font-semibold text-gray-800">
                                 <HighlightMatch text={product.code || "코드없음"} needle={query} />
                               </span>
-                              <span className="text-gray-400"> · 현재고 </span>
-                              <span className="font-medium text-gray-700">{product.stock || "미집계"}</span>
+                              <span className="mx-2 text-gray-300">|</span>
+                              <span className="text-gray-700">품목명: </span>
+                              <span className="font-semibold text-gray-900">{product.name || "(품목명 없음)"}</span>
+                              <span className="mx-2 text-gray-300">|</span>
+                              <span className="text-gray-700">현재고: </span>
+                              <span className="font-semibold text-gray-800">{product.stock || "미집계"}</span>
+                              <span className="mx-2 text-gray-300">|</span>
+                              <span className="text-gray-700">입고: </span>
+                              <span className="font-semibold text-gray-800">{product.inbound || "미집계"}</span>
+                              <span className="mx-2 text-gray-300">|</span>
+                              <span className="text-gray-700">출고: </span>
+                              <span className="font-semibold text-gray-800">{product.outbound || "미집계"}</span>
                             </p>
                           </span>
                         </button>
@@ -636,7 +704,7 @@ export function InventoryScannerView() {
               )}
             </div>
           </>
-        )}
+        ) : null}
       </div>
 
       <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
@@ -653,11 +721,6 @@ export function InventoryScannerView() {
               ) : (
                 <span className="text-gray-400 font-normal"> · (규격 없음)</span>
               )}
-            </p>
-            <p className="mt-1 text-xs text-gray-600">
-              <span className="font-mono text-gray-800">{selectedProduct.code || "코드없음"}</span>
-              <span className="text-gray-400"> · 현재고 </span>
-              <span className="font-medium text-gray-800">{selectedProduct.stock || "미집계"}</span>
             </p>
           </div>
         ) : (
@@ -711,35 +774,6 @@ export function InventoryScannerView() {
         </button>
       </div>
 
-      {pendingActions.length > 0 ? (
-        <div className="mt-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-900">최근 처리 대기 목록</h2>
-          <ul className="mt-2 space-y-1 text-sm">
-            {pendingActions.map((action, index) => (
-              <li
-                key={`${action.at}-${index}`}
-                className={`flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 ${
-                  index === 0 ? "border-emerald-200 bg-emerald-50/60" : "border-gray-100"
-                }`}
-              >
-                <span className="text-gray-800">
-                  [{MODE_LABELS[action.mode]}]{" "}
-                  <span className="font-medium">
-                    {action.product.name || "품목명 없음"}
-                    {action.product.spec ? ` · ${action.product.spec}` : ""}
-                  </span>
-                  <span className="text-gray-600">
-                    {" "}
-                    (<span className="font-mono">{action.product.code || "-"}</span>) × {action.quantity}
-                  </span>
-                </span>
-                <span className="text-xs text-gray-500">{new Date(action.at).toLocaleTimeString("ko-KR")}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2 text-xs text-gray-500">최근 버튼 처리 내역입니다.</p>
-        </div>
-      ) : null}
     </div>
   );
 }

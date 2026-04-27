@@ -1,6 +1,5 @@
 "use client";
 
-import Link from 'next/link';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { ChangeEvent, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
@@ -193,61 +192,13 @@ export default function AdminInventoryIndexPage() {
   return (
     <div className="p-6 sm:p-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">재고관리</h1>
+        <h1 className="text-2xl font-bold text-gray-900">제품 등록</h1>
         <p className="text-sm text-gray-600 mt-2">
-          전사 제품의 입고/출고/현재고를 통합 관리하는 페이지입니다.
+          제품을 등록하는 페이지 입니다.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-900">스캔 처리 시작</h2>
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <Link
-              href="/admin/inventory/scan?mode=in"
-              className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 whitespace-nowrap"
-            >
-              입고 스캔 시작
-            </Link>
-            <Link
-              href="/admin/inventory/scan?mode=out"
-              className="inline-flex items-center justify-center rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 whitespace-nowrap"
-            >
-              출고 스캔 시작
-            </Link>
-            <Link
-              href="/admin/inventory/scan?mode=production"
-              className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 whitespace-nowrap"
-            >
-              생산 스캔 시작
-            </Link>
-          </div>
-          <p className="mt-3 text-xs text-gray-500">
-            버튼 클릭 시 해당 모드(입고/출고/생산)가 선택된 상태로 이동합니다.
-          </p>
-        </div>
-
-        <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-gray-900">조회/등록 바로가기</h2>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Link
-              href="/admin/inventory/erp-status"
-              className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 whitespace-nowrap"
-            >
-              재고 현황
-            </Link>
-            <Link
-              href="/admin/production/request"
-              className="inline-flex items-center rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 whitespace-nowrap"
-            >
-              생산계획 등록
-            </Link>
-          </div>
-          <p className="mt-3 text-xs text-gray-500">재고 현황 확인 또는 생산요청 등록으로 바로 이동합니다.</p>
-        </div>
-      </div>
-
-      <div className="mt-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="text-base font-semibold text-gray-900">제품등록 (ERP 엑셀 업로드)</h2>
         <p className="text-sm text-gray-600 mt-1">
           ERP에서 내려받은 재고관리 대상 품목 엑셀 파일로 제품 마스터를 일괄 등록합니다.
@@ -289,9 +240,6 @@ export default function AdminInventoryIndexPage() {
         {excelSuccess ? <p className="mt-2 text-xs text-emerald-700">{excelSuccess}</p> : null}
       </div>
 
-      <p className="mt-4 text-xs text-gray-500">
-        운영 팁: 신규 제품 업로드 후 상단 스캔 처리에서 바로 입고/출고 작업을 시작할 수 있습니다.
-      </p>
     </div>
   );
 }

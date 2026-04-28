@@ -194,7 +194,7 @@ function DealerCustomersPageContent() {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 bg-gray-50">
-        <div className="w-full max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-10 sm:py-14">
+        <div className="w-full max-w-[1400px] mx-auto px-3 sm:px-6 lg:px-8 py-10 sm:py-14">
           <div className="mb-4 flex items-start justify-between gap-3 flex-wrap">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">대리점 담당고객</h1>
@@ -254,7 +254,7 @@ function DealerCustomersPageContent() {
 
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 sm:p-8">
             <div className="overflow-x-auto rounded-lg border border-gray-200">
-              <table className="w-full min-w-[760px]">
+              <table className="w-full min-w-[1100px]">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide whitespace-nowrap">번호</th>

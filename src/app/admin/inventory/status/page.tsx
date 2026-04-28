@@ -1982,10 +1982,18 @@ export default function AdminInventoryStatusPage() {
         filteredItems: product.filteredItems.filter((item) => {
           const plans = Array.isArray(item.productionPlanHistory) ? item.productionPlanHistory : [];
           const totalPlanned = plans.reduce(
-            (sum, plan) => sum + (typeof plan.plannedQuantity === 'number' ? plan.plannedQuantity : 0),
+            (sum, plan) =>
+              sum + (typeof plan.plannedQuantity === 'number' && plan.plannedQuantity > 0
+                ? plan.plannedQuantity
+                : 0),
             0
           );
-          return totalPlanned > 0;
+          const totalInbound = (item.inboundHistory ?? []).reduce(
+            (sum, inbound) =>
+              sum + (typeof inbound.quantity === 'number' && inbound.quantity > 0 ? inbound.quantity : 0),
+            0
+          );
+          return totalPlanned - totalInbound > 0;
         }),
       }))
       .filter((product) => product.filteredItems.length > 0);
@@ -2100,13 +2108,26 @@ export default function AdminInventoryStatusPage() {
     );
     if (plans.length === 0) return null;
 
-    const totalPlanned = plans.reduce((sum, plan) => sum + plan.plannedQuantity, 0);
-    const nearestDueDate = [...plans]
+    const activePlans = plans.filter(
+      (plan) => typeof plan.plannedQuantity === 'number' && plan.plannedQuantity > 0
+    );
+    if (activePlans.length === 0) return null;
+    const totalPlanned = activePlans.reduce((sum, plan) => sum + plan.plannedQuantity, 0);
+    const completedInbound = (item.inboundHistory ?? [])
+      .filter((history) => history.variantCode === variantCode)
+      .reduce(
+        (sum, history) =>
+          sum + (typeof history.quantity === 'number' && history.quantity > 0 ? history.quantity : 0),
+        0
+      );
+    const remainingPlanned = Math.max(0, totalPlanned - completedInbound);
+    const nearestDueDate = [...activePlans]
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
       ?.dueDate;
 
     return {
       totalPlanned,
+      remainingPlanned,
       nearestDueDate,
     };
   };

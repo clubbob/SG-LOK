@@ -16,6 +16,7 @@ export type AdminUhpProductListRow = {
 
 type VariantPlanInfo = {
   totalPlanned: number;
+  remainingPlanned: number;
   nearestDueDate: string | undefined;
 };
 
@@ -127,16 +128,16 @@ export function AdminUhpInventoryProductCard({
                       (() => {
                         const variantPlanInfo = getVariantProductionPlanInfo(item, variant.code);
                         const variantExpectedStock =
-                          variant.currentStock + (variantPlanInfo?.totalPlanned ?? 0);
+                          variant.currentStock + (variantPlanInfo?.remainingPlanned ?? 0);
                         return (
                           <div
                             key={variant.code}
                             className="rounded border border-gray-200 bg-white px-1.5 py-1 text-[10px]"
                           >
-                            <div className="flex flex-nowrap items-center justify-between gap-2">
+                            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto_auto] items-center gap-2">
                               <div className="group/quote relative min-w-0">
                                 <span
-                                  className={`inline-flex max-w-[170px] items-center truncate whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold tracking-wide ${
+                                  className={`inline-flex max-w-full items-center rounded px-1.5 py-0.5 text-xs font-semibold leading-tight tracking-wide break-all ${
                                     variant.hasQuoteRequest
                                       ? 'border-2 border-rose-500 bg-rose-100 text-rose-900 ring-1 ring-rose-300 shadow-sm'
                                       : 'border border-slate-300 bg-slate-50 text-slate-800'
@@ -151,31 +152,30 @@ export function AdminUhpInventoryProductCard({
                                   </span>
                                 )}
                               </div>
-                              <div className="ml-auto flex shrink-0 items-center gap-2.5">
-                                {canToggleQuoteRequest && (
-                                  <button
-                                    type="button"
-                                    title={
-                                      variant.hasQuoteRequest
+                                <button
+                                  type="button"
+                                  title={
+                                    canToggleQuoteRequest
+                                      ? variant.hasQuoteRequest
                                         ? '견적요청 표시 해제'
                                         : '견적요청 표시'
-                                    }
-                                    onClick={() =>
-                                      handleToggleQuoteRequest(
-                                        product.name,
-                                        item.code,
-                                        variant.code
-                                      )
-                                    }
-                                    className={`rounded-md border px-1.5 py-1 text-xs font-bold leading-none ${
-                                      variant.hasQuoteRequest
-                                        ? 'border-rose-400 bg-rose-100 text-rose-900 hover:bg-rose-200'
-                                        : 'border-slate-300 bg-slate-50 text-slate-500 hover:bg-slate-100'
-                                    }`}
-                                  >
-                                    Q
-                                  </button>
-                                )}
+                                      : '견적요청 표시는 관리자만 변경할 수 있습니다.'
+                                  }
+                                  onClick={() =>
+                                    handleToggleQuoteRequest(
+                                      product.name,
+                                      item.code,
+                                      variant.code
+                                    )
+                                  }
+                                  className={`rounded-md border px-1.5 py-1 text-xs font-bold leading-none ${
+                                    variant.hasQuoteRequest
+                                      ? 'border-rose-400 bg-rose-100 text-rose-900 hover:bg-rose-200'
+                                      : 'border-slate-300 bg-slate-50 text-slate-500 hover:bg-slate-100'
+                                  } ${canToggleQuoteRequest ? '' : 'opacity-70'}`}
+                                >
+                                  Q
+                                </button>
                               <span
                                 className={`whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-bold shadow-sm ${
                                   variant.currentStock > 0
@@ -217,19 +217,31 @@ export function AdminUhpInventoryProductCard({
                                     <path d="M6 1h4l.6 1H13v1H3V2h2.4L6 1Zm-1 4h1v7H5V5Zm3 0h1v7H8V5Zm3 0h1v7h-1V5ZM4 13h8a1 1 0 0 0 1-1V4H3v8a1 1 0 0 0 1 1Z" />
                                   </svg>
                                 </button>
-                              </div>
                             </div>
                             {variantPlanInfo && (
-                              <div className="mt-2.5 flex items-center justify-between gap-2">
-                                <span className="whitespace-nowrap text-xs font-medium text-gray-600">
-                                  완료예정 {variantPlanInfo.nearestDueDate ?? '-'}
-                                </span>
-                                <div className="flex shrink-0 items-center gap-1">
-                                  <span className="rounded-md border-2 border-purple-600 bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-900 ring-1 ring-purple-300 shadow-sm">
-                                    예상재고 {variantExpectedStock} {variant.unit}
+                              <>
+                                <div className="mt-2.5 flex items-center justify-between gap-2">
+                                  <span className="whitespace-nowrap text-xs font-medium text-gray-600">
+                                    완료예정 {variantPlanInfo.nearestDueDate ?? '-'}
                                   </span>
+                                  <div className="flex shrink-0 items-center gap-1">
+                                    {variantPlanInfo.remainingPlanned > 0 ? (
+                                      <span className="rounded-md border-2 border-purple-600 bg-purple-100 px-2.5 py-0.5 text-xs font-bold text-purple-900 ring-1 ring-purple-300 shadow-sm">
+                                        예상재고 {variantExpectedStock} {variant.unit}
+                                      </span>
+                                    ) : (
+                                      <span className="rounded-md border border-gray-300 bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700">
+                                        계획반영 완료
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
+                                <p className="mt-1 text-[10px] font-medium text-gray-500">
+                                  원계획 {variantPlanInfo.totalPlanned}
+                                  {variant.unit} / 잔여 {variantPlanInfo.remainingPlanned}
+                                  {variant.unit}
+                                </p>
+                              </>
                             )}
                           </div>
                         );

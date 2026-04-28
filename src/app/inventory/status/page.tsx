@@ -258,10 +258,18 @@ function InventoryStatusPageContent() {
         filteredItems: product.filteredItems.filter((item) => {
           const plans = Array.isArray(item.productionPlanHistory) ? item.productionPlanHistory : [];
           const totalPlanned = plans.reduce(
-            (sum, plan) => sum + (typeof plan.plannedQuantity === 'number' ? plan.plannedQuantity : 0),
+            (sum, plan) =>
+              sum + (typeof plan.plannedQuantity === 'number' && plan.plannedQuantity > 0
+                ? plan.plannedQuantity
+                : 0),
             0
           );
-          return totalPlanned > 0;
+          const totalInbound = (item.inboundHistory ?? []).reduce(
+            (sum, inbound) =>
+              sum + (typeof inbound.quantity === 'number' && inbound.quantity > 0 ? inbound.quantity : 0),
+            0
+          );
+          return totalPlanned - totalInbound > 0;
         }),
       }))
       .filter((product) => product.filteredItems.length > 0);
@@ -320,13 +328,26 @@ function InventoryStatusPageContent() {
     );
     if (plans.length === 0) return null;
 
-    const totalPlanned = plans.reduce((sum, plan) => sum + plan.plannedQuantity, 0);
-    const nearestDueDate = [...plans]
+    const activePlans = plans.filter(
+      (plan) => typeof plan.plannedQuantity === 'number' && plan.plannedQuantity > 0
+    );
+    if (activePlans.length === 0) return null;
+    const totalPlanned = activePlans.reduce((sum, plan) => sum + plan.plannedQuantity, 0);
+    const completedInbound = (item.inboundHistory ?? [])
+      .filter((history) => history.variantCode === variantCode)
+      .reduce(
+        (sum, history) =>
+          sum + (typeof history.quantity === 'number' && history.quantity > 0 ? history.quantity : 0),
+        0
+      );
+    const remainingPlanned = Math.max(0, totalPlanned - completedInbound);
+    const nearestDueDate = [...activePlans]
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
       ?.dueDate;
 
     return {
       totalPlanned,
+      remainingPlanned,
       nearestDueDate,
     };
   };
@@ -533,7 +554,7 @@ function InventoryStatusPageContent() {
                                       variant.code
                                     );
                                     const variantExpectedStock =
-                                      variant.currentStock + (variantPlanInfo?.totalPlanned ?? 0);
+                                      variant.currentStock + (variantPlanInfo?.remainingPlanned ?? 0);
                                     return (
                                       <div
                                         key={variant.code}
@@ -567,16 +588,29 @@ function InventoryStatusPageContent() {
                                           </span>
                                         </div>
                                         {variantPlanInfo && (
-                                          <div className="mt-2.5 flex flex-nowrap items-center justify-between gap-1">
-                                            <span className="min-w-0 whitespace-nowrap text-[11px] font-medium tracking-tight text-gray-600">
-                                              완료예정 {variantPlanInfo.nearestDueDate ?? '-'}
-                                            </span>
-                                            <div className="flex shrink-0 items-center gap-1">
-                                              <span className="whitespace-nowrap rounded-md border-2 border-purple-600 bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-900 ring-1 ring-purple-300 shadow-sm">
-                                                예상재고 {variantExpectedStock} {variant.unit}
+                                          <>
+                                            <div className="mt-2.5 flex flex-nowrap items-center justify-between gap-1">
+                                              <span className="min-w-0 whitespace-nowrap text-[11px] font-medium tracking-tight text-gray-600">
+                                                완료예정 {variantPlanInfo.nearestDueDate ?? '-'}
                                               </span>
+                                              <div className="flex shrink-0 items-center gap-1">
+                                                {variantPlanInfo.remainingPlanned > 0 ? (
+                                                  <span className="whitespace-nowrap rounded-md border-2 border-purple-600 bg-purple-100 px-2 py-0.5 text-[11px] font-bold text-purple-900 ring-1 ring-purple-300 shadow-sm">
+                                                    예상재고 {variantExpectedStock} {variant.unit}
+                                                  </span>
+                                                ) : (
+                                                  <span className="whitespace-nowrap rounded-md border border-gray-300 bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                                                    계획반영 완료
+                                                  </span>
+                                                )}
+                                              </div>
                                             </div>
-                                          </div>
+                                            <p className="mt-1 text-[10px] font-medium text-gray-500">
+                                              원계획 {variantPlanInfo.totalPlanned}
+                                              {variant.unit} / 잔여 {variantPlanInfo.remainingPlanned}
+                                              {variant.unit}
+                                            </p>
+                                          </>
                                         )}
                                       </div>
                                     );

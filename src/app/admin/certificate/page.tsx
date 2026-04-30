@@ -10,6 +10,7 @@ import { db, storage } from '@/lib/firebase';
 import { Certificate, CertificateStatus, CertificateType, CertificateAttachment, CertificateProduct } from '@/types';
 import { formatDateShort } from '@/lib/utils';
 import { generateV2PdfBlob as buildV2PdfBlob } from '@/lib/certificate/v2PdfPipeline';
+import { filterRequestAttachmentsOnly } from '@/lib/certificate/attachmentFilters';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -1431,7 +1432,7 @@ export default function AdminCertificatePage() {
                           <div className="text-xs text-gray-900">{certificate.completedAt ? formatDateShort(certificate.completedAt) : '-'}</div>
                         </td>
                         <td className="px-[7.68px] py-3 w-16">
-                          {certificate.attachments && certificate.attachments.length > 0 ? (
+                          {filterRequestAttachmentsOnly(certificate.attachments).length > 0 ? (
                             <button
                               onClick={() => setAttachmentModalCertificate(certificate)}
                               className="text-blue-600 hover:text-blue-800 text-xs font-medium"
@@ -1785,7 +1786,8 @@ export default function AdminCertificatePage() {
       )}
 
       {/* 첨부 파일 모달 */}
-      {attachmentModalCertificate && attachmentModalCertificate.attachments && attachmentModalCertificate.attachments.length > 0 && (
+      {attachmentModalCertificate &&
+        filterRequestAttachmentsOnly(attachmentModalCertificate.attachments).length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30" onClick={() => setAttachmentModalCertificate(null)}>
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col relative" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
@@ -1801,7 +1803,7 @@ export default function AdminCertificatePage() {
             </div>
             <div className="px-6 py-4 overflow-y-auto flex-1">
               <div className="space-y-2">
-                {attachmentModalCertificate.attachments.map((file, index) => (
+                {filterRequestAttachmentsOnly(attachmentModalCertificate.attachments).map((file, index) => (
                   <a
                     key={index}
                     href={file.url}

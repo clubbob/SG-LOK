@@ -9,6 +9,7 @@ import { db, storage, auth } from '@/lib/firebase';
 import { getProductMappingByCode, getAllProductMappings, addProductMapping, updateProductMapping, deleteProductMapping, DuplicateProductMappingError } from '@/lib/productMappings';
 import { CertificateAttachment, MaterialTestCertificate, CertificateProduct, ProductMapping } from '@/types';
 import { buildV2MaterialTestCertificateForFirestore } from '@/lib/certificate/v2SaveValidation';
+import { filterRequestAttachmentsOnly } from '@/lib/certificate/attachmentFilters';
 import { signInAnonymously } from 'firebase/auth';
 
 const ADMIN_SESSION_KEY = 'admin_session';
@@ -3787,42 +3788,15 @@ function MaterialTestCertificateContent() {
           productsData
         );
 
-        const flattenedAttachments = productsData.flatMap((p) => {
-          const pWithCerts = p as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
-          const certs = pWithCerts.inspectionCertificates && Array.isArray(pWithCerts.inspectionCertificates)
-            ? pWithCerts.inspectionCertificates
-            : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
-          return certs;
-        });
-        const dedupedRootAttachments = flattenedAttachments.filter((cert, index, arr) => {
-          const storagePath = cert.storagePath?.trim();
-          const key = storagePath && storagePath.length > 0
-            ? `sp:${storagePath}`
-            : `nu:${cert.name || ''}::${cert.url || ''}`;
-          return arr.findIndex((x) => {
-            const xStoragePath = x.storagePath?.trim();
-            const xKey = xStoragePath && xStoragePath.length > 0
-              ? `sp:${xStoragePath}`
-              : `nu:${x.name || ''}::${x.url || ''}`;
-            return xKey === key;
-          }) === index;
-        });
-        const rootAttachmentsForFirestore = dedupedRootAttachments.map((cert) => ({
-          name: cert.name || '',
-          url: cert.url || '',
-          storagePath: cert.storagePath || null,
-          size: typeof cert.size === 'number' ? cert.size : 0,
-          type: cert.type || '',
-          uploadedAt:
-            cert.uploadedAt instanceof Date && !Number.isNaN(cert.uploadedAt.getTime())
-              ? Timestamp.fromDate(cert.uploadedAt)
-              : Timestamp.now(),
-          uploadedBy: cert.uploadedBy || 'admin',
-        }));
+        const existingDocForAttachments = await getDoc(doc(db, 'certificates', targetCertificateId));
+        const existingPayload = existingDocForAttachments.exists() ? existingDocForAttachments.data() : {};
+        const preservedRequestAttachments = filterRequestAttachmentsOnly(
+          Array.isArray(existingPayload.attachments) ? existingPayload.attachments : []
+        );
 
         await updateDoc(doc(db, 'certificates', targetCertificateId), {
           materialTestCertificate: materialTestCertificateForFirestore,
-          attachments: rootAttachmentsForFirestore,
+          attachments: preservedRequestAttachments,
           certificateFile: null,
           status: 'completed',
           completedAt: Timestamp.now(),

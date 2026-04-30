@@ -1213,8 +1213,8 @@ export const generatePDFBlobWithProducts = async (
                 try {
                   fallbackBlob = await withTimeout(
                     getBlob(storageRef),
-                    12000,
-                    'getBlob 타임아웃 (12초)'
+                    45000,
+                    'getBlob 타임아웃 (45초)'
                   );
                 } catch {
                   // fetch(downloadURL) 경로는 환경에 따라 Failed to fetch가 반복되어 사용하지 않음
@@ -1283,8 +1283,8 @@ export const generatePDFBlobWithProducts = async (
                 appendFailureReason(`storage-proxy 실패: ${proxyMsg}`);
                 blob = await withTimeout(
                   getBlob(storageRef),
-                  20000,
-                  'getBlob 타임아웃 (20초)'
+                  60000,
+                  'getBlob 타임아웃 (60초)'
                 );
               }
               console.log('[PDF 생성] getBlob 다운로드 완료, 크기:', blob.size);
@@ -1689,9 +1689,11 @@ const ensureFirebaseAuth = async (): Promise<void> => {
 const extractMaterialAndHeatNo = (fileName: string): { material: string; heatNo: string } => {
   let material = '';
   let heatNo = '';
-  
+
+  // 내부 저장 접두어(inspection_certi_...) 제거 후 원본 파일명 기준으로 파싱
+  const sanitizedName = String(fileName || '').replace(/^inspection_certi_[^_]+_\d+_[^_]+_/i, '');
   // 확장자 제거 (예: .pdf, .jpg 등)
-  const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+  const nameWithoutExt = sanitizedName.replace(/\.[^/.]+$/, '');
   // 파일명을 '-'로 분리
   // 예: 316-11.11-S45123-210225 -> ['316', '11.11', 'S45123', '210225']
   const parts = nameWithoutExt.split('-');
@@ -1702,15 +1704,14 @@ const extractMaterialAndHeatNo = (fileName: string): { material: string; heatNo:
     material = '316/316L';
   } else if (materialCode === '304') {
     material = '304';
-  } else if (materialCode) {
-    material = materialCode; // 다른 소재 코드도 그대로 사용
   }
   
   // Heat No. 파트 찾기
   // 예: S58897, N27612 처럼 앞이 S 또는 N인 케이스를 모두 지원
   const heatNoPart = parts.find((part) => {
     const p = part.trim().toUpperCase();
-    return /^[SN]\d+/.test(p);
+    // S/N + 숫자 토큰만 허용 (랜덤 문자열 오탐 방지)
+    return /^(S|N)\d{4,8}$/.test(p);
   });
   
   // 마지막 부분에서 6자리 숫자 추출 (YYMMDD 형식)
@@ -1739,6 +1740,17 @@ const extractMaterialAndHeatNo = (fileName: string): { material: string; heatNo:
   }
   
   return { material, heatNo };
+};
+
+const sanitizeManualHeatNo = (value: string): string => {
+  const v = String(value || '').trim();
+  if (!v) return '';
+  const lower = v.toLowerCase();
+  if (lower.includes('inspection_certi_')) return '';
+  if (lower.includes('.png') || lower.includes('.jpg') || lower.includes('.jpeg') || lower.includes('.pdf')) {
+    return '';
+  }
+  return v;
 };
 
 // 모든 파일에서 Material과 Heat No. 수집하는 함수
@@ -3574,7 +3586,7 @@ function MaterialTestCertificateContent() {
           productName: product.productName.trim(),
           productCode: product.productCode.trim() || undefined,
           quantity: product.quantity.trim() ? parseInt(product.quantity, 10) : undefined,
-          heatNo: product.heatNo.trim() || undefined,
+          heatNo: sanitizeManualHeatNo(product.heatNo) || undefined,
           material: product.material.trim() || undefined,
         };
 
@@ -3822,7 +3834,7 @@ function MaterialTestCertificateContent() {
           productName: product.productName.trim(),
           productCode: product.productCode.trim() || undefined,
           quantity: product.quantity.trim() ? parseInt(product.quantity, 10) : undefined,
-          heatNo: product.heatNo.trim() || undefined,
+          heatNo: sanitizeManualHeatNo(product.heatNo) || undefined,
           material: product.material.trim() || undefined,
         };
 
@@ -4251,7 +4263,7 @@ function MaterialTestCertificateContent() {
           productName: product.productName.trim(),
           productCode: product.productCode.trim() || undefined,
           quantity: product.quantity.trim() ? parseInt(product.quantity, 10) : undefined,
-          heatNo: product.heatNo.trim() || undefined,
+          heatNo: sanitizeManualHeatNo(product.heatNo) || undefined,
           material: product.material.trim() || undefined,
         };
 
@@ -4485,7 +4497,7 @@ function MaterialTestCertificateContent() {
             productName: product.productName.trim(),
             productCode: product.productCode.trim() || undefined,
             quantity: product.quantity.trim() ? parseInt(product.quantity, 10) : undefined,
-            heatNo: product.heatNo.trim() || undefined,
+            heatNo: sanitizeManualHeatNo(product.heatNo) || undefined,
             material: product.material.trim() || undefined,
           };
 
@@ -4647,7 +4659,7 @@ function MaterialTestCertificateContent() {
           productName: product.productName.trim(),
           productCode: product.productCode.trim() || undefined,
           quantity: product.quantity.trim() ? parseInt(product.quantity, 10) : undefined,
-          heatNo: product.heatNo.trim() || undefined,
+          heatNo: sanitizeManualHeatNo(product.heatNo) || undefined,
           material: product.material.trim() || undefined,
         };
 

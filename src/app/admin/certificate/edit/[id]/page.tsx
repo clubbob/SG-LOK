@@ -1652,9 +1652,11 @@ const ensureFirebaseAuth = async (): Promise<void> => {
 const extractMaterialAndHeatNo = (fileName: string): { material: string; heatNo: string } => {
   let material = '';
   let heatNo = '';
-  
+
+  // 내부 저장 접두어(inspection_certi_...) 제거 후 원본 파일명 기준으로 파싱
+  const sanitizedName = String(fileName || '').replace(/^inspection_certi_[^_]+_\d+_[^_]+_/i, '');
   // 확장자 제거 (예: .pdf, .jpg 등)
-  const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+  const nameWithoutExt = sanitizedName.replace(/\.[^/.]+$/, '');
   // 파일명을 '-'로 분리
   // 예: 316-11.11-S45123-210225 -> ['316', '11.11', 'S45123', '210225']
   const parts = nameWithoutExt.split('-');
@@ -1665,15 +1667,14 @@ const extractMaterialAndHeatNo = (fileName: string): { material: string; heatNo:
     material = '316/316L';
   } else if (materialCode === '304') {
     material = '304';
-  } else if (materialCode) {
-    material = materialCode; // 다른 소재 코드도 그대로 사용
   }
   
   // Heat No. 파트 찾기
   // 예: S58897, N27612 처럼 앞이 S 또는 N인 케이스를 모두 지원
   const heatNoPart = parts.find((part) => {
     const p = part.trim().toUpperCase();
-    return /^[SN]\d+/.test(p);
+    // S/N + 숫자 토큰만 허용 (랜덤 문자열 오탐 방지)
+    return /^(S|N)\d{4,8}$/.test(p);
   });
   
   // 마지막 부분에서 6자리 숫자 추출 (YYMMDD 형식)
@@ -1702,6 +1703,17 @@ const extractMaterialAndHeatNo = (fileName: string): { material: string; heatNo:
   }
   
   return { material, heatNo };
+};
+
+const sanitizeManualHeatNo = (value: string): string => {
+  const v = String(value || '').trim();
+  if (!v) return '';
+  const lower = v.toLowerCase();
+  if (lower.includes('inspection_certi_')) return '';
+  if (lower.includes('.png') || lower.includes('.jpg') || lower.includes('.jpeg') || lower.includes('.pdf')) {
+    return '';
+  }
+  return v;
 };
 
 // 모든 파일에서 Material과 Heat No. 수집하는 함수 (파일 구분 제거)
@@ -1736,6 +1748,52 @@ const collectMaterialAndHeatNo = (
   const heatNoStr = heatNos.join(', ');
   
   return { material: materialStr, heatNo: heatNoStr };
+};
+
+const toUserVisibleInspectionFileName = (name: string): string => {
+  const raw = String(name || '').trim();
+  if (!raw) return raw;
+  return raw.replace(/^inspection_certi_[^_]+_\d+_[^_]+_/i, '');
+};
+
+const getVisibleInspectionItems = (
+  items: Array<CertificateAttachment | File>
+): Array<{
+  item: CertificateAttachment | File;
+  itemIndex: number;
+  displayName: string;
+  fileSize: number;
+}> => {
+  const seen = new Set<string>();
+  const selected: Array<{
+    item: CertificateAttachment | File;
+    itemIndex: number;
+    displayName: string;
+    fileSize: number;
+  }> = [];
+
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    const item = items[i];
+    if (!item) continue;
+    const isFile = item instanceof File;
+    const rawName = isFile ? item.name : item.name;
+    const displayName = toUserVisibleInspectionFileName(rawName);
+    const fileSize = isFile ? item.size : (item as CertificateAttachment).size || 0;
+    const key = `${displayName.toLowerCase()}::${fileSize}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    selected.push({ item, itemIndex: i, displayName, fileSize });
+  }
+
+  return selected.reverse();
+};
+
+const getInspectionDisplayKey = (item: CertificateAttachment | File): string => {
+  const isFile = item instanceof File;
+  const rawName = isFile ? item.name : item.name;
+  const displayName = toUserVisibleInspectionFileName(rawName).toLowerCase();
+  const fileSize = isFile ? item.size : ((item as CertificateAttachment).size || 0);
+  return `${displayName}::${fileSize}`;
 };
 
 function MaterialTestCertificateEditContent() {
@@ -2349,8 +2407,9 @@ function MaterialTestCertificateEditContent() {
           }
         }
 
-        if (loadedRecentAttachments.length > 0) {
-          // 최신 파일이 먼저 오도록 정렬 후 첫 제품에 보강
+        if (loadedRecentAttachments.length > 0 && nextProducts.length === 1) {
+          // 다품목 문서에서 첨부가 1번 제품으로 쏠리는 문제를 막기 위해
+          // 단일 제품 문서일 때만 Storage 최근 이미지 보강을 허용한다.
           loadedRecentAttachments.sort(
             (a, b) => (b.uploadedAt?.getTime?.() || 0) - (a.uploadedAt?.getTime?.() || 0)
           );
@@ -2703,18 +2762,24 @@ function MaterialTestCertificateEditContent() {
     const currentFiles = currentProduct?.inspectionCertificates || [];
     const fileToDelete = currentFiles[fileIndex];
     if (!fileToDelete) return;
+    const targetDisplayKey = getInspectionDisplayKey(fileToDelete);
 
     const fileName = fileToDelete instanceof File ? fileToDelete.name : fileToDelete.name;
     if (!confirm(`"${fileName}" 파일을 삭제하시겠습니까?`)) return;
 
-    if (!(fileToDelete instanceof File)) {
-      const cert = fileToDelete as CertificateAttachment;
-      const removeKey = cert.storagePath?.trim()
-        ? `sp:${cert.storagePath.trim()}`
-        : `nu:${cert.name || ''}::${cert.url || ''}`;
+    const removeKeys = currentFiles
+      .filter((candidate) => getInspectionDisplayKey(candidate) === targetDisplayKey)
+      .filter((candidate): candidate is CertificateAttachment => !(candidate instanceof File))
+      .map((cert) =>
+        cert.storagePath?.trim()
+          ? `sp:${cert.storagePath.trim()}`
+          : `nu:${cert.name || ''}::${cert.url || ''}`
+      );
+
+    if (removeKeys.length > 0) {
       setRemovedAttachmentKeys((prev) => {
         const next = new Set(prev);
-        next.add(removeKey);
+        removeKeys.forEach((key) => next.add(key));
         return next;
       });
       setLoadedExistingAttachmentsByIndex((prev) =>
@@ -2725,7 +2790,7 @@ function MaterialTestCertificateEditContent() {
                 const key = f.storagePath?.trim()
                   ? `sp:${f.storagePath.trim()}`
                   : `nu:${f.name || ''}::${f.url || ''}`;
-                return key !== removeKey;
+                return !removeKeys.includes(key);
               })
         )
       );
@@ -2740,7 +2805,9 @@ function MaterialTestCertificateEditContent() {
     setProducts((prev) => {
       const next = [...prev];
       const product = next[productIndex];
-      const updatedFiles = (product.inspectionCertificates || []).filter((_, i) => i !== fileIndex);
+      const updatedFiles = (product.inspectionCertificates || []).filter(
+        (candidate) => getInspectionDisplayKey(candidate) !== targetDisplayKey
+      );
       const { material, heatNo } = collectMaterialAndHeatNo(updatedFiles);
       next[productIndex] = {
         ...product,
@@ -3163,6 +3230,8 @@ function MaterialTestCertificateEditContent() {
         cert.storagePath && cert.storagePath.trim().length > 0
           ? `sp:${cert.storagePath.trim()}`
           : `nu:${cert.name || ''}::${cert.url || ''}`;
+      const isRemovedAttachment = (cert: CertificateAttachment): boolean =>
+        removedAttachmentKeys.has(getAttachmentKey(cert));
 
       const findRootAttachmentFallback = (name: string): CertificateAttachment | null => {
         const target = (name || '').trim().toLowerCase();
@@ -3309,6 +3378,9 @@ function MaterialTestCertificateEditContent() {
               // 기존 CertificateAttachment 처리
               const cert = item as CertificateAttachment;
               if (cert) {
+                if (isRemovedAttachment(cert)) {
+                  continue;
+                }
                 let finalUrl = cert.url || '';
                 
                 // storagePath가 있으면 URL이 있어도 항상 최신 downloadURL로 갱신
@@ -3426,7 +3498,11 @@ function MaterialTestCertificateEditContent() {
             i
           );
           if (fallbackCerts.length > 0) {
-            inspectionCertificates.push(...fallbackCerts.map((c) => ({ ...c })));
+            inspectionCertificates.push(
+              ...fallbackCerts
+                .filter((c) => !isRemovedAttachment(c))
+                .map((c) => ({ ...c }))
+            );
           }
         }
 
@@ -3450,7 +3526,7 @@ function MaterialTestCertificateEditContent() {
                   else if (lowerName.endsWith('.gif')) inferredType = 'image/gif';
                   else if (lowerName.endsWith('.pdf')) inferredType = 'application/pdf';
 
-                  recoveredFromStorage.push({
+                  const recoveredCert: CertificateAttachment = {
                     name: itemRef.name || '',
                     url: downloadUrl,
                     storagePath: itemRef.fullPath,
@@ -3458,7 +3534,10 @@ function MaterialTestCertificateEditContent() {
                     type: inferredType,
                     uploadedAt: new Date(),
                     uploadedBy: 'admin',
-                  });
+                  };
+                  if (!isRemovedAttachment(recoveredCert)) {
+                    recoveredFromStorage.push(recoveredCert);
+                  }
                 } catch (itemError) {
                   console.warn('[저장] Storage 기반 첨부 복구 실패(개별 파일 건너뜀):', itemRef.fullPath, itemError);
                 }
@@ -3506,7 +3585,7 @@ function MaterialTestCertificateEditContent() {
           productName: product.productName.trim(),
           productCode: product.productCode.trim() || undefined,
           quantity: product.quantity.trim() ? parseInt(product.quantity, 10) : undefined,
-          heatNo: collectedHeatNo || product.heatNo.trim() || undefined, // 파일에서 추출한 값 우선 사용
+          heatNo: collectedHeatNo || sanitizeManualHeatNo(product.heatNo) || undefined, // 파일에서 추출한 값 우선 사용
           material: collectedMaterial || product.material.trim() || undefined, // 파일에서 추출한 값 우선 사용
         };
 
@@ -3578,6 +3657,8 @@ function MaterialTestCertificateEditContent() {
       for (let i = 0; i < productsDataForFirestore.length; i++) {
         const current = productsDataForFirestore[i];
         if (!current) continue;
+        // 첨부를 직접 수정(삭제 포함)한 제품은 기존 첨부 자동 복원을 금지한다.
+        if (touchedAttachmentProductIndexes.has(i)) continue;
         const currentWithCerts = current as CertificateProduct & { inspectionCertificates?: CertificateAttachment[] };
         const currentCerts = currentWithCerts.inspectionCertificates && Array.isArray(currentWithCerts.inspectionCertificates)
           ? currentWithCerts.inspectionCertificates
@@ -3586,7 +3667,7 @@ function MaterialTestCertificateEditContent() {
         if (currentCerts.length > 0) continue;
 
         const key = `${(current.productName || '').trim()}::${(current.productCode || '').trim()}`;
-        const fallbackCerts = existingByNameCode.get(key) || [];
+        const fallbackCerts = (existingByNameCode.get(key) || []).filter((c) => !isRemovedAttachment(c));
         if (fallbackCerts.length > 0) {
           currentWithCerts.inspectionCertificates = fallbackCerts.map((c) => ({ ...c }));
           current.inspectionCertificate = currentWithCerts.inspectionCertificates[0];
@@ -3694,7 +3775,7 @@ function MaterialTestCertificateEditContent() {
           const certs = pWithCerts.inspectionCertificates && Array.isArray(pWithCerts.inspectionCertificates)
             ? pWithCerts.inspectionCertificates
             : (p.inspectionCertificate ? [p.inspectionCertificate] : []);
-          return certs;
+          return certs.filter((cert) => !isRemovedAttachment(cert));
         });
         const dedupedRootAttachments = flattenedAttachments.filter((cert, index, arr) => {
           const storagePath = cert.storagePath?.trim();
@@ -3963,7 +4044,7 @@ function MaterialTestCertificateEditContent() {
         const certs = pWithCerts.inspectionCertificates && Array.isArray(pWithCerts.inspectionCertificates)
           ? pWithCerts.inspectionCertificates
           : [];
-        return sum + certs.length;
+        return sum + certs.filter((c) => !isRemovedAttachment(c)).length;
       }, 0);
       if (totalCertCountAfterRepair === 0 && cachedStorageItems.length > 0 && productsDataForFirestore.length > 0) {
         const recoveredFromStorage: CertificateAttachment[] = [];
@@ -3978,7 +4059,7 @@ function MaterialTestCertificateEditContent() {
                 : lower.endsWith('.webp')
                   ? 'image/webp'
                   : 'image/png';
-            recoveredFromStorage.push({
+            const recoveredCert: CertificateAttachment = {
               name: item.name || '',
               url: downloadUrl,
               storagePath: item.fullPath,
@@ -3986,7 +4067,10 @@ function MaterialTestCertificateEditContent() {
               type: inferredType,
               uploadedAt: new Date(),
               uploadedBy: 'admin',
-            });
+            };
+            if (!isRemovedAttachment(recoveredCert)) {
+              recoveredFromStorage.push(recoveredCert);
+            }
           } catch {
             // 건너뜀
           }
@@ -4904,11 +4988,8 @@ function MaterialTestCertificateEditContent() {
                       {product.inspectionCertificates && product.inspectionCertificates.length > 0 && (
                         <div className="mb-3 space-y-2">
                           <p className="text-sm text-gray-600 mb-2 font-medium">새 파일 (MTC에 포함됨)</p>
-                          {product.inspectionCertificates.map((item, itemIndex) => {
-                            const isFile = item instanceof File;
-                            const fileName = isFile ? item.name : item.name;
-                            const fileSize = isFile ? item.size : (item as CertificateAttachment).size;
-                            
+                          {getVisibleInspectionItems(product.inspectionCertificates).map(
+                            ({ item, itemIndex, displayName, fileSize }) => {
                             return (
                               <div key={itemIndex} className="p-3 bg-gray-50 rounded-md border border-gray-200">
                                 <div className="flex items-center justify-between">
@@ -4916,7 +4997,7 @@ function MaterialTestCertificateEditContent() {
                                     <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                     </svg>
-                                    <span className="text-sm text-gray-900 font-medium">{fileName}</span>
+                                    <span className="text-sm text-gray-900 font-medium">{displayName}</span>
                                     <span className="text-xs text-blue-600 font-medium">(MTC에 포함됨)</span>
                                     {fileSize && (
                                       <span className="text-xs text-gray-500">

@@ -62,6 +62,8 @@ function formatDateTime(ts: unknown): string {
 
 export function SubstituteCodeListView({ embedded = false }: { embedded?: boolean }) {
   const PAGE_SIZE = 10;
+  /** 페이지 번호 버튼은 한 번에 최대 이 개수만 노출 (1–10, 11–20, …). */
+  const PAGE_NUMBER_BUTTON_WINDOW = 10;
   const { isAuthenticated, loading, user } = useAuth();
   const canAccessPage = embedded ? Boolean(user) : isAuthenticated;
   const canEditRows = canAccessPage;
@@ -244,6 +246,13 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
   const pagedRowsDisplay = [...pagedRows].reverse();
   const rangeStart = filteredRows.length === 0 ? 0 : (effectivePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(filteredRows.length, effectivePage * PAGE_SIZE);
+
+  const visiblePageNumbers = useMemo(() => {
+    const start =
+      Math.floor((effectivePage - 1) / PAGE_NUMBER_BUTTON_WINDOW) * PAGE_NUMBER_BUTTON_WINDOW + 1;
+    const end = Math.min(start + PAGE_NUMBER_BUTTON_WINDOW - 1, totalPages);
+    return Array.from({ length: Math.max(0, end - start + 1) }, (_, i) => start + i);
+  }, [effectivePage, totalPages]);
 
   if (loading) {
     return (
@@ -526,7 +535,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
                   >
                     이전
                   </button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => {
+                  {visiblePageNumbers.map((n) => {
                     const isActive = n === effectivePage;
                     return (
                       <button

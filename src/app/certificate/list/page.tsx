@@ -6,11 +6,12 @@ import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
-import { collection, query, where, doc, deleteDoc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { collection, query, where, doc, deleteDoc, onSnapshot, getDoc } from 'firebase/firestore';
+import { db, storage } from '@/lib/firebase';
 import { Certificate, CertificateStatus, CertificateType } from '@/types';
 import { formatDateShort } from '@/lib/utils';
 import { filterRequestAttachmentsOnly } from '@/lib/certificate/attachmentFilters';
+import { generateV2PdfBlob } from '@/lib/certificate/v2PdfPipeline';
 
 const STATUS_LABELS: Record<CertificateStatus, string> = {
   pending: '대기',
@@ -55,6 +56,7 @@ function CertificateListPageContent() {
   const itemsPerPage = 10; // 명시적으로 10개로 설정
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [downloadingCertificateId, setDownloadingCertificateId] = useState<string | null>(null);
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
   const [selectedCertificateForView, setSelectedCertificateForView] = useState<Certificate | null>(null);
@@ -99,22 +101,56 @@ function CertificateListPageContent() {
             return;
           }
           
-          // products 배열이 있으면 첫 번째 제품 정보를 단일 필드로 매핑 (하위 호환성)
-          const firstProduct = data.products && data.products.length > 0 ? data.products[0] : null;
-          
+          // 관리자 성적서목록2와 동일: materialTestCertificate.products 우선, 없으면 legacy products
+          const mtcProducts =
+            data.materialTestCertificate?.products && Array.isArray(data.materialTestCertificate.products)
+              ? data.materialTestCertificate.products
+              : [];
+          const legacyProducts = data.products && Array.isArray(data.products) ? data.products : [];
+          const effectiveProducts = mtcProducts.length > 0 ? mtcProducts : legacyProducts;
+          const firstProduct = effectiveProducts.length > 0 ? effectiveProducts[0] : null;
+          const summarizedProductName =
+            effectiveProducts.length <= 1
+              ? (firstProduct?.productName || data.productName)
+              : `${firstProduct?.productName || data.productName || '제품'} 외 ${effectiveProducts.length - 1}건`;
+          const summarizedProductCode =
+            effectiveProducts.length <= 1
+              ? (firstProduct?.productCode || data.productCode)
+              : `${firstProduct?.productCode || data.productCode || '-'} 외 ${effectiveProducts.length - 1}건`;
+          const summarizedQuantity =
+            effectiveProducts.length > 0
+              ? effectiveProducts.reduce((sum: number, p: { quantity?: number | string }) => {
+                  const value =
+                    typeof p.quantity === 'number'
+                      ? p.quantity
+                      : typeof p.quantity === 'string'
+                        ? Number.parseInt(p.quantity, 10)
+                        : 0;
+                  return sum + (Number.isFinite(value) ? value : 0);
+                }, 0)
+              : (firstProduct?.quantity || data.quantity);
+          const customerName =
+            data.materialTestCertificate?.customer ||
+            data.customerName ||
+            '';
+          const orderNumber =
+            data.materialTestCertificate?.poNo ||
+            data.orderNumber ||
+            '';
+
           certificatesData.push({
             id: doc.id,
             userId: data.userId || 'admin',
             userName: data.userName || '관리자',
             userEmail: data.userEmail || '',
             userCompany: data.userCompany || '',
-            customerName: data.customerName,
-            orderNumber: data.orderNumber,
-            products: data.products || [],
-            productName: firstProduct?.productName || data.productName,
-            productCode: firstProduct?.productCode || data.productCode,
+            customerName,
+            orderNumber,
+            products: effectiveProducts,
+            productName: summarizedProductName,
+            productCode: summarizedProductCode,
             lotNumber: firstProduct?.lotNumber || data.lotNumber,
-            quantity: firstProduct?.quantity || data.quantity,
+            quantity: summarizedQuantity,
             certificateType: data.certificateType || 'quality',
             requestDate: data.requestDate?.toDate() || new Date(),
             requestedCompletionDate: data.requestedCompletionDate?.toDate(),
@@ -252,9 +288,82 @@ function CertificateListPageContent() {
     }
   };
 
-  const handleDownload = (certificate: Certificate) => {
-    if (certificate.certificateFile?.url) {
-      window.open(certificate.certificateFile.url, '_blank');
+  // 관리자 성적서목록2와 동일: materialTestCertificate 기준으로 v2 PDF 생성 후 열기
+  const handleDownload = async (certificate: Certificate) => {
+    if (!certificate.materialTestCertificate) {
+      setError('성적서 데이터가 없어 다운로드할 수 없습니다.');
+      return;
+    }
+
+    const withTimeout = async <T,>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
+      let timeoutId: ReturnType<typeof setTimeout> | null = null;
+      const timeoutPromise = new Promise<T>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+      });
+      try {
+        return await Promise.race([promise, timeoutPromise]);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    };
+
+    const previewWindow = window.open('', '_blank');
+    if (previewWindow) {
+      try {
+        previewWindow.opener = null;
+      } catch {
+        // no-op
+      }
+      previewWindow.document.write(
+        '<!doctype html><title>PDF 생성 중</title><p style="font-family:sans-serif;padding:16px;">PDF 생성 중입니다...</p>'
+      );
+      previewWindow.document.close();
+    }
+
+    setDownloadingCertificateId(certificate.id);
+    setError('');
+    const pdfTimeoutMs = 120000;
+    try {
+      const latestDocSnap = await getDoc(doc(db, 'certificates', certificate.id));
+      const latestCertificate: Certificate = latestDocSnap.exists()
+        ? ({
+            id: latestDocSnap.id,
+            ...(latestDocSnap.data() as Omit<Certificate, 'id'>),
+          } as Certificate)
+        : certificate;
+
+      if (!latestCertificate.materialTestCertificate) {
+        throw new Error('성적서 데이터가 없어 PDF를 생성할 수 없습니다.');
+      }
+
+      const pdfBlob = await withTimeout(
+        generateV2PdfBlob(latestCertificate, storage),
+        pdfTimeoutMs,
+        `PDF 생성 타임아웃(${Math.floor(pdfTimeoutMs / 1000)}초): 첨부 파일 읽기 또는 병합이 지연되고 있습니다.`
+      );
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      if (previewWindow) {
+        previewWindow.location.href = blobUrl;
+      } else {
+        const downloadLink = document.createElement('a');
+        downloadLink.href = blobUrl;
+        downloadLink.target = '_blank';
+        downloadLink.rel = 'noopener noreferrer';
+        downloadLink.download = `MATERIAL_TEST_CERTIFICATE_${certificate.id}.pdf`;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (downloadError) {
+      console.error('v2 PDF 생성/열기 오류:', downloadError);
+      const message = downloadError instanceof Error ? downloadError.message : '알 수 없는 오류';
+      setError(`PDF 생성에 실패했습니다: ${message}`);
+      if (previewWindow) {
+        previewWindow.close();
+      }
+    } finally {
+      setDownloadingCertificateId(null);
     }
   };
 
@@ -484,12 +593,18 @@ function CertificateListPageContent() {
                                   </>
                                 ) : (
                                   <>
-                                    {certificate.certificateFile && (
+                                    {certificate.materialTestCertificate && (
                                       <button
                                         onClick={() => handleDownload(certificate)}
                                         className="text-green-600 hover:text-green-800 text-xs font-medium"
+                                        disabled={
+                                          deletingId === certificate.id ||
+                                          downloadingCertificateId === certificate.id
+                                        }
                                       >
-                                        다운로드
+                                        {downloadingCertificateId === certificate.id
+                                          ? 'PDF 생성 중...'
+                                          : '다운로드'}
                                       </button>
                                     )}
                                   </>
@@ -697,25 +812,26 @@ function CertificateListPageContent() {
                         <p className="text-sm text-gray-900 whitespace-pre-wrap bg-gray-50 p-3 rounded-md">{selectedCertificateForView.memo}</p>
                       </div>
                     )}
-                    {selectedCertificateForView.certificateFile && (
+                    {selectedCertificateForView.materialTestCertificate && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">성적서 파일</label>
-                        <a
-                          href={selectedCertificateForView.certificateFile.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-between p-3 border border-gray-200 rounded-md hover:bg-gray-50"
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(selectedCertificateForView)}
+                          disabled={downloadingCertificateId === selectedCertificateForView.id}
+                          className="flex w-full items-center justify-between p-3 border border-gray-200 rounded-md hover:bg-gray-50 text-left disabled:opacity-50"
                         >
                           <div className="flex items-center">
                             <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            <span className="text-sm text-blue-600 hover:underline">{selectedCertificateForView.certificateFile.name}</span>
+                            <span className="text-sm text-blue-600 hover:underline">
+                              {downloadingCertificateId === selectedCertificateForView.id
+                                ? 'PDF 생성 중...'
+                                : 'MATERIAL TEST CERTIFICATE 다운로드'}
+                            </span>
                           </div>
-                          <span className="text-xs text-gray-500">
-                            {selectedCertificateForView.certificateFile.size ? `${(selectedCertificateForView.certificateFile.size / 1024).toFixed(1)} KB` : ''}
-                          </span>
-                        </a>
+                        </button>
                       </div>
                     )}
                   </div>

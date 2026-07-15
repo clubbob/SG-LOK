@@ -529,6 +529,12 @@ export default function AdminLayout({
                               <Link
                                 key={subItem.id}
                                 href={subItem.path}
+                                onClick={(e) => {
+                                  if (subItem.id === 'certificate-list') {
+                                    e.preventDefault();
+                                    alert('사용 중단된 메뉴입니다.');
+                                  }
+                                }}
                                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
                                   isSubActive
                                     ? 'bg-blue-50 text-blue-600 font-semibold'

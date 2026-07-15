@@ -47,6 +47,16 @@ const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   cancelled: '취소',
 };
 
+const getDisplayStatusLabel = (request: { status: ProductionRequestStatus; cleaningEpCompletionDate?: Date }): string => {
+  if (request.cleaningEpCompletionDate) return '세정/EP 완료';
+  return STATUS_LABELS[request.status];
+};
+
+const getDisplayStatusColor = (request: { status: ProductionRequestStatus; cleaningEpCompletionDate?: Date }): string => {
+  if (request.cleaningEpCompletionDate) return 'bg-teal-600';
+  return STATUS_COLORS[request.status];
+};
+
 const PRODUCTION_STATUS_LABELS: Record<string, string> = {
   production_waiting: '진행중',
   production_2nd: '진행중 (2차 진행중)',
@@ -74,6 +84,7 @@ interface GanttTask {
   // 페이징에서 "최근 등록" 기준 정렬에 사용
   createdAt: Date;
   productionStatus?: 'production_waiting' | 'production_2nd' | 'production_3rd' | 'production_completed';
+  cleaningEpCompletionDate?: Date;
 }
 
 export default function AdminProductionCalendarPage() {
@@ -127,6 +138,7 @@ export default function AdminProductionCalendarPage() {
             plannedCompletionDate: convertFirestoreDate(data.plannedCompletionDate),
             actualStartDate: convertFirestoreDate(data.actualStartDate),
             actualCompletionDate: convertFirestoreDate(data.actualCompletionDate),
+            cleaningEpCompletionDate: convertFirestoreDate(data.cleaningEpCompletionDate),
             createdAt: convertFirestoreDate(data.createdAt) || new Date(),
             updatedAt: convertFirestoreDate(data.updatedAt) || new Date(),
           } as ProductionRequest;
@@ -144,7 +156,7 @@ export default function AdminProductionCalendarPage() {
       },
       (error) => {
         console.error('생산요청 목록 로드 오류:', error);
-        setError('생산요청 목록을 불러오는데 실패했습니다.');
+        setError('생산요청 현황을 불러오는데 실패했습니다.');
         setLoading(false);
       }
     );
@@ -255,6 +267,7 @@ export default function AdminProductionCalendarPage() {
           userName: req.userName,
           createdAt,
           productionStatus: req.productionStatus,
+          cleaningEpCompletionDate: req.cleaningEpCompletionDate,
         };
       });
   };
@@ -638,6 +651,10 @@ export default function AdminProductionCalendarPage() {
                 <div className={`w-4 h-4 rounded ${STATUS_COLORS['completed']}`}></div>
                 <span className="text-sm text-gray-700">{STATUS_LABELS['completed']}</span>
               </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-teal-600"></div>
+                <span className="text-sm text-gray-700">세정/EP 완료</span>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0 pt-1 sm:pt-0">
@@ -798,12 +815,12 @@ export default function AdminProductionCalendarPage() {
 
                           // 생산현황에 따른 색상 결정 (생산현황이 있으면 생산현황 색상 사용, 없으면 상태 색상 사용)
                           const taskColor = task.productionStatus 
-                            ? PRODUCTION_STATUS_COLORS[task.productionStatus] || STATUS_COLORS[task.status]
-                            : STATUS_COLORS[task.status];
+                            ? PRODUCTION_STATUS_COLORS[task.productionStatus] || getDisplayStatusColor(task)
+                            : getDisplayStatusColor(task);
                           const productionStatusLabel = task.productionStatus 
                             ? PRODUCTION_STATUS_LABELS[task.productionStatus] 
                             : null;
-                          const tooltipText = `${task.productName} (${task.quantity.toLocaleString()}) - ${task.userName} - ${STATUS_LABELS[task.status]}${productionStatusLabel ? ` - ${productionStatusLabel}` : ''} - ${formatDateShort(task.start)} ~ ${formatDateShort(task.end)}`;
+                          const tooltipText = `${task.productName} (${task.quantity.toLocaleString()}) - ${task.userName} - ${getDisplayStatusLabel(task)}${productionStatusLabel ? ` - ${productionStatusLabel}` : ''} - ${formatDateShort(task.start)} ~ ${formatDateShort(task.end)}`;
 
                           return (
                             <div

@@ -93,7 +93,7 @@ const adminMenuItems: MenuItem[] = [
     ),
     subItems: [
       { id: 'production-request', label: '생산요청 등록', path: '/admin/production/request' },
-      { id: 'production-list', label: '생산요청 목록', path: '/admin/production' },
+      { id: 'production-list', label: '생산요청 현황', path: '/admin/production' },
       { id: 'production-calendar', label: '생산일정 캘린더', path: '/admin/production/calendar' },
     ],
   },
@@ -530,7 +530,10 @@ export default function AdminLayout({
                                 key={subItem.id}
                                 href={subItem.path}
                                 onClick={(e) => {
-                                  if (subItem.id === 'certificate-list') {
+                                  if (
+                                    subItem.id === 'certificate-list' ||
+                                    subItem.id === 'production-calendar'
+                                  ) {
                                     e.preventDefault();
                                     alert('사용 중단된 메뉴입니다.');
                                   }

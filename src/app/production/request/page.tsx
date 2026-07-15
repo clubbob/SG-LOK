@@ -167,6 +167,11 @@ function ProductionRequestContent() {
         ...fieldErrors,
         [name]: ''
       });
+    } else if (name === 'productionReason' && value === 'inventory' && fieldErrors.customerName) {
+      setFieldErrors({
+        ...fieldErrors,
+        customerName: '',
+      });
     }
     if (error) setError('');
     if (success) setSuccess('');
@@ -212,8 +217,8 @@ function ProductionRequestContent() {
       errors.productName = '제품명을 입력해주세요.';
     }
 
-    // 2) 고객사명 필수
-    if (!formData.customerName.trim()) {
+    // 2) 고객사명 — 고객 주문일 때만 필수
+    if (formData.productionReason === 'order' && !formData.customerName.trim()) {
       errors.customerName = '고객사명을 입력해주세요.';
     }
 
@@ -239,10 +244,10 @@ function ProductionRequestContent() {
       }
     }
 
-    // 5) 완료요청일
+    // 5) 완료요청일 (신규 등록 시에만 '오늘 이후' 검증 — 수정은 과거 작성 건 유지 허용)
     if (!formData.requestedCompletionDate) {
       errors.requestedCompletionDate = '완료요청일을 선택해주세요.';
-    } else {
+    } else if (!isEditMode) {
       const completionDate = new Date(formData.requestedCompletionDate);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -463,14 +468,14 @@ function ProductionRequestContent() {
                 id="customerName"
                 name="customerName"
                 type="text"
-                label="고객사명 *"
+                label={formData.productionReason === 'order' ? '고객사명 *' : '고객사명'}
                 value={formData.customerName}
                 onChange={handleChange}
                 onFocus={() => setShowCustomerSuggestions(formData.customerName.length > 0)}
                 onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
                 placeholder="고객사명을 입력하세요"
                 error={fieldErrors.customerName}
-                required
+                required={formData.productionReason === 'order'}
                 list="customerNameList"
               />
               <datalist id="customerNameList">

@@ -45,12 +45,14 @@ function AdminProductionRequestContent() {
     productName: '',
     quantity: '',
     orderQuantity: '',
+    plannedQuantity: '',
     requestedCompletionDate: '',
     productionReason: 'order' as ProductionReason,
     customerName: '',
     memo: '',
     plannedCompletionDate: '',
     actualCompletionDate: '',
+    cleaningEpCompletionDate: '',
     adminMemo: '',
   });
   const [currentStatus, setCurrentStatus] = useState<string>('');
@@ -85,12 +87,14 @@ function AdminProductionRequestContent() {
             productName: data.productName || '',
             quantity: data.quantity?.toString() || '',
             orderQuantity: data.orderQuantity?.toString() || '',
+            plannedQuantity: data.plannedQuantity?.toString() || '',
             requestedCompletionDate: data.requestedCompletionDate?.toDate().toISOString().split('T')[0] || '',
             productionReason: data.productionReason || 'order',
             customerName: data.customerName || '',
             memo: data.memo || '',
             plannedCompletionDate: data.plannedCompletionDate?.toDate().toISOString().split('T')[0] || '',
             actualCompletionDate: data.actualCompletionDate?.toDate().toISOString().split('T')[0] || '',
+            cleaningEpCompletionDate: data.cleaningEpCompletionDate?.toDate().toISOString().split('T')[0] || '',
             adminMemo: data.adminMemo || '',
           });
         } else {
@@ -179,6 +183,11 @@ function AdminProductionRequestContent() {
         ...fieldErrors,
         [name]: ''
       });
+    } else if (name === 'productionReason' && value === 'inventory' && fieldErrors.customerName) {
+      setFieldErrors({
+        ...fieldErrors,
+        customerName: '',
+      });
     }
     if (error) setError('');
     if (success) setSuccess('');
@@ -224,8 +233,8 @@ function AdminProductionRequestContent() {
       errors.productName = '제품명을 입력해주세요.';
     }
 
-    // 2) 고객사명 필수
-    if (!formData.customerName.trim()) {
+    // 2) 고객사명 — 고객 주문일 때만 필수
+    if (formData.productionReason === 'order' && !formData.customerName.trim()) {
       errors.customerName = '고객사명을 입력해주세요.';
     }
 
@@ -251,10 +260,25 @@ function AdminProductionRequestContent() {
       }
     }
 
-    // 5) 완료요청일
+    // 4-1) 계획수량 — 확정 이후 수정 시 필수
+    if (
+      isEditMode &&
+      (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress')
+    ) {
+      if (!formData.plannedQuantity.trim()) {
+        errors.plannedQuantity = '계획수량을 입력해주세요.';
+      } else {
+        const plannedQtyNum = parseInt(formData.plannedQuantity, 10);
+        if (isNaN(plannedQtyNum) || plannedQtyNum <= 0) {
+          errors.plannedQuantity = '계획수량은 1 이상의 숫자여야 합니다.';
+        }
+      }
+    }
+
+    // 5) 완료요청일 (신규 등록 시에만 '오늘 이후' 검증 — 수정은 과거 작성 건 유지 허용)
     if (!formData.requestedCompletionDate) {
       errors.requestedCompletionDate = '완료요청일을 선택해주세요.';
-    } else {
+    } else if (!isEditMode) {
       const completionDate = new Date(formData.requestedCompletionDate);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -313,10 +337,13 @@ function AdminProductionRequestContent() {
           productionRequestData.adminMemo = formData.adminMemo.trim();
         }
 
-        // 확정된 경우 또는 완료된 경우 완료예정일 업데이트
+        // 확정된 경우 또는 완료된 경우 완료예정일·계획수량 업데이트
         if (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress') {
           if (formData.plannedCompletionDate) {
             productionRequestData.plannedCompletionDate = Timestamp.fromDate(new Date(formData.plannedCompletionDate));
+          }
+          if (formData.plannedQuantity.trim()) {
+            productionRequestData.plannedQuantity = parseInt(formData.plannedQuantity, 10);
           }
         }
 
@@ -324,9 +351,19 @@ function AdminProductionRequestContent() {
         if (formData.actualCompletionDate) {
           productionRequestData.actualCompletionDate = Timestamp.fromDate(new Date(formData.actualCompletionDate));
           productionRequestData.status = 'completed';
+
+          // 세정/EP 완료일 (생산완료일 다음에 등록)
+          if (formData.cleaningEpCompletionDate) {
+            productionRequestData.cleaningEpCompletionDate = Timestamp.fromDate(
+              new Date(formData.cleaningEpCompletionDate)
+            );
+          } else {
+            productionRequestData.cleaningEpCompletionDate = null;
+          }
         } else if (currentStatus === 'completed' && !formData.actualCompletionDate) {
-          // 생산완료일이 제거되면 상태를 확정으로 변경
+          // 생산완료일이 제거되면 상태를 확정으로 변경하고 세정/EP 완료일도 함께 제거
           productionRequestData.actualCompletionDate = null;
+          productionRequestData.cleaningEpCompletionDate = null;
           productionRequestData.status = 'confirmed';
         }
 
@@ -379,12 +416,14 @@ function AdminProductionRequestContent() {
         productName: '',
         quantity: '',
         orderQuantity: '',
+        plannedQuantity: '',
         requestedCompletionDate: '',
         productionReason: 'order',
         customerName: '',
         memo: '',
         plannedCompletionDate: '',
         actualCompletionDate: '',
+        cleaningEpCompletionDate: '',
         adminMemo: '',
       });
 
@@ -499,14 +538,14 @@ function AdminProductionRequestContent() {
                 id="customerName"
                 name="customerName"
                 type="text"
-                label="고객사명 *"
+                label={formData.productionReason === 'order' ? '고객사명 *' : '고객사명'}
                 value={formData.customerName}
                 onChange={handleChange}
                 onFocus={() => setShowCustomerSuggestions(formData.customerName.length > 0)}
                 onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
                 placeholder="고객사명을 입력하세요"
                 error={fieldErrors.customerName}
-                required
+                required={formData.productionReason === 'order'}
                 list="customerNameList"
                 disabled={isEditMode}
               />
@@ -569,6 +608,40 @@ function AdminProductionRequestContent() {
               />
             </div>
 
+            {isEditMode && (
+              <div>
+                <Input
+                  id="plannedQuantity"
+                  name="plannedQuantity"
+                  type="number"
+                  label={
+                    currentStatus === 'confirmed' ||
+                    currentStatus === 'completed' ||
+                    currentStatus === 'in_progress'
+                      ? '계획수량 *'
+                      : '계획수량'
+                  }
+                  value={formData.plannedQuantity}
+                  onChange={handleChange}
+                  placeholder="계획수량을 입력하세요"
+                  error={fieldErrors.plannedQuantity}
+                  min="1"
+                  required={
+                    currentStatus === 'confirmed' ||
+                    currentStatus === 'completed' ||
+                    currentStatus === 'in_progress'
+                  }
+                  disabled={
+                    !(
+                      currentStatus === 'confirmed' ||
+                      currentStatus === 'completed' ||
+                      currentStatus === 'in_progress'
+                    )
+                  }
+                />
+              </div>
+            )}
+
             <div>
               <Input
                 id="requestedCompletionDate"
@@ -583,45 +656,49 @@ function AdminProductionRequestContent() {
                 disabled={isEditMode}
               />
             </div>
+
+            {isEditMode &&
+              (currentStatus === 'confirmed' ||
+                currentStatus === 'completed' ||
+                currentStatus === 'in_progress') && (
+              <div>
+                <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
+                  완료예정일
+                </label>
+                <input
+                  type="date"
+                  id="plannedCompletionDate"
+                  name="plannedCompletionDate"
+                  value={formData.plannedCompletionDate}
+                  onChange={handleChange}
+                  disabled={true}
+                  className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 cursor-not-allowed opacity-50"
+                />
+              </div>
+            )}
           </div>
 
-          {/* 확정된 경우 또는 완료된 경우 또는 진행중인 경우 완료예정일, 생산완료일 수정 가능 */}
+          {/* 확정된 경우 또는 완료된 경우 또는 진행중인 경우 완료예정일 변경, 생산완료일 수정 가능 */}
           {isEditMode && (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress') && (
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
-                    완료예정일
-                  </label>
-                  <input
-                    type="date"
-                    id="plannedCompletionDate"
-                    name="plannedCompletionDate"
-                    value={formData.plannedCompletionDate}
-                    onChange={handleChange}
-                    disabled={true}
-                    className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 cursor-not-allowed opacity-50"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="plannedCompletionDateChange" className="block text-sm font-medium text-gray-700 mb-2">
-                    완료예정일 변경
-                  </label>
-                  <input
-                    type="date"
-                    id="plannedCompletionDateChange"
-                    name="plannedCompletionDateChange"
-                    value={formData.plannedCompletionDate}
-                    onChange={(e) => {
-                      setFormData(prev => ({ ...prev, plannedCompletionDate: e.target.value }));
-                    }}
-                    disabled={!!formData.actualCompletionDate}
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
-                  />
-                  {formData.actualCompletionDate && (
-                    <p className="mt-1 text-xs text-gray-500">생산완료일이 등록되어 있어 완료예정일을 변경할 수 없습니다.</p>
-                  )}
-                </div>
+              <div>
+                <label htmlFor="plannedCompletionDateChange" className="block text-sm font-medium text-gray-700 mb-2">
+                  완료예정일 변경
+                </label>
+                <input
+                  type="date"
+                  id="plannedCompletionDateChange"
+                  name="plannedCompletionDateChange"
+                  value={formData.plannedCompletionDate}
+                  onChange={(e) => {
+                    setFormData(prev => ({ ...prev, plannedCompletionDate: e.target.value }));
+                  }}
+                  disabled={!!formData.actualCompletionDate}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
+                />
+                {formData.actualCompletionDate && (
+                  <p className="mt-1 text-xs text-gray-500">생산완료일이 등록되어 있어 완료예정일을 변경할 수 없습니다.</p>
+                )}
               </div>
               
               <div>
@@ -633,9 +710,35 @@ function AdminProductionRequestContent() {
                   id="actualCompletionDate"
                   name="actualCompletionDate"
                   value={formData.actualCompletionDate}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      actualCompletionDate: value,
+                      // 생산완료일이 없으면 세정/EP 완료일도 함께 비움
+                      cleaningEpCompletionDate: value ? prev.cleaningEpCompletionDate : '',
+                    }));
+                  }}
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                 />
+              </div>
+
+              <div>
+                <label htmlFor="cleaningEpCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
+                  세정/EP 완료일
+                </label>
+                <input
+                  type="date"
+                  id="cleaningEpCompletionDate"
+                  name="cleaningEpCompletionDate"
+                  value={formData.cleaningEpCompletionDate}
+                  onChange={handleChange}
+                  disabled={!formData.actualCompletionDate}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
+                />
+                {!formData.actualCompletionDate && (
+                  <p className="mt-1 text-xs text-gray-500">생산완료일을 먼저 등록해야 세정/EP 완료일을 입력할 수 있습니다.</p>
+                )}
               </div>
             </div>
           )}

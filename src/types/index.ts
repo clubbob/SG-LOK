@@ -73,6 +73,7 @@ export interface ProductionRequest {
   productName: string; // 제품명 (자유 입력, 임시 정보)
   quantity: number; // 수량
   orderQuantity?: number; // 수주수량 (생산목적이 주문인 경우)
+  plannedQuantity?: number; // 승인 시 계획수량
   requestDate: Date; // 생산요청일
   requestedCompletionDate: Date; // 완료요청일
   productionReason: ProductionReason; // 생산이유
@@ -92,6 +93,7 @@ export interface ProductionRequest {
   // 실제 생산 정보
   actualStartDate?: Date; // 실제 생산개시일
   actualCompletionDate?: Date; // 실제 생산완료일
+  cleaningEpCompletionDate?: Date; // 세정/EP 완료일
   
   // 우선순위 및 메모
   priority?: number; // 우선순위

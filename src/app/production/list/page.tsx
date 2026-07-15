@@ -27,6 +27,27 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
   cancelled: 'bg-red-500 text-white',
 };
 
+const getDisplayStatusLabel = (request: ProductionRequest): string => {
+  if (request.cleaningEpCompletionDate) return '세정/EP 완료';
+  return STATUS_LABELS[request.status];
+};
+
+const getDisplayStatusColor = (request: ProductionRequest): string => {
+  if (request.cleaningEpCompletionDate) return 'bg-teal-600 text-white';
+  return STATUS_COLORS[request.status];
+};
+
+/** 날짜만 비교 (시분초 무시). a가 b보다 늦으면 true */
+const isDateAfter = (a?: Date, b?: Date): boolean => {
+  if (!a || !b) return false;
+  const da = new Date(a);
+  const db = new Date(b);
+  if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return false;
+  da.setHours(0, 0, 0, 0);
+  db.setHours(0, 0, 0, 0);
+  return da.getTime() > db.getTime();
+};
+
 
 function ProductionRequestListPageContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
@@ -103,6 +124,8 @@ function ProductionRequestListPageContent() {
             plannedCompletionDate: data.plannedCompletionDate?.toDate(),
             actualStartDate: data.actualStartDate?.toDate(),
             actualCompletionDate: data.actualCompletionDate?.toDate(),
+            cleaningEpCompletionDate: data.cleaningEpCompletionDate?.toDate(),
+            plannedQuantity: data.plannedQuantity,
             priority: data.priority,
             memo: data.memo || '',
             adminMemo: data.adminMemo || '',
@@ -123,7 +146,7 @@ function ProductionRequestListPageContent() {
       (error) => {
         console.error('생산요청 목록 로드 오류:', error);
         const firebaseError = error as { code?: string; message?: string };
-        setError(`생산요청 목록을 불러오는데 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+        setError(`생산요청 현황을 불러오는데 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
         setLoadingRequests(false);
       }
     );
@@ -164,7 +187,7 @@ function ProductionRequestListPageContent() {
       const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const customerName = request.customerName?.toLowerCase() || '';
       const userName = request.userName?.toLowerCase() || '';
-      const statusLabel = STATUS_LABELS[request.status]?.toLowerCase() || request.status || '';
+      const statusLabel = getDisplayStatusLabel(request).toLowerCase();
       return (
         productName.includes(q) ||
         productionReason.includes(q) ||
@@ -241,10 +264,12 @@ function ProductionRequestListPageContent() {
       '생산목적',
       '고객사명',
       '수주수량',
-        '요청수량',
+      '요청수량',
+      '계획수량',
       '완료요청일',
       '완료예정일',
       '생산완료일',
+      '세정/EP 완료일',
       '비고',
       '상태',
     ];
@@ -254,11 +279,14 @@ function ProductionRequestListPageContent() {
     const rows = exportRequests.map((request, idx) => {
       const rowNumber = exportRequests.length - idx;
       const productionReasonLabel = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
-      const statusLabel = STATUS_LABELS[request.status];
+      const statusLabel = getDisplayStatusLabel(request);
 
       const requestedDateStr = request.requestedCompletionDate ? formatDateShort(request.requestedCompletionDate) : '';
       const plannedDateStr = request.plannedCompletionDate ? formatDateShort(request.plannedCompletionDate) : '';
       const actualDateStr = request.actualCompletionDate ? formatDateShort(request.actualCompletionDate) : '';
+      const cleaningEpDateStr = request.cleaningEpCompletionDate
+        ? formatDateShort(request.cleaningEpCompletionDate)
+        : '';
       const requestDateStr = request.requestDate ? formatDateShort(request.requestDate) : '';
 
       const cols = [
@@ -270,9 +298,11 @@ function ProductionRequestListPageContent() {
         request.customerName || '',
         request.orderQuantity ?? '',
         request.quantity,
+        request.plannedQuantity ?? '',
         requestedDateStr,
         plannedDateStr,
         actualDateStr,
+        cleaningEpDateStr,
         request.memo || '',
         statusLabel,
       ];
@@ -316,8 +346,8 @@ function ProductionRequestListPageContent() {
         <div className="w-full max-w-[95%] mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-12">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
             <div className="min-w-0">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">생산요청 목록</h1>
-              <p className="text-gray-600 mt-2 text-sm sm:text-base">모든 생산요청을 확인할 수 있습니다</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">생산요청 현황</h1>
+              <p className="text-gray-600 mt-2 text-sm sm:text-base">생산요청 현황을 확인할 수 있습니다</p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto sm:flex-shrink-0">
               <Button
@@ -431,9 +461,11 @@ function ProductionRequestListPageContent() {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">고객사명</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수주수량</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청수량</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">계획수량</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산완료일</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">세정/EP 완료일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">비고</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">상태</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">관리</th>
@@ -483,24 +515,58 @@ function ProductionRequestListPageContent() {
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
+                              {request.plannedQuantity !== undefined && request.plannedQuantity !== null
+                                ? request.plannedQuantity.toLocaleString()
+                                : <span className="text-gray-400">-</span>}
+                            </div>
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
                               {formatDateShort(request.requestedCompletionDate)}
                             </div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
+                            <div
+                              className={`text-sm ${
+                                isDateAfter(request.plannedCompletionDate, request.requestedCompletionDate)
+                                  ? 'text-red-500'
+                                  : 'text-gray-900'
+                              }`}
+                            >
                               {request.plannedCompletionDate ? (
                                 formatDateShort(request.plannedCompletionDate)
                               ) : (
-                                <span className="text-gray-400">-</span>
+                                <span className="text-gray-400 font-normal">-</span>
                               )}
                             </div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
+                            <div
+                              className={`text-sm ${
+                                isDateAfter(request.actualCompletionDate, request.plannedCompletionDate)
+                                  ? 'text-red-500'
+                                  : 'text-gray-900'
+                              }`}
+                            >
                               {request.actualCompletionDate ? (
                                 formatDateShort(request.actualCompletionDate)
                               ) : (
-                                <span className="text-gray-400">-</span>
+                                <span className="text-gray-400 font-normal">-</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap">
+                            <div
+                              className={`text-sm ${
+                                isDateAfter(request.cleaningEpCompletionDate, request.plannedCompletionDate)
+                                  ? 'text-red-500'
+                                  : 'text-gray-900'
+                              }`}
+                            >
+                              {request.cleaningEpCompletionDate ? (
+                                formatDateShort(request.cleaningEpCompletionDate)
+                              ) : (
+                                <span className="text-gray-400 font-normal">-</span>
                               )}
                             </div>
                           </td>
@@ -519,8 +585,8 @@ function ProductionRequestListPageContent() {
                             </div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[request.status]}`}>
-                              {STATUS_LABELS[request.status]}
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDisplayStatusColor(request)}`}>
+                              {getDisplayStatusLabel(request)}
                             </span>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
@@ -671,6 +737,12 @@ function ProductionRequestListPageContent() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">요청수량</label>
                     <p className="text-sm text-gray-900">{selectedRequest.quantity.toLocaleString()}</p>
                   </div>
+                  {selectedRequest.plannedQuantity !== undefined && selectedRequest.plannedQuantity !== null && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">계획수량</label>
+                      <p className="text-sm text-gray-900">{selectedRequest.plannedQuantity.toLocaleString()}</p>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">등록일</label>
                     <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.requestDate)}</p>
@@ -691,10 +763,16 @@ function ProductionRequestListPageContent() {
                       <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.actualCompletionDate)}</p>
                     </div>
                   )}
+                  {selectedRequest.cleaningEpCompletionDate && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">세정/EP 완료일</label>
+                      <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.cleaningEpCompletionDate)}</p>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">상태</label>
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[selectedRequest.status]}`}>
-                      {STATUS_LABELS[selectedRequest.status]}
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDisplayStatusColor(selectedRequest)}`}>
+                      {getDisplayStatusLabel(selectedRequest)}
                     </span>
                   </div>
                 </div>

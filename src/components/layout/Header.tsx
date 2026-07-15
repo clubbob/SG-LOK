@@ -182,12 +182,16 @@ export default function Header() {
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
                           onClick={() => setIsProdMenuOpen(false)}
                         >
-                          생산요청 목록
+                          생산요청 현황
                         </Link>
                         <Link
                           href="/production/calendar"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsProdMenuOpen(false)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            alert('사용 중단된 메뉴입니다.');
+                            setIsProdMenuOpen(false);
+                          }}
                         >
                           생산일정 캘린더
                         </Link>
@@ -649,7 +653,7 @@ export default function Header() {
                 }`}
                 onClick={() => setIsMobileMenuOpen(false)}
               >
-                생산요청 목록
+                생산요청 현황
               </Link>
               <Link
                 href="/production/calendar"
@@ -658,7 +662,11 @@ export default function Header() {
                     ? 'bg-blue-700 text-white'
                     : 'text-white/95 hover:bg-blue-600'
                 }`}
-                onClick={() => setIsMobileMenuOpen(false)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  alert('사용 중단된 메뉴입니다.');
+                  setIsMobileMenuOpen(false);
+                }}
               >
                 생산일정 캘린더
               </Link>

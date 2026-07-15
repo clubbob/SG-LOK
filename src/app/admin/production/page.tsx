@@ -49,6 +49,27 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
   cancelled: 'bg-red-500 text-white',
 };
 
+const getDisplayStatusLabel = (request: ProductionRequest): string => {
+  if (request.cleaningEpCompletionDate) return '세정/EP 완료';
+  return STATUS_LABELS[request.status];
+};
+
+const getDisplayStatusColor = (request: ProductionRequest): string => {
+  if (request.cleaningEpCompletionDate) return 'bg-teal-600 text-white';
+  return STATUS_COLORS[request.status];
+};
+
+/** 날짜만 비교 (시분초 무시). a가 b보다 늦으면 true */
+const isDateAfter = (a?: Date, b?: Date): boolean => {
+  if (!a || !b) return false;
+  const da = new Date(a);
+  const db = new Date(b);
+  if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return false;
+  da.setHours(0, 0, 0, 0);
+  db.setHours(0, 0, 0, 0);
+  return da.getTime() > db.getTime();
+};
+
 
 export default function AdminProductionPage() {
   const router = useRouter();
@@ -63,8 +84,10 @@ export default function AdminProductionPage() {
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string; adminMemo?: string } | null>(null);
   const [approvingRequest, setApprovingRequest] = useState<ProductionRequest | null>(null);
   const [approvalForm, setApprovalForm] = useState({
-    plannedCompletionDate: '',
     quantity: '',
+    plannedQuantity: '',
+    requestedCompletionDate: '',
+    plannedCompletionDate: '',
     adminMemo: '',
   });
   const [approving, setApproving] = useState(false);
@@ -109,6 +132,7 @@ export default function AdminProductionPage() {
             productName: data.productName,
             quantity: data.quantity,
             orderQuantity: parsedOrderQty,
+            plannedQuantity: data.plannedQuantity,
             requestDate: data.requestDate?.toDate() || new Date(),
             requestedCompletionDate: data.requestedCompletionDate?.toDate() || new Date(),
             productionReason: data.productionReason,
@@ -120,6 +144,7 @@ export default function AdminProductionPage() {
             plannedCompletionDate: data.plannedCompletionDate?.toDate(),
             actualStartDate: data.actualStartDate?.toDate(),
             actualCompletionDate: data.actualCompletionDate?.toDate(),
+            cleaningEpCompletionDate: data.cleaningEpCompletionDate?.toDate(),
           priority: data.priority,
           memo: data.memo || '',
           adminMemo: data.adminMemo || '',
@@ -147,7 +172,7 @@ export default function AdminProductionPage() {
       (error) => {
         console.error('생산요청 목록 로드 오류:', error);
         const firebaseError = error as { code?: string; message?: string };
-        setError(`생산요청 목록을 불러오는데 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+        setError(`생산요청 현황을 불러오는데 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
         setLoadingRequests(false);
       }
     );
@@ -184,7 +209,7 @@ export default function AdminProductionPage() {
       const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const customerName = request.customerName?.toLowerCase() || '';
       const userName = request.userName?.toLowerCase() || '';
-      const statusLabel = STATUS_LABELS[request.status]?.toLowerCase() || request.status || '';
+      const statusLabel = getDisplayStatusLabel(request).toLowerCase();
 
       return (
         productName.includes(query) ||
@@ -221,14 +246,31 @@ export default function AdminProductionPage() {
     router.push(`/admin/production/request?id=${request.id}`);
   };
 
+  const emptyApprovalForm = {
+    quantity: '',
+    plannedQuantity: '',
+    requestedCompletionDate: '',
+    plannedCompletionDate: '',
+    adminMemo: '',
+  };
+
+  const toDateInputValue = (date: Date | undefined): string => {
+    if (!date) return '';
+    const d = date instanceof Date ? date : new Date(date);
+    if (Number.isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const handleApprove = (request: ProductionRequest) => {
     setApprovingRequest(request);
-    // 기존 값이 있으면 설정
     setApprovalForm({
-      plannedCompletionDate: request.plannedCompletionDate 
-        ? formatDateShort(request.plannedCompletionDate).replace(/\//g, '-')
-        : '',
       quantity: request.quantity?.toString() || '',
+      plannedQuantity: request.plannedQuantity?.toString() || '',
+      requestedCompletionDate: toDateInputValue(request.requestedCompletionDate),
+      plannedCompletionDate: toDateInputValue(request.plannedCompletionDate),
       adminMemo: request.adminMemo || '',
     });
   };
@@ -236,6 +278,19 @@ export default function AdminProductionPage() {
   const handleApproveSubmit = async () => {
     if (!approvingRequest) return;
 
+    if (!approvalForm.plannedQuantity.trim()) {
+      setError('계획수량을 입력해주세요.');
+      return;
+    }
+    const plannedQuantityNum = parseInt(approvalForm.plannedQuantity, 10);
+    if (isNaN(plannedQuantityNum) || plannedQuantityNum <= 0) {
+      setError('계획수량은 1 이상의 숫자여야 합니다.');
+      return;
+    }
+    if (!approvalForm.requestedCompletionDate.trim()) {
+      setError('완료요청일을 입력해주세요.');
+      return;
+    }
     if (!approvalForm.plannedCompletionDate.trim()) {
       setError('완료예정일을 입력해주세요.');
       return;
@@ -245,11 +300,11 @@ export default function AdminProductionPage() {
     setError('');
 
     try {
-      const plannedCompletionDate = Timestamp.fromDate(new Date(approvalForm.plannedCompletionDate));
-      
       const updateData: Record<string, unknown> = {
         status: 'confirmed',
-        plannedCompletionDate: plannedCompletionDate,
+        plannedQuantity: plannedQuantityNum,
+        requestedCompletionDate: Timestamp.fromDate(new Date(approvalForm.requestedCompletionDate)),
+        plannedCompletionDate: Timestamp.fromDate(new Date(approvalForm.plannedCompletionDate)),
         updatedAt: Timestamp.now(),
         updatedBy: 'admin',
       };
@@ -263,7 +318,7 @@ export default function AdminProductionPage() {
 
       // 모달 닫기
       setApprovingRequest(null);
-      setApprovalForm({ plannedCompletionDate: '', quantity: '', adminMemo: '' });
+      setApprovalForm(emptyApprovalForm);
       // 실시간 업데이트로 자동 새로고침됨
     } catch (error) {
       console.error('생산요청 승인 오류:', error);
@@ -294,9 +349,11 @@ export default function AdminProductionPage() {
       '고객사명',
       '수주수량',
       '요청수량',
+      '계획수량',
       '완료요청일',
       '완료예정일',
       '생산완료일',
+      '세정/EP 완료일',
       '요청자',
       '비고',
       '상태',
@@ -307,11 +364,14 @@ export default function AdminProductionPage() {
     const rows = exportRequests.map((request, idx) => {
       const rowNumber = exportRequests.length - idx;
       const productionReasonLabel = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
-      const statusLabel = STATUS_LABELS[request.status];
+      const statusLabel = getDisplayStatusLabel(request);
 
       const requestedDateStr = request.requestedCompletionDate ? formatDateShort(request.requestedCompletionDate) : '';
       const plannedDateStr = request.plannedCompletionDate ? formatDateShort(request.plannedCompletionDate) : '';
       const actualDateStr = request.actualCompletionDate ? formatDateShort(request.actualCompletionDate) : '';
+      const cleaningEpDateStr = request.cleaningEpCompletionDate
+        ? formatDateShort(request.cleaningEpCompletionDate)
+        : '';
       const requestDateStr = request.requestDate ? formatDateShort(request.requestDate) : '';
 
       const cols = [
@@ -322,9 +382,11 @@ export default function AdminProductionPage() {
         request.customerName || '',
         request.orderQuantity ?? '',
         request.quantity,
+        request.plannedQuantity ?? '',
         requestedDateStr,
         plannedDateStr,
         actualDateStr,
+        cleaningEpDateStr,
         request.userName || '',
         request.memo || '',
         statusLabel,
@@ -389,8 +451,8 @@ export default function AdminProductionPage() {
     <div className="p-4 sm:p-8">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">생산요청 목록</h1>
-          <p className="text-gray-600 mt-2 text-sm sm:text-base">전체 생산요청을 확인하고 관리할 수 있습니다</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">생산요청 현황</h1>
+          <p className="text-gray-600 mt-2 text-sm sm:text-base">전체 생산요청 현황을 확인하고 관리할 수 있습니다</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto sm:flex-shrink-0">
           <Button
@@ -484,9 +546,11 @@ export default function AdminProductionPage() {
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">고객사명</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수주수량</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청수량</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">계획수량</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산완료일</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">세정/EP 완료일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">비고</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">상태</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">관리</th>
@@ -535,25 +599,59 @@ export default function AdminProductionPage() {
                         <div className="text-sm text-gray-900 whitespace-nowrap">{request.quantity.toLocaleString()}</div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900 whitespace-nowrap">
+                          {request.plannedQuantity !== undefined && request.plannedQuantity !== null
+                            ? request.plannedQuantity.toLocaleString()
+                            : <span className="text-gray-400">-</span>}
+                        </div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           {formatDateShort(request.requestedCompletionDate)}
                         </div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <div
+                          className={`text-sm ${
+                            isDateAfter(request.plannedCompletionDate, request.requestedCompletionDate)
+                              ? 'text-red-500'
+                              : 'text-gray-900'
+                          }`}
+                        >
                           {request.plannedCompletionDate ? (
                             formatDateShort(request.plannedCompletionDate)
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-400 font-normal">-</span>
                           )}
                         </div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+                        <div
+                          className={`text-sm ${
+                            isDateAfter(request.actualCompletionDate, request.plannedCompletionDate)
+                              ? 'text-red-500'
+                              : 'text-gray-900'
+                          }`}
+                        >
                           {request.actualCompletionDate ? (
                             formatDateShort(request.actualCompletionDate)
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className="text-gray-400 font-normal">-</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <div
+                          className={`text-sm ${
+                            isDateAfter(request.cleaningEpCompletionDate, request.plannedCompletionDate)
+                              ? 'text-red-500'
+                              : 'text-gray-900'
+                          }`}
+                        >
+                          {request.cleaningEpCompletionDate ? (
+                            formatDateShort(request.cleaningEpCompletionDate)
+                          ) : (
+                            <span className="text-gray-400 font-normal">-</span>
                           )}
                         </div>
                       </td>
@@ -572,8 +670,8 @@ export default function AdminProductionPage() {
                         </div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${STATUS_COLORS[request.status]}`}>
-                          {STATUS_LABELS[request.status]}
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDisplayStatusColor(request)}`}>
+                          {getDisplayStatusLabel(request)}
                         </span>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
@@ -708,7 +806,7 @@ export default function AdminProductionPage() {
               <button
                 onClick={() => {
                   setApprovingRequest(null);
-                  setApprovalForm({ plannedCompletionDate: '', quantity: '', adminMemo: '' });
+                  setApprovalForm(emptyApprovalForm);
                   setError('');
                 }}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -736,80 +834,68 @@ export default function AdminProductionPage() {
                 <div 
                   onClick={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
-                  onMouseUp={(e) => e.stopPropagation()}
-                  onMouseMove={(e) => e.stopPropagation()}
-                  onSelect={(e) => e.stopPropagation()}
                 >
-                    <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-2">
-                    신청 요청수량
+                  <label htmlFor="quantity" className="block text-sm font-medium text-gray-700 mb-2">
+                    요청수량
                   </label>
                   <input
                     type="number"
                     id="quantity"
                     value={approvalForm.quantity}
                     readOnly
-                      onChange={(e) => {
-                        // readOnly라 입력 변경이 일어나지 않지만, 혹시 모를 상태 변화 방지를 위해 처리만 중단
-                        e.preventDefault();
-                        e.stopPropagation();
-                        e.nativeEvent.stopImmediatePropagation();
-                      }}
-                    onMouseDown={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                    }}
-                    onMouseUp={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                    }}
-                    onMouseMove={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                    }}
-                    onFocus={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                    }}
-                    onBlur={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                    }}
-                    onKeyDown={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                    }}
-                    onKeyUp={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                    }}
-                    onKeyPress={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                    }}
-                    onInput={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                    }}
-                    onSelect={(e) => {
-                      e.stopPropagation();
-                      e.nativeEvent.stopImmediatePropagation();
-                    }}
-                    placeholder="요청수량을 입력하세요"
                     className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     disabled={approving}
                     min="1"
                     step="1"
-                    autoFocus={false}
                   />
-                  <p className="mt-1 text-xs text-gray-500">기존 요청수량: {approvingRequest.quantity.toLocaleString()}</p>
+                </div>
+                <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                  <label htmlFor="plannedQuantity" className="block text-sm font-medium text-gray-700 mb-2">
+                    계획수량 *
+                  </label>
+                  <input
+                    type="number"
+                    id="plannedQuantity"
+                    value={approvalForm.plannedQuantity}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setApprovalForm({ ...approvalForm, plannedQuantity: e.target.value });
+                      if (error) setError('');
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder="계획수량을 입력하세요"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    disabled={approving}
+                    min="1"
+                    step="1"
+                    required
+                  />
+                </div>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <label htmlFor="requestedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
+                    완료요청일 *
+                  </label>
+                  <input
+                    type="date"
+                    id="requestedCompletionDate"
+                    value={approvalForm.requestedCompletionDate}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setApprovalForm({ ...approvalForm, requestedCompletionDate: e.target.value });
+                      if (error) setError('');
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onFocus={(e) => e.stopPropagation()}
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    disabled={approving}
+                    required
+                  />
                 </div>
                 <div onClick={(e) => e.stopPropagation()}>
                   <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
-                    완료예정일: *
+                    완료예정일 *
                   </label>
                   <input
                     type="date"
@@ -860,7 +946,7 @@ export default function AdminProductionPage() {
                 variant="outline"
                 onClick={() => {
                   setApprovingRequest(null);
-                  setApprovalForm({ plannedCompletionDate: '', quantity: '', adminMemo: '' });
+                  setApprovalForm(emptyApprovalForm);
                   setError('');
                 }}
                 disabled={approving}

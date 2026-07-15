@@ -68,14 +68,20 @@ export default function ProductionPage() {
                     </svg>
                   </div>
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900">생산요청 목록</h2>
-                    <p className="text-sm text-gray-600">등록한 생산요청을 확인합니다</p>
+                    <h2 className="text-lg font-semibold text-gray-900">생산요청 현황</h2>
+                    <p className="text-sm text-gray-600">등록한 생산요청 현황을 확인합니다</p>
                   </div>
                 </div>
               </div>
             </Link>
 
-            <Link href="/production/calendar">
+            <Link
+              href="/production/calendar"
+              onClick={(e) => {
+                e.preventDefault();
+                alert('사용 중단된 메뉴입니다.');
+              }}
+            >
               <div className="bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow cursor-pointer border-2 border-transparent hover:border-blue-500">
                 <div className="flex items-center gap-4">
                   <div className="bg-blue-100 rounded-lg p-3">

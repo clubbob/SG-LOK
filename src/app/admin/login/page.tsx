@@ -10,6 +10,7 @@ import { auth, db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
 import { hasEffectiveAdminAccess } from '@/lib/auth/adminBootstrap';
+import { ADMIN_NOTIF_CHECK_KEY } from '@/lib/adminNotifications';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -96,6 +97,7 @@ export default function AdminLoginPage() {
           expiresAt: new Date().getTime() + 24 * 60 * 60 * 1000, // 24시간
         };
         localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(sessionData));
+        sessionStorage.setItem(ADMIN_NOTIF_CHECK_KEY, '1');
 
         // 관리자 홈 페이지로 리다이렉트
         router.push('/admin/dashboard');

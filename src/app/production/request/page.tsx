@@ -8,6 +8,10 @@ import { Button, Input } from '@/components/ui';
 import { collection, addDoc, Timestamp, getDocs, query, where, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ProductionReason } from '@/types';
+import {
+  buildProductionRequestNotification,
+  postAdminNotification,
+} from '@/lib/adminNotifications';
 
 function ProductionRequestContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
@@ -341,7 +345,16 @@ function ProductionRequestContent() {
           productionRequestData.memo = formData.memo.trim();
         }
 
-        await addDoc(collection(db, 'productionRequests'), productionRequestData);
+        const createdRef = await addDoc(collection(db, 'productionRequests'), productionRequestData);
+        await postAdminNotification(
+          buildProductionRequestNotification({
+            userName: userProfile.name || '사용자',
+            productName: formData.productName.trim().toUpperCase(),
+            quantity: parseInt(formData.quantity, 10),
+            customerName: formData.customerName.trim() || undefined,
+            refId: createdRef.id,
+          })
+        );
         setSuccess('생산요청이 성공적으로 등록되었습니다.');
         
         // 등록 후 목록 페이지로 이동

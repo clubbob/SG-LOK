@@ -7,6 +7,11 @@ import { Header, Footer } from '@/components/layout';
 import { collection, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { hasEffectiveAdminAccess, isBootstrapAdminEmail } from '@/lib/auth/adminBootstrap';
+import {
+  ADMIN_NOTIF_CHECK_KEY,
+  type AdminNotification,
+} from '@/lib/adminNotifications';
+import { Button } from '@/components/ui';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -175,6 +180,8 @@ export default function AdminLayout({
   const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
   const [pendingUserCount, setPendingUserCount] = useState<number>(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [loginNotifications, setLoginNotifications] = useState<AdminNotification[]>([]);
+  const [showLoginNotifModal, setShowLoginNotifModal] = useState(false);
 
   // 로그인 페이지는 레이아웃 적용 안 함
   const isLoginPage = pathname === '/admin/login' || pathname?.startsWith('/admin/login');
@@ -301,8 +308,82 @@ export default function AdminLayout({
     setMobileNavOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (!isAdminAuthenticated || isLoginPage || loading) return;
+    if (typeof window === 'undefined') return;
+    if (sessionStorage.getItem(ADMIN_NOTIF_CHECK_KEY) !== '1') return;
+
+    const session = checkAdminAuth();
+    const adminUid = session.uid;
+    if (!adminUid) {
+      sessionStorage.removeItem(ADMIN_NOTIF_CHECK_KEY);
+      return;
+    }
+
+    let cancelled = false;
+    const loadNotifications = async () => {
+      try {
+        const res = await fetch(`/api/admin/notifications?uid=${encodeURIComponent(adminUid)}`);
+        const data = await res.json();
+        const items = Array.isArray(data?.items) ? data.items : [];
+        if (cancelled) return;
+        sessionStorage.removeItem(ADMIN_NOTIF_CHECK_KEY);
+        if (items.length === 0) return;
+        setLoginNotifications(
+          items.map((item: {
+            id: string;
+            type: AdminNotification['type'];
+            title: string;
+            message: string;
+            refId?: string;
+            createdAt: string;
+          }) => ({
+            id: item.id,
+            type: item.type,
+            title: item.title,
+            message: item.message,
+            refId: item.refId,
+            createdAt: new Date(item.createdAt),
+            read: false,
+          }))
+        );
+        setShowLoginNotifModal(true);
+      } catch (error) {
+        console.warn('관리자 로그인 알림 조회 실패:', error);
+        sessionStorage.removeItem(ADMIN_NOTIF_CHECK_KEY);
+      }
+    };
+    void loadNotifications();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdminAuthenticated, isLoginPage, loading]);
+
+  const closeLoginNotifications = () => {
+    setShowLoginNotifModal(false);
+    setLoginNotifications([]);
+  };
+
+  const hideLoginNotificationsForever = async () => {
+    const ids = loginNotifications.map((n) => n.id);
+    const session = checkAdminAuth();
+    const adminUid = session.uid;
+    closeLoginNotifications();
+    if (!adminUid || ids.length === 0) return;
+    try {
+      await fetch('/api/admin/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, adminUid }),
+      });
+    } catch (error) {
+      console.warn('알림 숨김 처리 실패:', error);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem(ADMIN_SESSION_KEY);
+    sessionStorage.removeItem(ADMIN_NOTIF_CHECK_KEY);
     router.push('/admin/login');
   };
 
@@ -597,6 +678,35 @@ export default function AdminLayout({
           {children}
         </main>
       </div>
+
+      {showLoginNotifModal && loginNotifications.length > 0 && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b border-gray-200 px-5 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">신규 요청 알림</h3>
+              <p className="mt-1 text-sm text-gray-600">
+                로그인 이후 확인할 새 요청이 {loginNotifications.length}건 있습니다.
+              </p>
+            </div>
+            <div className="max-h-80 space-y-3 overflow-y-auto px-5 py-4">
+              {loginNotifications.map((notification) => (
+                <div key={notification.id} className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5">
+                  <p className="text-sm font-semibold text-gray-900">{notification.title}</p>
+                  <p className="mt-1 text-sm text-gray-700">{notification.message}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-gray-200 px-5 py-3">
+              <Button type="button" variant="outline" onClick={() => void hideLoginNotificationsForever()}>
+                더 이상 보지 않기
+              </Button>
+              <Button type="button" variant="primary" onClick={closeLoginNotifications}>
+                확인
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

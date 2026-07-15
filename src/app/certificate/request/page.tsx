@@ -10,6 +10,10 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 import { InquiryAttachment, CertificateProduct, ProductMapping } from '@/types';
 import { getProductMappingByCode, addProductMapping, getAllProductMappings, updateProductMapping, deleteProductMapping } from '@/lib/productMappings';
+import {
+  buildCertificateRequestNotification,
+  postAdminNotification,
+} from '@/lib/adminNotifications';
 
 function CertificateRequestContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
@@ -575,7 +579,18 @@ function CertificateRequestContent() {
           certificateData.attachments = attachments;
         }
 
-        await addDoc(collection(db, 'certificates'), certificateData);
+        const createdRef = await addDoc(collection(db, 'certificates'), certificateData);
+        const firstProduct = Array.isArray(certificateData.products)
+          ? (certificateData.products as { productName?: string }[])[0]
+          : undefined;
+        await postAdminNotification(
+          buildCertificateRequestNotification({
+            userName: userProfile.name || '사용자',
+            customerName: typeof certificateData.customerName === 'string' ? certificateData.customerName : undefined,
+            productName: firstProduct?.productName,
+            refId: createdRef.id,
+          })
+        );
         setSuccess('성적서 요청이 성공적으로 등록되었습니다.');
         setSubmitting(false);
         

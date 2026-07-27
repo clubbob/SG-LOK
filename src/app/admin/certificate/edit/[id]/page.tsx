@@ -417,10 +417,19 @@ const generatePDFBlobWithProducts = async (
   }
 
   // 제목: MATERIAL TEST CERTIFICATE (로고 오른쪽에 배치)
-  doc.setFontSize(20 * 1.3); // 26 (기존 20의 1.3배)
+  const titleFontSize = 20 * 1.3 * 0.9; // 23.4 (기존 26 대비 10% 축소)
+  doc.setFontSize(titleFontSize);
   doc.setFont('helvetica', 'bold');
   doc.text('MATERIAL TEST CERTIFICATE', pageWidth / 2, titleYPosition, { align: 'center' });
-  yPosition = titleYPosition + 12; // 여유 공간 추가 (10 -> 12)
+
+  const subtitleFontSize = (20 * 1.3 / 2) * 1.1; // 14.3
+  const subtitleY = titleYPosition + 7;
+  doc.setFontSize(subtitleFontSize);
+  doc.setFont('helvetica', 'normal');
+  doc.text('DIN 50049.31 / EN 10204 3.1 / ISO 10474 3.1', pageWidth / 2, subtitleY, { align: 'center' });
+
+  const companyInfoStartY = subtitleY + 7;
+  yPosition = companyInfoStartY;
 
   // 회사 정보
   doc.setFontSize(9);
@@ -463,21 +472,22 @@ const generatePDFBlobWithProducts = async (
       const base64Data = canvas.toDataURL('image/png');
       const base64ImageData = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
       
-      // 이미지 크기 설정 (높이 10.5mm로 설정 - 기존 15mm의 70%)
-      const imageHeightMM = 15 * 0.7; // 10.5mm
+      // 이미지 크기 설정 (기존 10.5mm 대비 30% 확대)
+      const imageHeightMM = 15 * 0.7 * 1.3; // 13.65mm
       const imageWidthMM = (originalDocImg.width / originalDocImg.height) * imageHeightMM;
       
-      // 페이지 우측 끝에 배치 (회사 정보와 같은 높이)
-      const imageX = pageWidth - margin - imageWidthMM;
-      const imageY = titleYPosition + 5; // 회사 정보 시작 위치
+      // 우측 끝 기준 고정 — 크기 확대 시 왼쪽으로만 커지도록
+      const imageRightX = pageWidth - margin;
+      const imageX = imageRightX - imageWidthMM;
+      const imageY = companyInfoStartY - 7; // 회사 정보 시작 위치
       
       doc.addImage(base64ImageData, 'PNG', imageX, imageY, imageWidthMM, imageHeightMM);
     }
   } catch (error) {
     console.warn('original document.png 이미지 로드 실패, 이미지 없이 진행:', error);
   }
-  
-  yPosition += 8;
+
+  yPosition += 4;
 
   // 구분선
   doc.setLineWidth(0.5);
@@ -521,11 +531,11 @@ const generatePDFBlobWithProducts = async (
   rightY += lineHeight;
 
   // 제품 정보 테이블
-  yPosition = leftY + 10;
+  yPosition = leftY + 7;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.text('PRODUCT INFORMATION:', margin, yPosition);
-  yPosition += 10;
+  yPosition += 7;
 
   // 제품 테이블 헤더 (DESCRIPTION 열 너비 확대, Q'TY 열 너비 축소, HEAT NO. 우측 확대, REMARK 확대)
   doc.setFontSize(10);
@@ -554,7 +564,7 @@ const generatePDFBlobWithProducts = async (
   doc.text('RESULT', colResult, yPosition);
   doc.text('HEAT NO.', colHeatNo, yPosition);
   doc.text('REMARK', colRemark, yPosition);
-  yPosition += 8;
+  yPosition += 6;
   
   // 구분선
   doc.setLineWidth(0.3);

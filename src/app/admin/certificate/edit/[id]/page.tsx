@@ -426,7 +426,7 @@ const generatePDFBlobWithProducts = async (
   const subtitleY = titleYPosition + 7;
   doc.setFontSize(subtitleFontSize);
   doc.setFont('helvetica', 'normal');
-  doc.text('DIN 50049.31 / EN 10204 3.1 / ISO 10474 3.1', pageWidth / 2, subtitleY, { align: 'center' });
+  doc.text('DIN 50049 3.1 / EN 10204 3.1 / ISO 10474 3.1', pageWidth / 2, subtitleY, { align: 'center' });
 
   const companyInfoStartY = subtitleY + 7;
   yPosition = companyInfoStartY;

@@ -47,6 +47,7 @@ function AdminProductionRequestContent() {
   
   const [formData, setFormData] = useState({
     productName: '',
+    productCode: '',
     quantity: '',
     orderQuantity: '',
     plannedQuantity: '',
@@ -89,6 +90,7 @@ function AdminProductionRequestContent() {
           setCurrentStatus(data.status || 'pending_review');
           setFormData({
             productName: data.productName || '',
+            productCode: data.productCode || '',
             quantity: data.quantity?.toString() || '',
             orderQuantity: data.orderQuantity?.toString() || '',
             plannedQuantity: data.plannedQuantity?.toString() || '',
@@ -237,6 +239,11 @@ function AdminProductionRequestContent() {
       errors.productName = '제품명을 입력해주세요.';
     }
 
+    // 1-1) 제품코드
+    if (!formData.productCode.trim()) {
+      errors.productCode = '제품코드를 입력해주세요.';
+    }
+
     // 2) 고객사명 — 고객 주문일 때만 필수
     if (formData.productionReason === 'order' && !formData.customerName.trim()) {
       errors.customerName = '고객사명을 입력해주세요.';
@@ -311,6 +318,7 @@ function AdminProductionRequestContent() {
         // 수정 모드
         const productionRequestData: Record<string, unknown> = {
           productName: formData.productName.trim().toUpperCase(),
+          productCode: formData.productCode.trim().toUpperCase(),
           quantity: parseInt(formData.quantity, 10),
           orderQuantity: formData.productionReason === 'order' && formData.orderQuantity.trim()
             ? parseInt(formData.orderQuantity, 10)
@@ -387,6 +395,7 @@ function AdminProductionRequestContent() {
           userName: '관리자',
           userEmail: 'admin@sglok.com',
           productName: formData.productName.trim().toUpperCase(),
+          productCode: formData.productCode.trim().toUpperCase(),
           quantity: parseInt(formData.quantity, 10),
           orderQuantity:
             formData.productionReason === 'order' && formData.orderQuantity.trim()
@@ -488,44 +497,62 @@ function AdminProductionRequestContent() {
         )}
 
         <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-6 space-y-6">
-          <div className="relative">
-            <Input
-              id="productName"
-              name="productName"
-              type="text"
-              label="제품명 *"
-              value={formData.productName}
-              onChange={handleChange}
-              onFocus={() => setShowProductSuggestions(formData.productName.length > 0)}
-              onBlur={isEditMode ? () => setTimeout(() => setShowProductSuggestions(false), 200) : handleProductNameBlur}
-              placeholder="제품명을 입력하거나 선택하세요"
-              error={fieldErrors.productName}
-              required
-              list="productNameList"
-              disabled={isEditMode}
-              className="uppercase"
-            />
-            <datalist id="productNameList">
-              {productNameSuggestions.map((name, index) => (
-                <option key={index} value={name} />
-              ))}
-            </datalist>
-            
-            {/* 커스텀 자동완성 드롭다운 (datalist가 브라우저마다 다르게 동작할 수 있어서) */}
-            {showProductSuggestions && filteredProductSuggestions.length > 0 && (
-              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                {filteredProductSuggestions.map((name: string, index: number) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => handleProductNameSelect(name)}
-                    className="w-full text-left px-4 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
-                  >
-                    {name}
-                  </button>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="relative">
+              <Input
+                id="productName"
+                name="productName"
+                type="text"
+                label="제품명 *"
+                value={formData.productName}
+                onChange={handleChange}
+                onFocus={() => setShowProductSuggestions(formData.productName.length > 0)}
+                onBlur={isEditMode ? () => setTimeout(() => setShowProductSuggestions(false), 200) : handleProductNameBlur}
+                placeholder="제품명을 입력하세요"
+                error={fieldErrors.productName}
+                required
+                list="productNameList"
+                disabled={isEditMode}
+                className="uppercase"
+              />
+              <datalist id="productNameList">
+                {productNameSuggestions.map((name, index) => (
+                  <option key={index} value={name} />
                 ))}
-              </div>
-            )}
+              </datalist>
+              
+              {/* 커스텀 자동완성 드롭다운 (datalist가 브라우저마다 다르게 동작할 수 있어서) */}
+              {showProductSuggestions && filteredProductSuggestions.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                  {filteredProductSuggestions.map((name: string, index: number) => (
+                    <button
+                      key={index}
+                      type="button"
+                      onClick={() => handleProductNameSelect(name)}
+                      className="w-full text-left px-4 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Input
+                id="productCode"
+                name="productCode"
+                type="text"
+                label="제품코드 *"
+                value={formData.productCode}
+                onChange={handleChange}
+                placeholder="제품코드를 입력하세요"
+                error={fieldErrors.productCode}
+                required
+                disabled={isEditMode}
+                className="uppercase"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

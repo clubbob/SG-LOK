@@ -130,6 +130,7 @@ export default function AdminProductionPage() {
             userEmail: data.userEmail,
             userCompany: data.userCompany,
             productName: data.productName,
+            productCode: data.productCode || '',
             quantity: data.quantity,
             orderQuantity: parsedOrderQty,
             plannedQuantity: data.plannedQuantity,
@@ -206,6 +207,7 @@ export default function AdminProductionPage() {
     const query = searchQuery.toLowerCase().trim();
     const filtered = statusFiltered.filter((request) => {
       const productName = request.productName?.toLowerCase() || '';
+      const productCode = request.productCode?.toLowerCase() || '';
       const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const customerName = request.customerName?.toLowerCase() || '';
       const userName = request.userName?.toLowerCase() || '';
@@ -213,6 +215,7 @@ export default function AdminProductionPage() {
 
       return (
         productName.includes(query) ||
+        productCode.includes(query) ||
         productionReason.includes(query) ||
         customerName.includes(query) ||
         userName.includes(query) ||
@@ -345,6 +348,7 @@ export default function AdminProductionPage() {
       '번호',
       '등록일',
       '제품명',
+      '제품코드',
       '생산목적',
       '고객사명',
       '수주수량',
@@ -378,6 +382,7 @@ export default function AdminProductionPage() {
         rowNumber,
         requestDateStr,
         request.productName,
+        request.productCode || '',
         productionReasonLabel,
         request.customerName || '',
         request.orderQuantity ?? '',
@@ -500,7 +505,7 @@ export default function AdminProductionPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="제품명, 생산목적, 고객사명, 요청자, 상태 검색..."
+            placeholder="제품명, 제품코드, 생산목적, 고객사명, 요청자, 상태 검색..."
             className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
           />
           <svg
@@ -542,6 +547,7 @@ export default function AdminProductionPage() {
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품명</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품코드</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산목적</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">고객사명</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수주수량</th>
@@ -577,6 +583,9 @@ export default function AdminProductionPage() {
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{request.productName}</div>
                         {request.itemName && <div className="text-xs text-gray-500">({request.itemName})</div>}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-900">{request.productCode || '-'}</div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
@@ -830,6 +839,7 @@ export default function AdminProductionPage() {
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-gray-600 mb-2">제품명: <span className="font-medium text-gray-900">{approvingRequest.productName}</span></p>
+                  <p className="text-sm text-gray-600">제품코드: <span className="font-medium text-gray-900">{approvingRequest.productCode || '-'}</span></p>
                 </div>
                 <div 
                   onClick={(e) => e.stopPropagation()}

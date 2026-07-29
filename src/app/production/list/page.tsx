@@ -111,6 +111,7 @@ function ProductionRequestListPageContent() {
             userEmail: data.userEmail,
             userCompany: data.userCompany,
             productName: data.productName,
+            productCode: data.productCode || '',
             quantity: data.quantity,
             orderQuantity: parsedOrderQty,
             requestDate: data.requestDate?.toDate() || new Date(),
@@ -184,12 +185,14 @@ function ProductionRequestListPageContent() {
     const q = searchQuery.toLowerCase().trim();
     const filtered = statusFiltered.filter((request) => {
       const productName = request.productName?.toLowerCase() || '';
+      const productCode = request.productCode?.toLowerCase() || '';
       const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
       const customerName = request.customerName?.toLowerCase() || '';
       const userName = request.userName?.toLowerCase() || '';
       const statusLabel = getDisplayStatusLabel(request).toLowerCase();
       return (
         productName.includes(q) ||
+        productCode.includes(q) ||
         productionReason.includes(q) ||
         customerName.includes(q) ||
         userName.includes(q) ||
@@ -261,6 +264,7 @@ function ProductionRequestListPageContent() {
       '요청자',
       '등록일',
       '제품명',
+      '제품코드',
       '생산목적',
       '고객사명',
       '수주수량',
@@ -294,6 +298,7 @@ function ProductionRequestListPageContent() {
         request.userName || '',
         requestDateStr,
         request.productName,
+        request.productCode || '',
         productionReasonLabel,
         request.customerName || '',
         request.orderQuantity ?? '',
@@ -395,7 +400,7 @@ function ProductionRequestListPageContent() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="제품명, 생산목적, 고객사명, 상태 검색..."
+                placeholder="제품명, 제품코드, 생산목적, 고객사명, 상태 검색..."
                 className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               />
               <svg
@@ -457,6 +462,7 @@ function ProductionRequestListPageContent() {
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품명</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품코드</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산목적</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">고객사명</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수주수량</th>
@@ -492,6 +498,9 @@ function ProductionRequestListPageContent() {
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div className="text-sm font-medium text-gray-900">{request.productName}</div>
                             {request.itemName && <div className="text-xs text-gray-500">({request.itemName})</div>}
+                          </td>
+                          <td className="px-3 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{request.productCode || '-'}</div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
@@ -716,6 +725,10 @@ function ProductionRequestListPageContent() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">제품명</label>
                     <p className="text-sm text-gray-900">{selectedRequest.productName}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">제품코드</label>
+                    <p className="text-sm text-gray-900">{selectedRequest.productCode || '-'}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">생산목적</label>

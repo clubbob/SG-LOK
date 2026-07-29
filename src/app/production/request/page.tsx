@@ -13,6 +13,17 @@ import {
   postAdminNotification,
 } from '@/lib/adminNotifications';
 
+const INITIAL_FORM_DATA = {
+  productName: '',
+  productCode: '',
+  quantity: '',
+  orderQuantity: '',
+  requestedCompletionDate: '',
+  productionReason: 'order' as ProductionReason,
+  customerName: '',
+  memo: '',
+};
+
 function ProductionRequestContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
@@ -24,16 +35,7 @@ function ProductionRequestContent() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
-  const [formData, setFormData] = useState({
-    productName: '',
-    productCode: '',
-    quantity: '',
-    orderQuantity: '',
-    requestedCompletionDate: '',
-    productionReason: 'order' as ProductionReason,
-    customerName: '',
-    memo: '',
-  });
+  const [formData, setFormData] = useState(INITIAL_FORM_DATA);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [productNameSuggestions, setProductNameSuggestions] = useState<string[]>([]);
@@ -374,15 +376,7 @@ function ProductionRequestContent() {
       }
       
       // 폼 초기화
-      setFormData({
-        productName: '',
-        quantity: '',
-        orderQuantity: '',
-        requestedCompletionDate: '',
-        productionReason: 'order',
-        customerName: '',
-        memo: '',
-      });
+      setFormData(INITIAL_FORM_DATA);
     } catch (error) {
       console.error('생산요청 등록 오류:', error);
       const firebaseError = error as { code?: string; message?: string };

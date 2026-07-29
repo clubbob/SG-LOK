@@ -13,6 +13,22 @@ import {
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
+const INITIAL_FORM_DATA = {
+  productName: '',
+  productCode: '',
+  quantity: '',
+  orderQuantity: '',
+  plannedQuantity: '',
+  requestedCompletionDate: '',
+  productionReason: 'order' as ProductionReason,
+  customerName: '',
+  memo: '',
+  plannedCompletionDate: '',
+  actualCompletionDate: '',
+  cleaningEpCompletionDate: '',
+  adminMemo: '',
+};
+
 // 관리자 인증 확인 함수
 const checkAdminAuth = (): boolean => {
   if (typeof window === 'undefined') return false;
@@ -45,21 +61,7 @@ function AdminProductionRequestContent() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
-  const [formData, setFormData] = useState({
-    productName: '',
-    productCode: '',
-    quantity: '',
-    orderQuantity: '',
-    plannedQuantity: '',
-    requestedCompletionDate: '',
-    productionReason: 'order' as ProductionReason,
-    customerName: '',
-    memo: '',
-    plannedCompletionDate: '',
-    actualCompletionDate: '',
-    cleaningEpCompletionDate: '',
-    adminMemo: '',
-  });
+  const [formData, setFormData] = useState(INITIAL_FORM_DATA);
   const [currentStatus, setCurrentStatus] = useState<string>('');
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -434,20 +436,7 @@ function AdminProductionRequestContent() {
       }
       
       // 폼 초기화
-      setFormData({
-        productName: '',
-        quantity: '',
-        orderQuantity: '',
-        plannedQuantity: '',
-        requestedCompletionDate: '',
-        productionReason: 'order',
-        customerName: '',
-        memo: '',
-        plannedCompletionDate: '',
-        actualCompletionDate: '',
-        cleaningEpCompletionDate: '',
-        adminMemo: '',
-      });
+      setFormData(INITIAL_FORM_DATA);
 
       // 2초 후 목록 페이지로 이동
       setTimeout(() => {

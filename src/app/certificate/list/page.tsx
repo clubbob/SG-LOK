@@ -19,6 +19,7 @@ import {
   downloadV2CertificatePdf,
   openLegacyCertificateFile,
 } from '@/lib/certificate/downloadV2CertificatePdf';
+import { getPaginationPageNumbers } from '@/lib/pagination';
 
 const STATUS_LABELS: Record<CertificateStatus, string> = {
   pending: '대기',
@@ -513,8 +514,8 @@ function CertificateListPageContent() {
 
               {/* 페이지네이션 */}
               {totalPages > 1 && (
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-xs sm:text-sm text-gray-700 min-w-0">
+                <div className="mt-6 flex flex-col gap-3">
+                  <div className="text-xs sm:text-sm text-gray-700 text-center min-w-0">
                     {searchQuery ? (
                       <>
                         검색 결과 <span className="font-medium">{filteredCertificates.length}</span>건 중{' '}
@@ -541,7 +542,7 @@ function CertificateListPageContent() {
                       </>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end sm:flex-nowrap w-full sm:w-auto">
+                  <div className="flex flex-wrap items-center justify-center gap-2 w-full">
                     <Button
                       variant="outline"
                       size="sm"
@@ -552,7 +553,7 @@ function CertificateListPageContent() {
                       이전
                     </Button>
                     <div className="flex flex-wrap items-center justify-center gap-1 max-w-full">
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      {getPaginationPageNumbers(currentPage, totalPages).map((page) => (
                         <button
                           key={page}
                           type="button"

@@ -12,6 +12,7 @@ import { formatDateShort } from '@/lib/utils';
 import { generateV2PdfBlob as buildV2PdfBlob } from '@/lib/certificate/v2PdfPipeline';
 import { filterRequestAttachmentsOnly } from '@/lib/certificate/attachmentFilters';
 import { certificateDocToListRow } from '@/lib/certificate/certificateListRow';
+import { getPaginationPageNumbers } from '@/lib/pagination';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -100,7 +101,20 @@ export default function AdminCertificatePage() {
   // 오늘 날짜를 YYYY-MM-DD 형식으로 변환
   const today = new Date().toISOString().split('T')[0];
 
+  const isLegacyCertificateListPath =
+    pathname === '/admin/certificate' || pathname === '/admin/certificate/';
+
   useEffect(() => {
+    if (!isLegacyCertificateListPath) return;
+    const qs = searchParams.toString();
+    router.replace(`/admin/certificate/list2${qs ? `?${qs}` : ''}`);
+  }, [isLegacyCertificateListPath, router, searchParams]);
+
+  useEffect(() => {
+    if (isLegacyCertificateListPath) {
+      return;
+    }
+
     // 관리자 세션 확인
     if (!checkAdminAuth()) {
       router.push('/admin/login');
@@ -147,7 +161,7 @@ export default function AdminCertificatePage() {
     );
 
     return () => unsubscribeSnapshot();
-  }, [router]);
+  }, [router, isLegacyCertificateListPath]);
 
   // 검색 필터링
   useEffect(() => {
@@ -1161,7 +1175,7 @@ export default function AdminCertificatePage() {
     window.location.reload();
   };
 
-  if (loadingCertificates) {
+  if (isLegacyCertificateListPath || loadingCertificates) {
     return (
       <div className="p-8">
         <div className="flex items-center justify-center h-64">
@@ -1178,7 +1192,7 @@ export default function AdminCertificatePage() {
     <div className="p-8">
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900">{isV2Flow ? '성적서 목록2' : '성적서 목록'}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">성적서 목록</h1>
           <p className="text-gray-600 mt-2 text-sm sm:text-base">
             전체 성적서 요청을 확인하고 관리할 수 있습니다
           </p>
@@ -1506,8 +1520,8 @@ export default function AdminCertificatePage() {
 
           {/* 페이지네이션 */}
           {totalPages > 1 && (
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-xs sm:text-sm text-gray-700 min-w-0">
+            <div className="mt-6 flex flex-col gap-3">
+              <div className="text-xs sm:text-sm text-gray-700 text-center min-w-0">
                 {searchQuery ? (
                   <>
                     검색 결과 <span className="font-medium">{filteredCertificates.length}</span>건 중{' '}
@@ -1534,7 +1548,7 @@ export default function AdminCertificatePage() {
                   </>
                 )}
               </div>
-              <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end sm:flex-nowrap w-full sm:w-auto">
+              <div className="flex flex-wrap items-center justify-center gap-2 w-full">
                 <Button
                   variant="outline"
                   size="sm"
@@ -1545,7 +1559,7 @@ export default function AdminCertificatePage() {
                   이전
                 </Button>
                 <div className="flex flex-wrap items-center justify-center gap-1 max-w-full">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  {getPaginationPageNumbers(currentPage, totalPages).map((page) => (
                     <button
                       key={page}
                       type="button"

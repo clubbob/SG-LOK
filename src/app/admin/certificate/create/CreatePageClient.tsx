@@ -2581,7 +2581,7 @@ function MaterialTestCertificateContent() {
       if (!targetId) {
         setError('성적서 요청 ID가 필요합니다. 성적서 목록에서 성적서 작성 버튼을 클릭해주세요.');
         setTimeout(() => {
-          router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
+          router.push('/admin/certificate/list2');
         }, 3000);
         return;
       }
@@ -4231,7 +4231,7 @@ function MaterialTestCertificateContent() {
       
       setSuccess(successMessage);
       // 작성 완료 시 수정 화면 상태로 전환하지 않고 바로 목록으로 이동
-      router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
+      router.push('/admin/certificate/list2');
     } catch (error) {
       console.error('저장 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
@@ -4779,8 +4779,8 @@ function MaterialTestCertificateContent() {
         <p className="text-gray-600 mt-2">
           {isV2Flow
             ? (isEditMode
-              ? '신규(v2) 수정 흐름입니다. 저장 후 목록2에서 다운로드 시 PDF가 생성됩니다.'
-              : '신규(v2) 작성 흐름입니다. 저장 후 목록2에서 다운로드 시 PDF가 생성됩니다.')
+              ? '신규(v2) 수정 흐름입니다. 저장 후 성적서 목록에서 다운로드 시 PDF가 생성됩니다.'
+              : '신규(v2) 작성 흐름입니다. 저장 후 성적서 목록에서 다운로드 시 PDF가 생성됩니다.')
             : (isEditMode
               ? '성적서 내용을 수정하고 PDF로 재생성할 수 있습니다'
               : '성적서 내용을 입력하고 PDF로 생성할 수 있습니다')}
@@ -5170,7 +5170,7 @@ function MaterialTestCertificateContent() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate')}
+                onClick={() => router.push('/admin/certificate/list2')}
                 disabled={saving || generatingPDF}
               >
                 취소

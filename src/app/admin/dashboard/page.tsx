@@ -587,7 +587,7 @@ export default function AdminPage() {
         <div className="mb-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <h2 className="text-base font-semibold text-gray-900 mb-3">성적서관리</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-            <Link href="/admin/certificate" className="block h-full">
+            <Link href="/admin/certificate/list2" className="block h-full">
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200 hover:shadow-md transition-all hover:scale-[1.02]">
                 <div className="flex items-center justify-between">
                   <div>
@@ -603,7 +603,7 @@ export default function AdminPage() {
               </div>
             </Link>
 
-            <Link href="/admin/certificate?status=pending" className="block h-full">
+            <Link href="/admin/certificate/list2?status=pending" className="block h-full">
               <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-3 border border-yellow-200 hover:shadow-md transition-all hover:scale-[1.02]">
                 <div className="flex items-center justify-between">
                   <div>
@@ -619,7 +619,7 @@ export default function AdminPage() {
               </div>
             </Link>
 
-            <Link href="/admin/certificate?status=in_progress" className="block h-full">
+            <Link href="/admin/certificate/list2?status=in_progress" className="block h-full">
               <div className="bg-gradient-to-br from-cyan-50 to-cyan-100 rounded-lg p-3 border border-cyan-200 hover:shadow-md transition-all hover:scale-[1.02]">
                 <div className="flex items-center justify-between">
                   <div>
@@ -635,7 +635,7 @@ export default function AdminPage() {
               </div>
             </Link>
 
-            <Link href="/admin/certificate?status=completed" className="block h-full">
+            <Link href="/admin/certificate/list2?status=completed" className="block h-full">
               <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-3 border border-green-200 hover:shadow-md transition-all hover:scale-[1.02]">
                 <div className="flex items-center justify-between">
                   <div>

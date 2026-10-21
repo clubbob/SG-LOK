@@ -1943,7 +1943,7 @@ function MaterialTestCertificateEditContent() {
       if (!certificateId) {
         setError('성적서 ID가 필요합니다. 성적서 목록에서 수정 버튼을 클릭해주세요.');
         setTimeout(() => {
-          router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
+          router.push('/admin/certificate/list2');
         }, 3000);
         return;
       }
@@ -1958,7 +1958,7 @@ function MaterialTestCertificateEditContent() {
         if (!certDoc.exists()) {
           setError('성적서를 찾을 수 없습니다.');
           setTimeout(() => {
-            router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
+            router.push('/admin/certificate/list2');
           }, 3000);
           setLoadingCertificate(false);
           return;
@@ -2208,7 +2208,7 @@ function MaterialTestCertificateEditContent() {
             // 수정 페이지에서는 materialTestCertificate가 필수입니다
             setError('성적서 데이터가 없습니다. 성적서를 먼저 작성해주세요.');
             setTimeout(() => {
-              router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
+              router.push('/admin/certificate/list2');
             }, 3000);
             setLoadingCertificate(false);
             return;
@@ -3057,7 +3057,7 @@ function MaterialTestCertificateEditContent() {
         touchedAttachmentProductIndexes.size === 0
       ) {
         setSuccess('변경사항이 없어 기존 PDF/첨부를 그대로 유지했습니다. 목록으로 이동합니다.');
-        router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
+        router.push('/admin/certificate/list2');
         return;
       }
 
@@ -4698,7 +4698,7 @@ function MaterialTestCertificateEditContent() {
       // 저장 후 상태 업데이트는 불필요 (저장 후 목록 페이지로 이동하므로)
       
       // 저장 완료 즉시 목록으로 이동 (체감 지연 제거)
-      router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate');
+      router.push('/admin/certificate/list2');
       }
     } catch (error) {
       console.error('저장 오류:', error);
@@ -5087,7 +5087,7 @@ function MaterialTestCertificateEditContent() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => router.push(isV2Flow ? '/admin/certificate/list2' : '/admin/certificate')}
+                onClick={() => router.push('/admin/certificate/list2')}
                 disabled={saving}
               >
                 취소

@@ -9,7 +9,7 @@ export type CertificateListRowMapOptions = {
 };
 
 /**
- * Firestore certificates 문서 → 성적서목록2 목록 행 (관리자 list2 / 사용자 목록 공통)
+ * Firestore certificates 문서 → 성적서 목록 행 (관리자·사용자 공통)
  */
 export function certificateDocToListRow(
   id: string,
@@ -85,7 +85,7 @@ export function certificateDocToListRow(
   };
 }
 
-/** 성적서목록2 다운로드 가능 여부 (v2 작성 데이터 또는 구버전 업로드 파일) */
+/** 성적서 목록 다운로드 가능 여부 (v2 작성 데이터 또는 구버전 업로드 파일) */
 export function isCertificateList2Downloadable(certificate: Certificate): boolean {
   return !!certificate.materialTestCertificate || !!certificate.certificateFile?.url;
 }

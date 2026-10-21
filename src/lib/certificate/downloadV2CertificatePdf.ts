@@ -23,7 +23,7 @@ export type DownloadV2CertificatePdfParams = {
 };
 
 /**
- * 관리자 성적서목록2와 동일: Firestore 최신 문서 기준 v2 PDF 생성 후 새 탭(또는 다운로드)으로 열기
+ * 관리자 성적서 목록(v2)과 동일: Firestore 최신 문서 기준 v2 PDF 생성 후 새 탭(또는 다운로드)으로 열기
  */
 export async function downloadV2CertificatePdf({
   certificate,

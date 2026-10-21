@@ -112,8 +112,7 @@ const adminMenuItems: MenuItem[] = [
     ),
     subItems: [
       { id: 'certificate-request', label: '성적서요청 등록', path: '/admin/certificate/request' },
-      { id: 'certificate-list', label: '성적서 목록', path: '/admin/certificate' },
-      { id: 'certificate-manage-2', label: '성적서목록2', path: '/admin/certificate/list2' },
+      { id: 'certificate-manage-2', label: '성적서 목록', path: '/admin/certificate/list2' },
       { id: 'inspection-certi', label: '소재 사이즈 관리', path: '/admin/certificate/inspection' },
     ],
   },
@@ -581,21 +580,18 @@ export default function AdminLayout({
                                 // 재고관리 > 제품 등록은 정확히 /admin/inventory 일 때만 활성화
                                 isSubActive = false;
                               } else if (subItem.path === '/admin/certificate/list2' && isCertificateV2WritePath) {
-                                // 작성2/수정2에서는 목록2 메뉴를 활성화해 컨텍스트를 유지
+                                // 작성2/수정2에서는 성적서 목록 메뉴를 활성화해 컨텍스트를 유지
                                 isSubActive = true;
-                              } else if (subItem.path === '/admin/production' || subItem.path === '/admin/certificate') {
-                                // /admin/production 또는 /admin/certificate의 경우, 정확히 일치하거나 하위 경로로 시작하되
-                                // 다른 서브 메뉴 경로가 아닐 때만 활성화
+                              } else if (
+                                subItem.path === '/admin/production' ||
+                                subItem.path === '/admin/certificate/list2'
+                              ) {
                                 const otherSubPaths = item.subItems
                                   ?.filter(s => s.path !== subItem.path)
                                   .map(s => normalizePath(s.path)) || [];
                                 const isOtherSubPath = otherSubPaths.some(otherPath => 
                                   normalizedPathname === otherPath || normalizedPathname.startsWith(`${otherPath}/`)
                                 );
-                                // v2 작성/수정 화면에서는 기존 '성적서 목록'을 활성화하지 않음
-                                if (subItem.path === '/admin/certificate' && isCertificateV2WritePath) {
-                                  isSubActive = false;
-                                } else
                                 if (normalizedPathname.startsWith(`${normalizedSubPath}/`) && !isOtherSubPath) {
                                   isSubActive = true;
                                 }
@@ -611,10 +607,7 @@ export default function AdminLayout({
                                 key={subItem.id}
                                 href={subItem.path}
                                 onClick={(e) => {
-                                  if (
-                                    subItem.id === 'certificate-list' ||
-                                    subItem.id === 'production-calendar'
-                                  ) {
+                                  if (subItem.id === 'production-calendar') {
                                     e.preventDefault();
                                     alert('사용 중단된 메뉴입니다.');
                                   }

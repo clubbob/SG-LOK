@@ -192,7 +192,7 @@ function AdminCertificateRequestContent() {
           }
         } else {
           setError('성적서 요청을 찾을 수 없습니다.');
-          router.push('/admin/certificate');
+          router.push('/admin/certificate/list2');
         }
       } catch (error) {
         console.error('성적서 요청 로드 오류:', error);
@@ -643,7 +643,7 @@ function AdminCertificateRequestContent() {
         
         // 수정 후 목록 페이지로 이동
         setTimeout(() => {
-          router.push('/admin/certificate');
+          router.push('/admin/certificate/list2');
         }, 2000);
         return;
       } else {
@@ -693,7 +693,7 @@ function AdminCertificateRequestContent() {
         
         // 등록 후 목록 페이지로 이동
         setTimeout(() => {
-          router.push('/admin/certificate');
+          router.push('/admin/certificate/list2');
         }, 2000);
         return;
       }
@@ -1131,7 +1131,7 @@ function AdminCertificateRequestContent() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push('/admin/certificate')}
+              onClick={() => router.push('/admin/certificate/list2')}
               disabled={submitting || uploadingFiles || uploadingCertificateFile}
             >
               취소

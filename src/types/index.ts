@@ -207,6 +207,9 @@ export interface CertificateProduct {
   salesRegion?: ProductionSalesRegion; // 생산요청: 제품별 국내/해외
   customerName?: string; // 생산요청: 제품별 고객사명
   requestedCompletionDate?: Date; // 생산요청: 제품별 완료요청일
+  lineStatus?: ProductionRequestStatus; // 생산요청: 제품별 승인·진행 상태 (다중 제품)
+  plannedQuantity?: number; // 생산요청: 제품별 계획수량 (승인 시)
+  plannedCompletionDate?: Date; // 생산요청: 제품별 완료예정일 (승인 시)
   lotNumber?: string;           // 로트번호
   heatNo?: string;              // HEAT NO.
   material?: string;            // MATERIAL (소재 정보, 예: 316/316L, 304)

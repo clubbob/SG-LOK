@@ -6,6 +6,7 @@ import {
   AdminUhpInventoryProductCard,
   type AdminUhpProductCardHandlers,
 } from '@/components/admin/inventory/AdminUhpInventoryProductCard';
+import { DateInput } from '@/components/ui/DateInput';
 import { ScrollToTopFab } from '@/components/ui/ScrollToTopFab';
 import { auth, db } from '@/lib/firebase';
 import { isBootstrapAdminEmail } from '@/lib/auth/adminBootstrap';
@@ -2771,9 +2772,8 @@ export default function AdminInventoryStatusPage() {
                 <label className="mb-2 block text-sm font-medium text-gray-700" htmlFor="productionDueDate">
                   생산완료일
                 </label>
-                <input
+                <DateInput
                   id="productionDueDate"
-                  type="date"
                   value={productionPlanModal.dueDateInput}
                   onChange={(e) =>
                     setProductionPlanModal((prev) => ({
@@ -2781,7 +2781,7 @@ export default function AdminInventoryStatusPage() {
                       dueDateInput: e.target.value,
                     }))
                   }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                  className="text-gray-800 focus:border-purple-500 focus:ring-purple-100"
                 />
               </div>
               <div>

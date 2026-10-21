@@ -1,4 +1,11 @@
-import { CertificateProduct, ProductionReason, ProductionRequest, ProductionSalesRegion } from '@/types';
+import { Timestamp } from 'firebase/firestore';
+import {
+  CertificateProduct,
+  ProductionReason,
+  ProductionRequest,
+  ProductionRequestStatus,
+  ProductionSalesRegion,
+} from '@/types';
 
 export type ProductionRequestListRow = {
   rowKey: string;
@@ -12,6 +19,9 @@ export type ProductionRequestListRow = {
   orderQuantity: number | null;
   requestQuantity: number | null;
   requestedCompletionDate?: Date;
+  lineStatus: ProductionRequestStatus;
+  plannedQuantity: number | null;
+  plannedCompletionDate?: Date;
 };
 
 export function lineProductionReason(
@@ -45,6 +55,12 @@ export function lineCustomerName(
 export function formatProductionReasonLabel(reason?: ProductionReason | string): string {
   if (reason === 'order') return '주문';
   if (reason === 'inventory') return '재고';
+  return '-';
+}
+
+export function formatProductionSalesRegionLabel(region?: ProductionSalesRegion | string): string {
+  if (region === 'domestic') return '국내';
+  if (region === 'overseas') return '해외';
   return '-';
 }
 
@@ -115,6 +131,100 @@ function productLineCompletionDate(
   return firestoreDateToDate(product.requestedCompletionDate) ?? request.requestedCompletionDate;
 }
 
+/** 다중 제품 문서에서 줄별 상태 (미승인 줄은 대기중) */
+export function resolveProductionLineStatus(
+  product: CertificateProduct | undefined,
+  request: ProductionRequest,
+  multiProduct: boolean
+): ProductionRequestStatus {
+  if (product?.lineStatus) {
+    return normalizeProductionRequestStatus(product.lineStatus);
+  }
+  if (multiProduct && request.status === 'pending_review') {
+    return 'pending_review';
+  }
+  return normalizeProductionRequestStatus(request.status);
+}
+
+function linePlannedQuantity(
+  product: CertificateProduct | undefined,
+  request: ProductionRequest,
+  multiProduct: boolean
+): number | null {
+  if (product?.plannedQuantity != null) return product.plannedQuantity;
+  if (!multiProduct && request.plannedQuantity != null) return request.plannedQuantity;
+  return null;
+}
+
+function linePlannedCompletionDate(
+  product: CertificateProduct | undefined,
+  request: ProductionRequest,
+  multiProduct: boolean
+): Date | undefined {
+  const fromProduct = firestoreDateToDate(product?.plannedCompletionDate);
+  if (fromProduct) return fromProduct;
+  if (!multiProduct) return request.plannedCompletionDate;
+  return undefined;
+}
+
+/** 관리자 승인: 선택한 목록 줄(제품)만 반영 */
+export function buildProductionRequestLineApprovalPatch(
+  listRow: ProductionRequestListRow,
+  approval: {
+    plannedQuantity: number;
+    plannedCompletionDate: Date;
+    adminMemo?: string | null;
+  }
+): Record<string, unknown> {
+  const request = listRow.request;
+  const productIndex = listRow.productIndex;
+  const products = request.products;
+
+  const base: Record<string, unknown> = {
+    updatedAt: Timestamp.now(),
+    updatedBy: 'admin',
+  };
+  if (approval.adminMemo !== undefined) {
+    base.adminMemo = approval.adminMemo;
+  }
+
+  if (!products?.length) {
+    return {
+      ...base,
+      status: 'confirmed',
+      plannedQuantity: approval.plannedQuantity,
+      plannedCompletionDate: Timestamp.fromDate(approval.plannedCompletionDate),
+    };
+  }
+
+  const updatedProducts = products.map((p, i) => {
+    if (i !== productIndex) return p;
+    return {
+      ...p,
+      lineStatus: 'confirmed' as ProductionRequestStatus,
+      plannedQuantity: approval.plannedQuantity,
+      plannedCompletionDate: approval.plannedCompletionDate,
+    };
+  });
+
+  const allConfirmed = updatedProducts.every(
+    (p) => normalizeProductionRequestStatus(p.lineStatus) === 'confirmed'
+  );
+
+  const patch: Record<string, unknown> = {
+    ...base,
+    products: updatedProducts,
+    status: allConfirmed ? 'confirmed' : 'pending_review',
+  };
+
+  if (products.length === 1) {
+    patch.plannedQuantity = approval.plannedQuantity;
+    patch.plannedCompletionDate = Timestamp.fromDate(approval.plannedCompletionDate);
+  }
+
+  return patch;
+}
+
 /** 목록·엑셀: 제품 1개 = 1행 */
 export function expandProductionRequestsToListRows(
   requests: ProductionRequest[]
@@ -122,6 +232,7 @@ export function expandProductionRequestsToListRows(
   const rows: ProductionRequestListRow[] = [];
   for (const request of requests) {
     if (request.products?.length) {
+      const multiProduct = request.products.length > 1;
       request.products.forEach((product, productIndex) => {
         const reason = lineProductionReason(product, request);
         rows.push({
@@ -137,6 +248,9 @@ export function expandProductionRequestsToListRows(
             reason === 'order' && product.orderQuantity != null ? product.orderQuantity : null,
           requestQuantity: product.quantity != null ? product.quantity : null,
           requestedCompletionDate: productLineCompletionDate(product, request),
+          lineStatus: resolveProductionLineStatus(product, request, multiProduct),
+          plannedQuantity: linePlannedQuantity(product, request, multiProduct),
+          plannedCompletionDate: linePlannedCompletionDate(product, request, multiProduct),
         });
       });
     } else {
@@ -153,6 +267,9 @@ export function expandProductionRequestsToListRows(
           request.productionReason === 'order' ? request.orderQuantity ?? null : null,
         requestQuantity: request.quantity ?? null,
         requestedCompletionDate: request.requestedCompletionDate,
+        lineStatus: normalizeProductionRequestStatus(request.status),
+        plannedQuantity: request.plannedQuantity ?? null,
+        plannedCompletionDate: request.plannedCompletionDate,
       });
     }
   }

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Button } from '@/components/ui';
+import { Button, DateInput } from '@/components/ui';
 import { collection, query, getDocs, doc, updateDoc, Timestamp, onSnapshot, deleteDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject, listAll } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
@@ -1875,12 +1875,9 @@ export default function AdminCertificatePage() {
                   </div>
                 )}
                 <div onClick={(e) => e.stopPropagation()}>
-                  <label htmlFor="requestedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
-                    완료예정일: *
-                  </label>
-                  <input
-                    type="date"
+                  <DateInput
                     id="requestedCompletionDate"
+                    label="완료예정일: *"
                     value={approvalForm.requestedCompletionDate}
                     onChange={(e) => {
                       e.stopPropagation();
@@ -1889,8 +1886,6 @@ export default function AdminCertificatePage() {
                     }}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
-                    onFocus={(e) => e.stopPropagation()}
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     disabled={approving}
                     min={today}
                     required

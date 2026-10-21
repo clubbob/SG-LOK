@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useId } from 'react';
+import { DATE_INPUT_PICKER_CLASS, tryOpenDatePicker } from '@/lib/dateInput';
 import { cn } from '@/lib/utils';
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -11,28 +12,39 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, label, error, helperText, warning, id, onClick, ...props }, ref) => {
+  (
+    { className, type, label, error, helperText, warning, id, onClick, onFocus, onMouseDown, onPointerDown, ...props },
+    ref
+  ) => {
     const generatedId = useId();
     const inputId = id || generatedId;
     const isDate = type === 'date';
 
-    const openDatePicker = (el: HTMLInputElement) => {
-      if (el.disabled || el.readOnly) return;
-      if (typeof el.showPicker === 'function') {
-        try {
-          el.showPicker();
-        } catch {
-          // 일부 브라우저/상황에서 거부될 수 있음
-        }
+    const openPickerIfDate = (el: HTMLInputElement, defaultPrevented: boolean) => {
+      if (isDate && !defaultPrevented) {
+        tryOpenDatePicker(el);
+      }
+    };
+
+    const handlePointerDown = (e: React.PointerEvent<HTMLInputElement>) => {
+      onPointerDown?.(e);
+      if (isDate && e.button === 0) {
+        openPickerIfDate(e.currentTarget, e.defaultPrevented);
+      }
+    };
+
+    const handleMouseDown = (e: React.MouseEvent<HTMLInputElement>) => {
+      onMouseDown?.(e);
+      if (isDate) {
+        openPickerIfDate(e.currentTarget, e.defaultPrevented);
       }
     };
 
     const handleClick = (e: React.MouseEvent<HTMLInputElement>) => {
       onClick?.(e);
-      if (isDate && !e.defaultPrevented) {
-        openDatePicker(e.currentTarget);
-      }
+      openPickerIfDate(e.currentTarget, e.defaultPrevented);
     };
+
 
     return (
       <div className="w-full">
@@ -48,15 +60,17 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           type={type}
           className={cn(
             'flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
-            isDate &&
-              'relative cursor-pointer [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:left-0 [&::-webkit-calendar-picker-indicator]:top-0 [&::-webkit-calendar-picker-indicator]:z-[1] [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0',
+            isDate && DATE_INPUT_PICKER_CLASS,
             error && 'border-red-500 focus-visible:ring-red-500',
             className
           )}
           ref={ref}
           id={inputId}
           {...props}
+          onPointerDown={isDate ? handlePointerDown : onPointerDown}
+          onMouseDown={isDate ? handleMouseDown : onMouseDown}
           onClick={isDate ? handleClick : onClick}
+          onFocus={onFocus}
           value={props.value !== undefined ? props.value : ''}
         />
         {error && (

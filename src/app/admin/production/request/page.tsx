@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, FormPageAlert, Input } from '@/components/ui';
+import { Button, DateInput, FormPageAlert, Input } from '@/components/ui';
 import { collection, addDoc, Timestamp, getDocs, query, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { sanitizeForFirestore } from '@/lib/firestoreSanitize';
@@ -240,11 +240,11 @@ function AdminProductionRequestContent() {
       (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress')
     ) {
       if (!formData.plannedQuantity.trim()) {
-        errors.plannedQuantity = '계획수량을 입력해주세요.';
+        errors.plannedQuantity = '생산계획수량을 입력해주세요.';
       } else {
         const plannedQtyNum = parseInt(formData.plannedQuantity, 10);
         if (isNaN(plannedQtyNum) || plannedQtyNum <= 0) {
-          errors.plannedQuantity = '계획수량은 1 이상의 숫자여야 합니다.';
+          errors.plannedQuantity = '생산계획수량은 1 이상의 숫자여야 합니다.';
         }
       }
     }
@@ -475,12 +475,12 @@ function AdminProductionRequestContent() {
                     currentStatus === 'confirmed' ||
                     currentStatus === 'completed' ||
                     currentStatus === 'in_progress'
-                      ? '계획수량 *'
-                      : '계획수량'
+                      ? '생산계획수량 *'
+                      : '생산계획수량'
                   }
                   value={formData.plannedQuantity}
                   onChange={handleChange}
-                  placeholder="계획수량을 입력하세요"
+                  placeholder="생산계획수량을 입력하세요"
                   error={fieldErrors.plannedQuantity}
                   min="1"
                   required={
@@ -505,14 +505,13 @@ function AdminProductionRequestContent() {
                 <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
                   완료예정일
                 </label>
-                <input
-                  type="date"
+                <DateInput
                   id="plannedCompletionDate"
                   name="plannedCompletionDate"
                   value={formData.plannedCompletionDate}
                   onChange={handleChange}
                   disabled={true}
-                  className="w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 cursor-not-allowed opacity-50"
+                  className="bg-gray-50 cursor-not-allowed opacity-50"
                 />
               </div>
             )}
@@ -529,8 +528,7 @@ function AdminProductionRequestContent() {
                 <label htmlFor="plannedCompletionDateChange" className="block text-sm font-medium text-gray-700 mb-2">
                   완료예정일 변경
                 </label>
-                <input
-                  type="date"
+                <DateInput
                   id="plannedCompletionDateChange"
                   name="plannedCompletionDateChange"
                   value={formData.plannedCompletionDate}
@@ -538,7 +536,7 @@ function AdminProductionRequestContent() {
                     setFormData(prev => ({ ...prev, plannedCompletionDate: e.target.value }));
                   }}
                   disabled={!!formData.actualCompletionDate}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
+                  className="disabled:bg-gray-50"
                 />
                 {formData.actualCompletionDate && (
                   <p className="mt-1 text-xs text-gray-500">생산완료일이 등록되어 있어 완료예정일을 변경할 수 없습니다.</p>
@@ -549,8 +547,7 @@ function AdminProductionRequestContent() {
                 <label htmlFor="actualCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
                   생산완료일
                 </label>
-                <input
-                  type="date"
+                <DateInput
                   id="actualCompletionDate"
                   name="actualCompletionDate"
                   value={formData.actualCompletionDate}
@@ -563,7 +560,6 @@ function AdminProductionRequestContent() {
                       cleaningEpCompletionDate: value ? prev.cleaningEpCompletionDate : '',
                     }));
                   }}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                 />
               </div>
 
@@ -571,14 +567,13 @@ function AdminProductionRequestContent() {
                 <label htmlFor="cleaningEpCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
                   세정/EP 완료일
                 </label>
-                <input
-                  type="date"
+                <DateInput
                   id="cleaningEpCompletionDate"
                   name="cleaningEpCompletionDate"
                   value={formData.cleaningEpCompletionDate}
                   onChange={handleChange}
                   disabled={!formData.actualCompletionDate}
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
+                  className="disabled:bg-gray-50"
                 />
                 {!formData.actualCompletionDate && (
                   <p className="mt-1 text-xs text-gray-500">생산완료일을 먼저 등록해야 세정/EP 완료일을 입력할 수 있습니다.</p>

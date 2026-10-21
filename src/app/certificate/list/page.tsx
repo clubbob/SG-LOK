@@ -6,12 +6,19 @@ import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
-import { collection, query, where, doc, deleteDoc, onSnapshot, getDoc } from 'firebase/firestore';
+import { collection, query, where, doc, deleteDoc, onSnapshot } from 'firebase/firestore';
 import { db, storage } from '@/lib/firebase';
 import { Certificate, CertificateStatus, CertificateType } from '@/types';
 import { formatDateShort } from '@/lib/utils';
 import { filterRequestAttachmentsOnly } from '@/lib/certificate/attachmentFilters';
-import { generateV2PdfBlob } from '@/lib/certificate/v2PdfPipeline';
+import {
+  certificateDocToListRow,
+  isCertificateList2Downloadable,
+} from '@/lib/certificate/certificateListRow';
+import {
+  downloadV2CertificatePdf,
+  openLegacyCertificateFile,
+} from '@/lib/certificate/downloadV2CertificatePdf';
 
 const STATUS_LABELS: Record<CertificateStatus, string> = {
   pending: '대기',
@@ -93,79 +100,14 @@ function CertificateListPageContent() {
       (querySnapshot) => {
         const certificatesData: Certificate[] = [];
         
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          
-          // 생산요청 데이터 필터링
-          if (data.productionReason) {
-            return;
-          }
-          
-          // 관리자 성적서목록2와 동일: materialTestCertificate.products 우선, 없으면 legacy products
-          const mtcProducts =
-            data.materialTestCertificate?.products && Array.isArray(data.materialTestCertificate.products)
-              ? data.materialTestCertificate.products
-              : [];
-          const legacyProducts = data.products && Array.isArray(data.products) ? data.products : [];
-          const effectiveProducts = mtcProducts.length > 0 ? mtcProducts : legacyProducts;
-          const firstProduct = effectiveProducts.length > 0 ? effectiveProducts[0] : null;
-          const summarizedProductName =
-            effectiveProducts.length <= 1
-              ? (firstProduct?.productName || data.productName)
-              : `${firstProduct?.productName || data.productName || '제품'} 외 ${effectiveProducts.length - 1}건`;
-          const summarizedProductCode =
-            effectiveProducts.length <= 1
-              ? (firstProduct?.productCode || data.productCode)
-              : `${firstProduct?.productCode || data.productCode || '-'} 외 ${effectiveProducts.length - 1}건`;
-          const summarizedQuantity =
-            effectiveProducts.length > 0
-              ? effectiveProducts.reduce((sum: number, p: { quantity?: number | string }) => {
-                  const value =
-                    typeof p.quantity === 'number'
-                      ? p.quantity
-                      : typeof p.quantity === 'string'
-                        ? Number.parseInt(p.quantity, 10)
-                        : 0;
-                  return sum + (Number.isFinite(value) ? value : 0);
-                }, 0)
-              : (firstProduct?.quantity || data.quantity);
-          const customerName =
-            data.materialTestCertificate?.customer ||
-            data.customerName ||
-            '';
-          const orderNumber =
-            data.materialTestCertificate?.poNo ||
-            data.orderNumber ||
-            '';
-
-          certificatesData.push({
-            id: doc.id,
-            userId: data.userId || 'admin',
-            userName: data.userName || '관리자',
-            userEmail: data.userEmail || '',
-            userCompany: data.userCompany || '',
-            customerName,
-            orderNumber,
-            products: effectiveProducts,
-            productName: summarizedProductName,
-            productCode: summarizedProductCode,
-            lotNumber: firstProduct?.lotNumber || data.lotNumber,
-            quantity: summarizedQuantity,
-            certificateType: data.certificateType || 'quality',
-            requestDate: data.requestDate?.toDate() || new Date(),
-            requestedCompletionDate: data.requestedCompletionDate?.toDate(),
-            status: data.status || 'pending',
-            memo: data.memo || '',
-            attachments: data.attachments || [],
-            certificateFile: data.certificateFile,
-            materialTestCertificate: data.materialTestCertificate,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || new Date(),
-            createdBy: data.createdBy,
-            updatedBy: data.updatedBy,
-            completedAt: data.completedAt?.toDate(),
-            completedBy: data.completedBy,
+        querySnapshot.forEach((docSnap) => {
+          const row = certificateDocToListRow(docSnap.id, docSnap.data(), {
+            defaultUserId: 'admin',
+            defaultUserName: '관리자',
           });
+          if (row) {
+            certificatesData.push(row);
+          }
         });
         
         // 클라이언트 사이드 정렬 (오래된 순으로 정렬)
@@ -288,80 +230,28 @@ function CertificateListPageContent() {
     }
   };
 
-  // 관리자 성적서목록2와 동일: materialTestCertificate 기준으로 v2 PDF 생성 후 열기
   const handleDownload = async (certificate: Certificate) => {
-    if (!certificate.materialTestCertificate) {
+    if (!isCertificateList2Downloadable(certificate)) {
       setError('성적서 데이터가 없어 다운로드할 수 없습니다.');
       return;
     }
 
-    const withTimeout = async <T,>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
-      let timeoutId: ReturnType<typeof setTimeout> | null = null;
-      const timeoutPromise = new Promise<T>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), ms);
-      });
-      try {
-        return await Promise.race([promise, timeoutPromise]);
-      } finally {
-        if (timeoutId) clearTimeout(timeoutId);
-      }
-    };
-
-    const previewWindow = window.open('', '_blank');
-    if (previewWindow) {
-      try {
-        previewWindow.opener = null;
-      } catch {
-        // no-op
-      }
-      previewWindow.document.write(
-        '<!doctype html><title>PDF 생성 중</title><p style="font-family:sans-serif;padding:16px;">PDF 생성 중입니다...</p>'
-      );
-      previewWindow.document.close();
-    }
-
     setDownloadingCertificateId(certificate.id);
     setError('');
-    const pdfTimeoutMs = 120000;
     try {
-      const latestDocSnap = await getDoc(doc(db, 'certificates', certificate.id));
-      const latestCertificate: Certificate = latestDocSnap.exists()
-        ? ({
-            id: latestDocSnap.id,
-            ...(latestDocSnap.data() as Omit<Certificate, 'id'>),
-          } as Certificate)
-        : certificate;
-
-      if (!latestCertificate.materialTestCertificate) {
-        throw new Error('성적서 데이터가 없어 PDF를 생성할 수 없습니다.');
+      if (certificate.materialTestCertificate) {
+        await downloadV2CertificatePdf({ certificate, storage });
+        return;
       }
-
-      const pdfBlob = await withTimeout(
-        generateV2PdfBlob(latestCertificate, storage),
-        pdfTimeoutMs,
-        `PDF 생성 타임아웃(${Math.floor(pdfTimeoutMs / 1000)}초): 첨부 파일 읽기 또는 병합이 지연되고 있습니다.`
-      );
-      const blobUrl = URL.createObjectURL(pdfBlob);
-      if (previewWindow) {
-        previewWindow.location.href = blobUrl;
-      } else {
-        const downloadLink = document.createElement('a');
-        downloadLink.href = blobUrl;
-        downloadLink.target = '_blank';
-        downloadLink.rel = 'noopener noreferrer';
-        downloadLink.download = `MATERIAL_TEST_CERTIFICATE_${certificate.id}.pdf`;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-      }
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+      openLegacyCertificateFile(certificate);
     } catch (downloadError) {
-      console.error('v2 PDF 생성/열기 오류:', downloadError);
+      console.error('성적서 다운로드 오류:', downloadError);
       const message = downloadError instanceof Error ? downloadError.message : '알 수 없는 오류';
-      setError(`PDF 생성에 실패했습니다: ${message}`);
-      if (previewWindow) {
-        previewWindow.close();
-      }
+      setError(
+        certificate.materialTestCertificate
+          ? `PDF 생성에 실패했습니다: ${message}`
+          : `성적서 파일을 열 수 없습니다: ${message}`
+      );
     } finally {
       setDownloadingCertificateId(null);
     }
@@ -593,7 +483,7 @@ function CertificateListPageContent() {
                                   </>
                                 ) : (
                                   <>
-                                    {certificate.materialTestCertificate && (
+                                    {isCertificateList2Downloadable(certificate) && (
                                       <button
                                         onClick={() => handleDownload(certificate)}
                                         className="text-green-600 hover:text-green-800 text-xs font-medium"
@@ -603,7 +493,9 @@ function CertificateListPageContent() {
                                         }
                                       >
                                         {downloadingCertificateId === certificate.id
-                                          ? 'PDF 생성 중...'
+                                          ? certificate.materialTestCertificate
+                                            ? 'PDF 생성 중...'
+                                            : '열기 중...'
                                           : '다운로드'}
                                       </button>
                                     )}
@@ -812,7 +704,7 @@ function CertificateListPageContent() {
                         <p className="text-sm text-gray-900 whitespace-pre-wrap bg-gray-50 p-3 rounded-md">{selectedCertificateForView.memo}</p>
                       </div>
                     )}
-                    {selectedCertificateForView.materialTestCertificate && (
+                    {isCertificateList2Downloadable(selectedCertificateForView) && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">성적서 파일</label>
                         <button

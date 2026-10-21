@@ -11,6 +11,7 @@ import { Certificate, CertificateStatus, CertificateType, CertificateAttachment,
 import { formatDateShort } from '@/lib/utils';
 import { generateV2PdfBlob as buildV2PdfBlob } from '@/lib/certificate/v2PdfPipeline';
 import { filterRequestAttachmentsOnly } from '@/lib/certificate/attachmentFilters';
+import { certificateDocToListRow } from '@/lib/certificate/certificateListRow';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -115,90 +116,20 @@ export default function AdminCertificatePage() {
       (querySnapshot) => {
         const certificatesData: Certificate[] = [];
         
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          
-          // 성적서 데이터인지 확인
-          // 생산요청 데이터와 구분: productionReason이 있으면 생산요청, 없으면 성적서
-          // 또는 certificateType이 있으면 성적서로 간주
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data();
           if (data.productionReason) {
-            // 생산요청 데이터는 건너뛰기
-            console.warn(`생산요청 데이터가 certificates 컬렉션에 있습니다: ${doc.id}`);
+            console.warn(`생산요청 데이터가 certificates 컬렉션에 있습니다: ${docSnap.id}`);
             return;
           }
-          
-          // certificateType이 없으면 성적서가 아닐 수 있음 (안전장치)
-          if (!data.certificateType && !data.requestDate) {
-            console.warn(`성적서 형식이 아닌 데이터가 있습니다: ${doc.id}`);
+          const row = certificateDocToListRow(docSnap.id, data, { skipInvalidShape: true });
+          if (!row) {
+            if (!data.certificateType && !data.requestDate) {
+              console.warn(`성적서 형식이 아닌 데이터가 있습니다: ${docSnap.id}`);
+            }
             return;
           }
-          
-          // 목록 표시는 작성/수정에서 실제 저장되는 materialTestCertificate.products를 우선 사용
-          // (구버전 문서는 data.products로 fallback)
-          const mtcProducts =
-            data.materialTestCertificate?.products && Array.isArray(data.materialTestCertificate.products)
-              ? data.materialTestCertificate.products
-              : [];
-          const legacyProducts = data.products && Array.isArray(data.products) ? data.products : [];
-          const effectiveProducts = mtcProducts.length > 0 ? mtcProducts : legacyProducts;
-          const firstProduct = effectiveProducts.length > 0 ? effectiveProducts[0] : null;
-          const summarizedProductName =
-            effectiveProducts.length <= 1
-              ? (firstProduct?.productName || data.productName)
-              : `${firstProduct?.productName || data.productName || '제품'} 외 ${effectiveProducts.length - 1}건`;
-          const summarizedProductCode =
-            effectiveProducts.length <= 1
-              ? (firstProduct?.productCode || data.productCode)
-              : `${firstProduct?.productCode || data.productCode || '-'} 외 ${effectiveProducts.length - 1}건`;
-          const summarizedQuantity = effectiveProducts.length > 0
-            ? effectiveProducts.reduce((sum: number, p: { quantity?: number | string }) => {
-                const value =
-                  typeof p.quantity === 'number'
-                    ? p.quantity
-                    : typeof p.quantity === 'string'
-                      ? Number.parseInt(p.quantity, 10)
-                      : 0;
-                return sum + (Number.isFinite(value) ? value : 0);
-              }, 0)
-            : (firstProduct?.quantity || data.quantity);
-          
-          const customerName =
-            data.materialTestCertificate?.customer ||
-            data.customerName ||
-            '';
-          const orderNumber =
-            data.materialTestCertificate?.poNo ||
-            data.orderNumber ||
-            '';
-
-          certificatesData.push({
-            id: doc.id,
-            userId: data.userId,
-            userName: data.userName,
-            userEmail: data.userEmail,
-            userCompany: data.userCompany,
-            customerName: customerName,
-            orderNumber: orderNumber,
-            products: effectiveProducts,
-            productName: summarizedProductName,
-            productCode: summarizedProductCode,
-            lotNumber: firstProduct?.lotNumber || data.lotNumber,
-            quantity: summarizedQuantity,
-            certificateType: data.certificateType || 'quality',
-            requestDate: data.requestDate?.toDate() || new Date(),
-            requestedCompletionDate: data.requestedCompletionDate?.toDate(),
-            status: data.status || 'pending',
-            memo: data.memo || '',
-            attachments: data.attachments || [],
-            certificateFile: data.certificateFile,
-            materialTestCertificate: data.materialTestCertificate,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || new Date(),
-            createdBy: data.createdBy,
-            updatedBy: data.updatedBy,
-            completedAt: data.completedAt?.toDate(),
-            completedBy: data.completedBy,
-          });
+          certificatesData.push(row);
         });
         
         // 클라이언트 사이드 정렬 (오래된 순으로 정렬)

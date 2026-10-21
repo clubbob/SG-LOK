@@ -1,14 +1,26 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
-import { collection, query, where, doc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { ProductionRequest, ProductionRequestStatus } from '@/types';
+import { CertificateProduct, ProductionRequest, ProductionRequestStatus, ProductionSalesRegion } from '@/types';
+import { ProductionRequestProductLines } from '@/components/production/ProductionRequestProductLines';
+import {
+  expandProductionRequestsToListRows,
+  formatProductionReasonLabel,
+  type ProductionRequestListRow,
+} from '@/lib/production/productionRequestDisplay';
+import { removeProductionRequestProductLine } from '@/lib/production/removeProductionRequestProductLine';
+import {
+  PRODUCTION_REQUEST_SEARCH_HELP,
+  USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER,
+  productionRequestMatchesSearch,
+} from '@/lib/production/productionRequestSearch';
 import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
@@ -56,14 +68,24 @@ function ProductionRequestListPageContent() {
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [error, setError] = useState('');
-  const [displayedRequests, setDisplayedRequests] = useState<ProductionRequest[]>([]);
+  const [displayedListRows, setDisplayedListRows] = useState<ProductionRequestListRow[]>([]);
   const itemsPerPage = 10; // 명시적으로 10개로 설정
   const [currentPage, setCurrentPage] = useState(1);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingRowKey, setDeletingRowKey] = useState<string | null>(null);
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string; adminMemo?: string } | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<ProductionRequest | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredRequests, setFilteredRequests] = useState<ProductionRequest[]>([]);
+
+  const filteredListRows = useMemo(
+    () => expandProductionRequestsToListRows(filteredRequests),
+    [filteredRequests]
+  );
+
+  const totalListRowCount = useMemo(
+    () => expandProductionRequestsToListRows(requests).length,
+    [requests]
+  );
 
   // 인증 확인
   useEffect(() => {
@@ -117,6 +139,13 @@ function ProductionRequestListPageContent() {
             requestDate: data.requestDate?.toDate() || new Date(),
             requestedCompletionDate: data.requestedCompletionDate?.toDate() || new Date(),
             productionReason: data.productionReason,
+            salesRegion:
+              data.salesRegion === 'overseas' || data.salesRegion === 'domestic'
+                ? (data.salesRegion as ProductionSalesRegion)
+                : undefined,
+            products: Array.isArray(data.products)
+              ? (data.products as CertificateProduct[])
+              : undefined,
             customerName: data.customerName,
             status: data.status || 'pending_review',
             itemCode: data.itemCode,
@@ -174,7 +203,8 @@ function ProductionRequestListPageContent() {
       setFilteredRequests(statusFiltered);
       if (statusFiltered.length > 0) {
         const ITEMS_PER_PAGE = 10;
-        const totalPages = Math.ceil(statusFiltered.length / ITEMS_PER_PAGE);
+        const expanded = expandProductionRequestsToListRows(statusFiltered);
+        const totalPages = Math.ceil(expanded.length / ITEMS_PER_PAGE);
         setCurrentPage(totalPages > 0 ? totalPages : 1);
       } else {
         setCurrentPage(1);
@@ -182,68 +212,58 @@ function ProductionRequestListPageContent() {
       return;
     }
 
-    const q = searchQuery.toLowerCase().trim();
-    const filtered = statusFiltered.filter((request) => {
-      const productName = request.productName?.toLowerCase() || '';
-      const productCode = request.productCode?.toLowerCase() || '';
-      const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
-      const customerName = request.customerName?.toLowerCase() || '';
-      const userName = request.userName?.toLowerCase() || '';
-      const statusLabel = getDisplayStatusLabel(request).toLowerCase();
-      return (
-        productName.includes(q) ||
-        productCode.includes(q) ||
-        productionReason.includes(q) ||
-        customerName.includes(q) ||
-        userName.includes(q) ||
-        statusLabel.includes(q) ||
-        request.status.includes(q)
-      );
-    });
+    const filtered = statusFiltered.filter((request) =>
+      productionRequestMatchesSearch(request, searchQuery, getDisplayStatusLabel)
+    );
 
     setFilteredRequests(filtered);
     setCurrentPage(1);
   }, [searchQuery, requests, searchParams]);
 
-  // 페이지네이션
+  // 페이지네이션 (제품 1개 = 1행)
   useEffect(() => {
-    const ITEMS_PER_PAGE = 10; // 명시적으로 10개로 설정
-    if (filteredRequests.length === 0) {
-      setDisplayedRequests([]);
+    const ITEMS_PER_PAGE = 10;
+    if (filteredListRows.length === 0) {
+      setDisplayedListRows([]);
       return;
     }
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
-    const sliced = filteredRequests.slice(startIndex, endIndex);
-    // 각 페이지에서 위쪽이 최신 번호가 되도록 역순으로 뒤집기
+    const sliced = filteredListRows.slice(startIndex, endIndex);
     const reversed = [...sliced].reverse();
-    setDisplayedRequests(reversed);
-  }, [filteredRequests, currentPage]);
+    setDisplayedListRows(reversed);
+  }, [filteredListRows, currentPage]);
 
-  const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredListRows.length / itemsPerPage);
 
-  const handleEdit = (request: ProductionRequest) => {
-    router.push(`/production/request?id=${request.id}`);
+  const handleEdit = (listRow: ProductionRequestListRow) => {
+    router.push(
+      `/production/request?id=${listRow.request.id}&productIndex=${listRow.productIndex}`
+    );
   };
 
-  const handleDelete = async (request: ProductionRequest) => {
+  const handleDeleteLine = async (listRow: ProductionRequestListRow) => {
+    const request = listRow.request;
     if (userProfile?.id && request.userId !== userProfile.id) {
       return;
     }
-    if (!confirm(`정말로 "${request.productName}" 생산요청을 삭제하시겠습니까?`)) {
+    const multiProduct = (request.products?.length ?? 0) > 1;
+    const confirmMessage = multiProduct
+      ? `"${listRow.productName}" 제품만 삭제하시겠습니까? (다른 제품은 유지됩니다)`
+      : `정말로 "${listRow.productName}" 생산요청을 삭제하시겠습니까?`;
+    if (!confirm(confirmMessage)) {
       return;
     }
 
-    setDeletingId(request.id);
+    setDeletingRowKey(listRow.rowKey);
     try {
-      await deleteDoc(doc(db, 'productionRequests', request.id));
-      // 실시간 업데이트로 자동 새로고침됨
+      await removeProductionRequestProductLine(listRow);
     } catch (error) {
       console.error('생산요청 삭제 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
-      setError(`생산요청 삭제에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+      setError(`삭제에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
     } finally {
-      setDeletingId(null);
+      setDeletingRowKey(null);
     }
   };
 
@@ -262,7 +282,7 @@ function ProductionRequestListPageContent() {
       const headers = [
       '번호',
       '요청자',
-      '등록일',
+      '요청일',
       '제품명',
       '제품코드',
       '생산목적',
@@ -279,13 +299,16 @@ function ProductionRequestListPageContent() {
     ];
 
     // 엑셀은 최근 등록이 위쪽에 오도록 역순 출력, 번호는 목록과 동일(최신=가장 큰 번호)
-    const exportRequests = [...filteredRequests].reverse();
-    const rows = exportRequests.map((request, idx) => {
-      const rowNumber = exportRequests.length - idx;
-      const productionReasonLabel = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
+    const exportRows = [...expandProductionRequestsToListRows(filteredRequests)].reverse();
+    const rows = exportRows.map((listRow, idx) => {
+      const request = listRow.request;
+      const rowNumber = exportRows.length - idx;
+      const productionReasonLabel = formatProductionReasonLabel(listRow.productionReason);
       const statusLabel = getDisplayStatusLabel(request);
 
-      const requestedDateStr = request.requestedCompletionDate ? formatDateShort(request.requestedCompletionDate) : '';
+      const requestedDateStr = listRow.requestedCompletionDate
+        ? formatDateShort(listRow.requestedCompletionDate)
+        : '';
       const plannedDateStr = request.plannedCompletionDate ? formatDateShort(request.plannedCompletionDate) : '';
       const actualDateStr = request.actualCompletionDate ? formatDateShort(request.actualCompletionDate) : '';
       const cleaningEpDateStr = request.cleaningEpCompletionDate
@@ -297,12 +320,12 @@ function ProductionRequestListPageContent() {
         rowNumber,
         request.userName || '',
         requestDateStr,
-        request.productName,
-        request.productCode || '',
+        listRow.productName,
+        listRow.productCode,
         productionReasonLabel,
-        request.customerName || '',
-        request.orderQuantity ?? '',
-        request.quantity,
+        listRow.customerName || '',
+        listRow.orderQuantity ?? '',
+        listRow.requestQuantity ?? '',
         request.plannedQuantity ?? '',
         requestedDateStr,
         plannedDateStr,
@@ -375,7 +398,7 @@ function ProductionRequestListPageContent() {
                 size="sm"
                 className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap"
                 onClick={handleExportToExcel}
-                disabled={loadingRequests || filteredRequests.length === 0}
+                disabled={loadingRequests || filteredListRows.length === 0}
               >
                 <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16v4H4m4 4h8m-8 4h5m-1 4l-3-3h6l-3 3z" />
@@ -400,7 +423,7 @@ function ProductionRequestListPageContent() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="제품명, 제품코드, 생산목적, 고객사명, 상태 검색..."
+                placeholder={USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER}
                 className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
               />
               <svg
@@ -422,6 +445,7 @@ function ProductionRequestListPageContent() {
                 </button>
               )}
             </div>
+            <p className="mt-1.5 text-xs text-red-600 leading-relaxed">{PRODUCTION_REQUEST_SEARCH_HELP}</p>
           </div>
 
           {error && (
@@ -460,7 +484,7 @@ function ProductionRequestListPageContent() {
                       <tr>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
-                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
+                        <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청일</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품명</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품코드</th>
                         <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산목적</th>
@@ -478,14 +502,16 @@ function ProductionRequestListPageContent() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {displayedRequests.map((request, idx) => {
-                        const itemsPerPageValue = 10; // 명시적으로 10개로 설정
-                        // 역순으로 표시되므로, idx는 역순 인덱스 (0이 마지막 항목)
-                        const reversedIdx = displayedRequests.length - 1 - idx;
+                      {displayedListRows.map((listRow, idx) => {
+                        const request = listRow.request;
+                        const itemsPerPageValue = 10;
+                        const reversedIdx = displayedListRows.length - 1 - idx;
                         const absoluteIndex = (currentPage - 1) * itemsPerPageValue + reversedIdx;
-                        const rowNumber = absoluteIndex + 1; // 1번부터 시작
+                        const rowNumber = absoluteIndex + 1;
+                        const lineRequestedDate =
+                          listRow.requestedCompletionDate ?? request.requestedCompletionDate;
                         return (
-                        <tr key={request.id} className="hover:bg-gray-50">
+                        <tr key={listRow.rowKey} className="hover:bg-gray-50">
                           <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap text-center w-12">
                             {rowNumber}
                           </td>
@@ -496,31 +522,35 @@ function ProductionRequestListPageContent() {
                             <div className="text-sm text-gray-900">{formatDateShort(request.requestDate)}</div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
-                            <div className="text-sm font-medium text-gray-900">{request.productName}</div>
-                            {request.itemName && <div className="text-xs text-gray-500">({request.itemName})</div>}
+                            <div className="text-sm font-medium text-gray-900">{listRow.productName}</div>
+                            {request.itemName && listRow.productIndex === 0 && (
+                              <div className="text-xs text-gray-500">({request.itemName})</div>
+                            )}
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{request.productCode || '-'}</div>
+                            <div className="text-sm text-gray-900">{listRow.productCode}</div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              {request.productionReason === 'order' ? '고객 주문' : '재고 준비'}
+                              {formatProductionReasonLabel(listRow.productionReason)}
                             </div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{request.customerName || '-'}</div>
+                            <div className="text-sm text-gray-900">{listRow.customerName || '-'}</div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              {request.orderQuantity !== undefined && request.orderQuantity !== null
-                                ? request.orderQuantity.toLocaleString()
-                                : request.productionReason === 'order'
-                                ? request.quantity.toLocaleString()
+                              {listRow.orderQuantity != null
+                                ? listRow.orderQuantity.toLocaleString()
                                 : '-'}
                             </div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{request.quantity.toLocaleString()}</div>
+                            <div className="text-sm text-gray-900">
+                              {listRow.requestQuantity != null
+                                ? listRow.requestQuantity.toLocaleString()
+                                : '-'}
+                            </div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
@@ -531,13 +561,13 @@ function ProductionRequestListPageContent() {
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              {formatDateShort(request.requestedCompletionDate)}
+                              {lineRequestedDate ? formatDateShort(lineRequestedDate) : '-'}
                             </div>
                           </td>
                           <td className="px-3 py-4 whitespace-nowrap">
                             <div
                               className={`text-sm ${
-                                isDateAfter(request.plannedCompletionDate, request.requestedCompletionDate)
+                                isDateAfter(request.plannedCompletionDate, lineRequestedDate)
                                   ? 'text-red-500'
                                   : 'text-gray-900'
                               }`}
@@ -603,19 +633,19 @@ function ProductionRequestListPageContent() {
                               {userProfile && request.userId === userProfile.id && request.status === 'pending_review' ? (
                                 <>
                                   <button
-                                    onClick={() => handleEdit(request)}
+                                    onClick={() => handleEdit(listRow)}
                                     className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                                    disabled={deletingId === request.id}
+                                    disabled={deletingRowKey === listRow.rowKey}
                                   >
                                     수정
                                   </button>
                                   <span className="text-gray-300">|</span>
                                   <button
-                                    onClick={() => handleDelete(request)}
+                                    onClick={() => handleDeleteLine(listRow)}
                                     className="text-red-600 hover:text-red-800 text-sm font-medium"
-                                    disabled={deletingId === request.id}
+                                    disabled={deletingRowKey === listRow.rowKey}
                                   >
-                                    {deletingId === request.id ? '삭제 중...' : '삭제'}
+                                    {deletingRowKey === listRow.rowKey ? '삭제 중...' : '삭제'}
                                   </button>
                                 </>
                               ) : (
@@ -637,25 +667,25 @@ function ProductionRequestListPageContent() {
                   <div className="text-sm text-gray-700">
                     {searchQuery ? (
                       <>
-                        검색 결과 <span className="font-medium">{filteredRequests.length}</span>건 중{' '}
+                        검색 결과 <span className="font-medium">{filteredListRows.length}</span>건 중{' '}
                         <span className="font-medium">
                           {(currentPage - 1) * itemsPerPage + 1}
                         </span>
                         -
                         <span className="font-medium">
-                          {Math.min(currentPage * itemsPerPage, filteredRequests.length)}
+                          {Math.min(currentPage * itemsPerPage, filteredListRows.length)}
                         </span>
-                        건 표시 (전체 {requests.length}건)
+                        건 표시 (전체 {totalListRowCount}건)
                       </>
                     ) : (
                       <>
-                        전체 <span className="font-medium">{filteredRequests.length}</span>건 중{' '}
+                        전체 <span className="font-medium">{filteredListRows.length}</span>건 중{' '}
                         <span className="font-medium">
                           {(currentPage - 1) * itemsPerPage + 1}
                         </span>
                         -
                         <span className="font-medium">
-                          {Math.min(currentPage * itemsPerPage, filteredRequests.length)}
+                          {Math.min(currentPage * itemsPerPage, filteredListRows.length)}
                         </span>
                         건 표시
                       </>
@@ -724,27 +754,31 @@ function ProductionRequestListPageContent() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">제품명</label>
-                    <p className="text-sm text-gray-900">{selectedRequest.productName}</p>
+                    <ProductionRequestProductLines request={selectedRequest} field="name" nameClassName="text-sm text-gray-900" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">제품코드</label>
-                    <p className="text-sm text-gray-900">{selectedRequest.productCode || '-'}</p>
+                    <ProductionRequestProductLines request={selectedRequest} field="code" codeClassName="text-sm text-gray-900" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">생산목적</label>
-                    <p className="text-sm text-gray-900">{selectedRequest.productionReason === 'order' ? '고객 주문' : '재고 준비'}</p>
+                    <p className="text-sm text-gray-900">
+                      {formatProductionReasonLabel(selectedRequest.productionReason)}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">고객사명</label>
+                    <p className="text-sm text-gray-900">{selectedRequest.customerName || '-'}</p>
                   </div>
                   {selectedRequest.productionReason === 'order' && (
-                    <>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">고객사명</label>
-                        <p className="text-sm text-gray-900">{selectedRequest.customerName || '-'}</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">수주수량</label>
-                        <p className="text-sm text-gray-900">{selectedRequest.orderQuantity ? selectedRequest.orderQuantity.toLocaleString() : '-'}</p>
-                      </div>
-                    </>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">수주수량</label>
+                      <p className="text-sm text-gray-900">
+                        {selectedRequest.orderQuantity
+                          ? selectedRequest.orderQuantity.toLocaleString()
+                          : '-'}
+                      </p>
+                    </div>
                   )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">요청수량</label>
@@ -757,7 +791,7 @@ function ProductionRequestListPageContent() {
                     </div>
                   )}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">등록일</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">요청일</label>
                     <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.requestDate)}</p>
                   </div>
                   <div>

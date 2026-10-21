@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "clean": "npx --yes rimraf@5 .next .next-alt",
+    "clean": "npx --yes rimraf@5 .next .next-dev .next-alt",
     "dev": "node scripts/dev.mjs",
+    "dev:turbo": "cross-env DEV_TURBO=1 node scripts/dev.mjs",
     "dev:clean": "npm run clean && npm run dev",
     "dev:refresh": "npm run clean && node scripts/dev.mjs",
     "dev:3000": "next dev --port 3000",

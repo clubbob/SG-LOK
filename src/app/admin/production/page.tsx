@@ -1,11 +1,23 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { collection, query, getDocs, Timestamp, onSnapshot, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { ProductionRequest, ProductionRequestStatus } from '@/types';
+import { CertificateProduct, ProductionRequest, ProductionRequestStatus, ProductionSalesRegion } from '@/types';
+import {
+  expandProductionRequestsToListRows,
+  formatProductionReasonLabel,
+  formatProductionRequestProductNames,
+  type ProductionRequestListRow,
+} from '@/lib/production/productionRequestDisplay';
+import { removeProductionRequestProductLine } from '@/lib/production/removeProductionRequestProductLine';
+import {
+  ADMIN_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER,
+  PRODUCTION_REQUEST_SEARCH_HELP,
+  productionRequestMatchesSearch,
+} from '@/lib/production/productionRequestSearch';
 import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 import { Button } from '@/components/ui';
 
@@ -77,10 +89,10 @@ export default function AdminProductionPage() {
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [error, setError] = useState('');
-  const [displayedRequests, setDisplayedRequests] = useState<ProductionRequest[]>([]);
+  const [displayedListRows, setDisplayedListRows] = useState<ProductionRequestListRow[]>([]);
   const itemsPerPage = 10; // 명시적으로 10개로 설정
   const [currentPage, setCurrentPage] = useState(1);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingRowKey, setDeletingRowKey] = useState<string | null>(null);
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string; adminMemo?: string } | null>(null);
   const [approvingRequest, setApprovingRequest] = useState<ProductionRequest | null>(null);
   const [approvalForm, setApprovalForm] = useState({
@@ -93,6 +105,11 @@ export default function AdminProductionPage() {
   const [approving, setApproving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredRequests, setFilteredRequests] = useState<ProductionRequest[]>([]);
+
+  const filteredListRows = useMemo(
+    () => expandProductionRequestsToListRows(filteredRequests),
+    [filteredRequests]
+  );
 
   useEffect(() => {
     // 관리자 세션 확인
@@ -137,6 +154,13 @@ export default function AdminProductionPage() {
             requestDate: data.requestDate?.toDate() || new Date(),
             requestedCompletionDate: data.requestedCompletionDate?.toDate() || new Date(),
             productionReason: data.productionReason,
+            salesRegion:
+              data.salesRegion === 'overseas' || data.salesRegion === 'domestic'
+                ? (data.salesRegion as ProductionSalesRegion)
+                : undefined,
+            products: Array.isArray(data.products)
+              ? (data.products as CertificateProduct[])
+              : undefined,
             customerName: data.customerName,
             status: currentStatus,
             itemCode: data.itemCode,
@@ -198,55 +222,45 @@ export default function AdminProductionPage() {
       // 검색어가 없을 때는 마지막 페이지로 이동 (최신 항목 표시)
       if (statusFiltered.length > 0) {
         const ITEMS_PER_PAGE = 10;
-        const totalPages = Math.ceil(statusFiltered.length / ITEMS_PER_PAGE);
+        const expanded = expandProductionRequestsToListRows(statusFiltered);
+        const totalPages = Math.ceil(expanded.length / ITEMS_PER_PAGE);
         setCurrentPage(totalPages > 0 ? totalPages : 1);
       }
       return;
     }
 
-    const query = searchQuery.toLowerCase().trim();
-    const filtered = statusFiltered.filter((request) => {
-      const productName = request.productName?.toLowerCase() || '';
-      const productCode = request.productCode?.toLowerCase() || '';
-      const productionReason = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
-      const customerName = request.customerName?.toLowerCase() || '';
-      const userName = request.userName?.toLowerCase() || '';
-      const statusLabel = getDisplayStatusLabel(request).toLowerCase();
-
-      return (
-        productName.includes(query) ||
-        productCode.includes(query) ||
-        productionReason.includes(query) ||
-        customerName.includes(query) ||
-        userName.includes(query) ||
-        statusLabel.includes(query) ||
-        request.status.includes(query)
-      );
-    });
+    const filtered = statusFiltered.filter((request) =>
+      productionRequestMatchesSearch(request, searchQuery, getDisplayStatusLabel)
+    );
 
     setFilteredRequests(filtered);
     setCurrentPage(1); // 검색 시 첫 페이지로 리셋
   }, [searchQuery, requests, searchParams]);
 
-  // 페이지네이션
+  // 페이지네이션 (제품 1개 = 1행)
   useEffect(() => {
-    const ITEMS_PER_PAGE = 10; // 명시적으로 10개로 설정
-    if (filteredRequests.length === 0) {
-      setDisplayedRequests([]);
+    const ITEMS_PER_PAGE = 10;
+    if (filteredListRows.length === 0) {
+      setDisplayedListRows([]);
       return;
     }
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
-    const sliced = filteredRequests.slice(startIndex, endIndex);
-    // 각 페이지에서 위쪽이 최신 번호가 되도록 역순으로 뒤집기
+    const sliced = filteredListRows.slice(startIndex, endIndex);
     const reversed = [...sliced].reverse();
-    setDisplayedRequests(reversed);
-  }, [filteredRequests, currentPage]);
+    setDisplayedListRows(reversed);
+  }, [filteredListRows, currentPage]);
 
-  const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredListRows.length / itemsPerPage);
+  const totalListRowCount = useMemo(
+    () => expandProductionRequestsToListRows(requests).length,
+    [requests]
+  );
 
-  const handleEdit = (request: ProductionRequest) => {
-    router.push(`/admin/production/request?id=${request.id}`);
+  const handleEdit = (listRow: ProductionRequestListRow) => {
+    router.push(
+      `/admin/production/request?id=${listRow.request.id}&productIndex=${listRow.productIndex}`
+    );
   };
 
   const emptyApprovalForm = {
@@ -346,7 +360,7 @@ export default function AdminProductionPage() {
 
     const headers = [
       '번호',
-      '등록일',
+      '요청일',
       '제품명',
       '제품코드',
       '생산목적',
@@ -364,13 +378,16 @@ export default function AdminProductionPage() {
     ];
 
     // 엑셀은 최근 등록이 위쪽에 오도록 역순 출력, 번호는 목록과 동일(최신=가장 큰 번호)
-    const exportRequests = [...filteredRequests].reverse();
-    const rows = exportRequests.map((request, idx) => {
-      const rowNumber = exportRequests.length - idx;
-      const productionReasonLabel = request.productionReason === 'order' ? '고객 주문' : '재고 준비';
+    const exportRows = [...expandProductionRequestsToListRows(filteredRequests)].reverse();
+    const rows = exportRows.map((listRow, idx) => {
+      const request = listRow.request;
+      const rowNumber = exportRows.length - idx;
+      const productionReasonLabel = formatProductionReasonLabel(listRow.productionReason);
       const statusLabel = getDisplayStatusLabel(request);
 
-      const requestedDateStr = request.requestedCompletionDate ? formatDateShort(request.requestedCompletionDate) : '';
+      const requestedDateStr = listRow.requestedCompletionDate
+        ? formatDateShort(listRow.requestedCompletionDate)
+        : '';
       const plannedDateStr = request.plannedCompletionDate ? formatDateShort(request.plannedCompletionDate) : '';
       const actualDateStr = request.actualCompletionDate ? formatDateShort(request.actualCompletionDate) : '';
       const cleaningEpDateStr = request.cleaningEpCompletionDate
@@ -381,12 +398,12 @@ export default function AdminProductionPage() {
       const cols = [
         rowNumber,
         requestDateStr,
-        request.productName,
-        request.productCode || '',
+        listRow.productName,
+        listRow.productCode,
         productionReasonLabel,
-        request.customerName || '',
-        request.orderQuantity ?? '',
-        request.quantity,
+        listRow.customerName || '',
+        listRow.orderQuantity ?? '',
+        listRow.requestQuantity ?? '',
         request.plannedQuantity ?? '',
         requestedDateStr,
         plannedDateStr,
@@ -414,21 +431,25 @@ export default function AdminProductionPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleDelete = async (request: ProductionRequest) => {
-    if (!confirm(`정말로 "${request.productName}" 생산요청을 삭제하시겠습니까?`)) {
+  const handleDeleteLine = async (listRow: ProductionRequestListRow) => {
+    const request = listRow.request;
+    const multiProduct = (request.products?.length ?? 0) > 1;
+    const confirmMessage = multiProduct
+      ? `"${listRow.productName}" 제품만 삭제하시겠습니까? (다른 제품은 유지됩니다)`
+      : `정말로 "${listRow.productName}" 생산요청을 삭제하시겠습니까?`;
+    if (!confirm(confirmMessage)) {
       return;
     }
 
-    setDeletingId(request.id);
+    setDeletingRowKey(listRow.rowKey);
     try {
-      await deleteDoc(doc(db, 'productionRequests', request.id));
-      // 실시간 업데이트로 자동 새로고침됨
+      await removeProductionRequestProductLine(listRow);
     } catch (error) {
       console.error('생산요청 삭제 오류:', error);
       const firebaseError = error as { code?: string; message?: string };
-      setError(`생산요청 삭제에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+      setError(`삭제에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
     } finally {
-      setDeletingId(null);
+      setDeletingRowKey(null);
     }
   };
 
@@ -477,7 +498,7 @@ export default function AdminProductionPage() {
             size="sm"
             className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap"
             onClick={handleExportToExcel}
-            disabled={loadingRequests || filteredRequests.length === 0}
+            disabled={loadingRequests || filteredListRows.length === 0}
           >
             <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16v4H4m4 4h8m-8 4h5m-1 4l-3-3h6l-3 3z" />
@@ -505,7 +526,7 @@ export default function AdminProductionPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="제품명, 제품코드, 생산목적, 고객사명, 요청자, 상태 검색..."
+            placeholder={ADMIN_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER}
             className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
           />
           <svg
@@ -527,6 +548,7 @@ export default function AdminProductionPage() {
             </button>
           )}
         </div>
+        <p className="mt-1.5 text-xs text-red-600 leading-relaxed">{PRODUCTION_REQUEST_SEARCH_HELP}</p>
       </div>
 
       {requests.length === 0 ? (
@@ -545,7 +567,7 @@ export default function AdminProductionPage() {
                   <tr>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">등록일</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청일</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품명</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품코드</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산목적</th>
@@ -563,14 +585,16 @@ export default function AdminProductionPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {displayedRequests.map((request, idx) => {
-                    const itemsPerPageValue = 10; // 명시적으로 10개로 설정
-                    // 역순으로 표시되므로, idx는 역순 인덱스 (0이 마지막 항목)
-                    const reversedIdx = displayedRequests.length - 1 - idx;
+                  {displayedListRows.map((listRow, idx) => {
+                    const request = listRow.request;
+                    const itemsPerPageValue = 10;
+                    const reversedIdx = displayedListRows.length - 1 - idx;
                     const absoluteIndex = (currentPage - 1) * itemsPerPageValue + reversedIdx;
-                    const rowNumber = absoluteIndex + 1; // 1번부터 시작
+                    const rowNumber = absoluteIndex + 1;
+                    const lineRequestedDate =
+                      listRow.requestedCompletionDate ?? request.requestedCompletionDate;
                     return (
-                    <tr key={request.id} className="hover:bg-gray-50">
+                    <tr key={listRow.rowKey} className="hover:bg-gray-50">
                       <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap text-center w-12">
                         {rowNumber}
                       </td>
@@ -581,31 +605,35 @@ export default function AdminProductionPage() {
                         <div className="text-sm text-gray-900">{formatDateShort(request.requestDate)}</div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{request.productName}</div>
-                        {request.itemName && <div className="text-xs text-gray-500">({request.itemName})</div>}
+                        <div className="text-sm font-medium text-gray-900">{listRow.productName}</div>
+                        {request.itemName && listRow.productIndex === 0 && (
+                          <div className="text-xs text-gray-500 mt-0.5">({request.itemName})</div>
+                        )}
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{request.productCode || '-'}</div>
+                        <div className="text-sm text-gray-900">{listRow.productCode}</div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {request.productionReason === 'order' ? '고객 주문' : '재고 준비'}
+                          {formatProductionReasonLabel(listRow.productionReason)}
                         </div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{request.customerName || '-'}</div>
+                        <div className="text-sm text-gray-900">{listRow.customerName || '-'}</div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {request.orderQuantity !== undefined && request.orderQuantity !== null
-                            ? request.orderQuantity.toLocaleString()
-                            : request.productionReason === 'order'
-                            ? request.quantity.toLocaleString()
+                          {listRow.orderQuantity != null
+                            ? listRow.orderQuantity.toLocaleString()
                             : '-'}
                         </div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 whitespace-nowrap">{request.quantity.toLocaleString()}</div>
+                        <div className="text-sm text-gray-900 whitespace-nowrap">
+                          {listRow.requestQuantity != null
+                            ? listRow.requestQuantity.toLocaleString()
+                            : '-'}
+                        </div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900 whitespace-nowrap">
@@ -616,13 +644,13 @@ export default function AdminProductionPage() {
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          {formatDateShort(request.requestedCompletionDate)}
+                          {lineRequestedDate ? formatDateShort(lineRequestedDate) : '-'}
                         </div>
                       </td>
                       <td className="px-3 py-4 whitespace-nowrap">
                         <div
                           className={`text-sm ${
-                            isDateAfter(request.plannedCompletionDate, request.requestedCompletionDate)
+                            isDateAfter(request.plannedCompletionDate, lineRequestedDate)
                               ? 'text-red-500'
                               : 'text-gray-900'
                           }`}
@@ -690,7 +718,7 @@ export default function AdminProductionPage() {
                               <button
                                 onClick={() => handleApprove(request)}
                                 className="text-green-600 hover:text-green-800 text-sm font-medium"
-                                disabled={deletingId === request.id || approving}
+                                disabled={deletingRowKey === listRow.rowKey || approving}
                               >
                                 승인
                               </button>
@@ -698,19 +726,19 @@ export default function AdminProductionPage() {
                             </>
                           )}
                           <button
-                            onClick={() => handleEdit(request)}
+                            onClick={() => handleEdit(listRow)}
                             className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                            disabled={deletingId === request.id || approving}
+                            disabled={deletingRowKey === listRow.rowKey || approving}
                           >
                             수정
                           </button>
                           <span className="text-gray-300">|</span>
                           <button
-                            onClick={() => handleDelete(request)}
+                            onClick={() => handleDeleteLine(listRow)}
                             className="text-red-600 hover:text-red-800 text-sm font-medium"
-                            disabled={deletingId === request.id || approving}
+                            disabled={deletingRowKey === listRow.rowKey || approving}
                           >
-                            {deletingId === request.id ? '삭제 중...' : '삭제'}
+                            {deletingRowKey === listRow.rowKey ? '삭제 중...' : '삭제'}
                           </button>
                         </div>
                       </td>
@@ -728,25 +756,25 @@ export default function AdminProductionPage() {
               <div className="text-sm text-gray-700">
                 {searchQuery ? (
                   <>
-                    검색 결과 <span className="font-medium">{filteredRequests.length}</span>건 중{' '}
+                    검색 결과 <span className="font-medium">{filteredListRows.length}</span>건 중{' '}
                     <span className="font-medium">
                       {(currentPage - 1) * itemsPerPage + 1}
                     </span>
                     -
                     <span className="font-medium">
-                      {Math.min(currentPage * itemsPerPage, filteredRequests.length)}
+                      {Math.min(currentPage * itemsPerPage, filteredListRows.length)}
                     </span>
-                    건 표시 (전체 {requests.length}건)
+                    건 표시 (전체 {totalListRowCount}건)
                   </>
                 ) : (
                   <>
-                    전체 <span className="font-medium">{filteredRequests.length}</span>건 중{' '}
+                    전체 <span className="font-medium">{filteredListRows.length}</span>건 중{' '}
                     <span className="font-medium">
                       {(currentPage - 1) * itemsPerPage + 1}
                     </span>
                     -
                     <span className="font-medium">
-                      {Math.min(currentPage * itemsPerPage, filteredRequests.length)}
+                      {Math.min(currentPage * itemsPerPage, filteredListRows.length)}
                     </span>
                     건 표시
                   </>
@@ -838,7 +866,12 @@ export default function AdminProductionPage() {
               )}
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-gray-600 mb-2">제품명: <span className="font-medium text-gray-900">{approvingRequest.productName}</span></p>
+                  <p className="text-sm text-gray-600 mb-2">
+                    제품명:{' '}
+                    <span className="font-medium text-gray-900">
+                      {formatProductionRequestProductNames(approvingRequest)}
+                    </span>
+                  </p>
                   <p className="text-sm text-gray-600">제품코드: <span className="font-medium text-gray-900">{approvingRequest.productCode || '-'}</span></p>
                 </div>
                 <div 

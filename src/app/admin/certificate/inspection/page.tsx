@@ -463,7 +463,7 @@ export default function InspectionCertiPage() {
                   label="제품코드 *"
                   value={editingProduct.productCode}
                   onChange={(e) => setEditingProduct({ ...editingProduct, productCode: e.target.value.toUpperCase() })}
-                  placeholder="제품코드를 입력하세요"
+                  placeholder="제품코드 입력"
                 />
               </div>
               <div>
@@ -551,7 +551,7 @@ export default function InspectionCertiPage() {
                     });
                   }
                 }}
-                placeholder="제품코드를 입력하세요"
+                placeholder="제품코드 입력"
                 required
               />
             </div>

@@ -1,27 +1,37 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Input } from '@/components/ui';
+import { Button, FormPageAlert, Input } from '@/components/ui';
 import { collection, addDoc, Timestamp, getDocs, query, limit, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { ProductionReason } from '@/types';
+import { sanitizeForFirestore } from '@/lib/firestoreSanitize';
+import {
+  firestoreValueToDateInputString,
+  isProductionRequestContentEditable,
+  normalizeProductionRequestStatus,
+} from '@/lib/production/productionRequestDisplay';
 import {
   buildProductionRequestNotification,
   postAdminNotification,
 } from '@/lib/adminNotifications';
+import { RequestProductLinesSection } from '@/components/products/RequestProductLinesSection';
+import {
+  buildCertificateProductsFromLines,
+  createEmptyRequestProductLine,
+  linesFromFirestoreProducts,
+  summarizeOrderQuantityFromOrderLines,
+  summarizeProductionLegacyFromProducts,
+  summarizeProductionRequestRootFromProducts,
+  summarizeRequestedCompletionDateFromProducts,
+  validateRequestProductLines,
+  type RequestProductLine,
+} from '@/lib/products/requestProductLines';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
 const INITIAL_FORM_DATA = {
-  productName: '',
-  productCode: '',
-  quantity: '',
-  orderQuantity: '',
   plannedQuantity: '',
-  requestedCompletionDate: '',
-  productionReason: 'order' as ProductionReason,
-  customerName: '',
   memo: '',
   plannedCompletionDate: '',
   actualCompletionDate: '',
@@ -55,20 +65,34 @@ function AdminProductionRequestContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestId = searchParams.get('id');
+  const productIndexParam = searchParams.get('productIndex');
   const [isEditMode, setIsEditMode] = useState(false);
-  const [loadingRequest, setLoadingRequest] = useState(false);
+  const [editProductIndex, setEditProductIndex] = useState<number | null>(null);
+  const allProductLinesRef = useRef<RequestProductLine[] | null>(null);
+  const [loadingRequest, setLoadingRequest] = useState(() => Boolean(requestId));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
   const [formData, setFormData] = useState(INITIAL_FORM_DATA);
+  const [products, setProducts] = useState<RequestProductLine[]>([createEmptyRequestProductLine()]);
   const [currentStatus, setCurrentStatus] = useState<string>('');
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [productNameSuggestions, setProductNameSuggestions] = useState<string[]>([]);
-  const [showProductSuggestions, setShowProductSuggestions] = useState(false);
   const [customerNameSuggestions, setCustomerNameSuggestions] = useState<string[]>([]);
-  const [showCustomerSuggestions, setShowCustomerSuggestions] = useState(false);
+
+  const clearFieldError = (key: string) => {
+    setFieldErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const setFieldError = (key: string, message: string) => {
+    setFieldErrors((prev) => ({ ...prev, [key]: message }));
+  };
 
   // 관리자 인증 확인
   useEffect(() => {
@@ -88,21 +112,28 @@ function AdminProductionRequestContent() {
         if (requestDoc.exists()) {
           const data = requestDoc.data();
           
+          const status = normalizeProductionRequestStatus(data.status);
+          const allLines = linesFromFirestoreProducts(data);
+          allProductLinesRef.current = allLines;
+          const parsedIndex =
+            productIndexParam != null && productIndexParam !== ''
+              ? Number.parseInt(productIndexParam, 10)
+              : NaN;
+          const singleLineIndex =
+            !Number.isNaN(parsedIndex) && parsedIndex >= 0 && parsedIndex < allLines.length
+              ? parsedIndex
+              : null;
+
           setIsEditMode(true);
-          setCurrentStatus(data.status || 'pending_review');
+          setCurrentStatus(status);
+          setEditProductIndex(singleLineIndex);
+          setProducts(singleLineIndex != null ? [allLines[singleLineIndex]] : allLines);
           setFormData({
-            productName: data.productName || '',
-            productCode: data.productCode || '',
-            quantity: data.quantity?.toString() || '',
-            orderQuantity: data.orderQuantity?.toString() || '',
             plannedQuantity: data.plannedQuantity?.toString() || '',
-            requestedCompletionDate: data.requestedCompletionDate?.toDate().toISOString().split('T')[0] || '',
-            productionReason: data.productionReason || 'order',
-            customerName: data.customerName || '',
             memo: data.memo || '',
-            plannedCompletionDate: data.plannedCompletionDate?.toDate().toISOString().split('T')[0] || '',
-            actualCompletionDate: data.actualCompletionDate?.toDate().toISOString().split('T')[0] || '',
-            cleaningEpCompletionDate: data.cleaningEpCompletionDate?.toDate().toISOString().split('T')[0] || '',
+            plannedCompletionDate: firestoreValueToDateInputString(data.plannedCompletionDate),
+            actualCompletionDate: firestoreValueToDateInputString(data.actualCompletionDate),
+            cleaningEpCompletionDate: firestoreValueToDateInputString(data.cleaningEpCompletionDate),
             adminMemo: data.adminMemo || '',
           });
         } else {
@@ -120,7 +151,7 @@ function AdminProductionRequestContent() {
     if (requestId) {
       loadRequestData();
     }
-  }, [requestId, router]);
+  }, [requestId, productIndexParam, router]);
 
   // 이전에 등록된 제품명 및 고객사명 목록 불러오기
   useEffect(() => {
@@ -130,24 +161,25 @@ function AdminProductionRequestContent() {
         const q = query(productionRequestsRef, limit(500)); // 인덱스 없이 사용, 최대 500개
         const querySnapshot = await getDocs(q);
         
-        const productNames = new Set<string>();
         const customerNames = new Set<string>();
         
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          if (data.productName && typeof data.productName === 'string') {
-            productNames.add(data.productName);
-          }
           if (data.customerName && typeof data.customerName === 'string') {
             customerNames.add(data.customerName);
           }
+          if (Array.isArray(data.products)) {
+            for (const p of data.products) {
+              if (p?.customerName && typeof p.customerName === 'string') {
+                customerNames.add(p.customerName);
+              }
+            }
+          }
         });
         
-        // 클라이언트 측에서 정렬
-        setProductNameSuggestions(Array.from(productNames).sort());
         setCustomerNameSuggestions(Array.from(customerNames).sort());
       } catch (error) {
-        console.error('제품명/고객사명 목록 로드 오류:', error);
+        console.error('고객사명 목록 로드 오류:', error);
       }
     };
 
@@ -165,115 +197,44 @@ function AdminProductionRequestContent() {
     );
   }
 
+  const canEditRequestContent =
+    !isEditMode || isProductionRequestContentEditable(currentStatus);
+  /** 확정 이후 수정: 계획수량·완료일·관리자 비고 등 (대기중 수정은 등록 화면과 동일) */
+  const showAdminPostReviewFields = isEditMode && !canEditRequestContent;
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-
-    // 제품명: 입력 중 toUpperCase()를 매번 적용하면 제어 컴포넌트가 리렌더되며 커서가 끝으로 점프함.
-    // 대문자 통일은 blur / 제출 시에만 수행함.
     setFormData({
       ...formData,
       [name]: value
     });
     
-    // 제품명 입력 시 자동완성 표시
-    if (name === 'productName') {
-      setShowProductSuggestions(value.length > 0);
-    }
-    
-    // 고객사명 입력 시 자동완성 표시
-    if (name === 'customerName') {
-      setShowCustomerSuggestions(value.length > 0);
-    }
-    
-    // 필드별 에러 초기화
     if (fieldErrors[name]) {
       setFieldErrors({
         ...fieldErrors,
         [name]: ''
-      });
-    } else if (name === 'productionReason' && value === 'inventory' && fieldErrors.customerName) {
-      setFieldErrors({
-        ...fieldErrors,
-        customerName: '',
       });
     }
     if (error) setError('');
     if (success) setSuccess('');
   };
 
-  const handleProductNameBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    const upper = e.target.value.toUpperCase();
-    setFormData((prev) => (prev.productName === upper ? prev : { ...prev, productName: upper }));
-    setTimeout(() => setShowProductSuggestions(false), 200);
-  };
-
-  const handleProductNameSelect = (productName: string) => {
-    setFormData({
-      ...formData,
-      productName: productName.toUpperCase()
-    });
-    setShowProductSuggestions(false);
-  };
-
-  const handleCustomerNameSelect = (customerName: string) => {
-    setFormData({
-      ...formData,
-      customerName: customerName
-    });
-    setShowCustomerSuggestions(false);
-  };
-
-  // 필터링된 제품명 제안 목록
-  const filteredProductSuggestions = productNameSuggestions.filter(name =>
-    name.toLowerCase().includes(formData.productName.toLowerCase())
-  ).slice(0, 10); // 최대 10개만 표시
-
-  // 필터링된 고객사명 제안 목록
-  const filteredCustomerSuggestions = customerNameSuggestions.filter(name =>
-    name.toLowerCase().includes(formData.customerName.toLowerCase())
-  ).slice(0, 10); // 최대 10개만 표시
-
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    // 1) 제품명
-    if (!formData.productName.trim()) {
-      errors.productName = '제품명을 입력해주세요.';
+    if (canEditRequestContent) {
+      Object.assign(
+        errors,
+        validateRequestProductLines(products, {
+          requireProductGroup: true,
+          requireProductionContext: true,
+          requireRequestedCompletionDate: true,
+          allowPastRequestedCompletionDate: isEditMode,
+        })
+      );
     }
 
-    // 1-1) 제품코드
-    if (!formData.productCode.trim()) {
-      errors.productCode = '제품코드를 입력해주세요.';
-    }
-
-    // 2) 고객사명 — 고객 주문일 때만 필수
-    if (formData.productionReason === 'order' && !formData.customerName.trim()) {
-      errors.customerName = '고객사명을 입력해주세요.';
-    }
-
-    // 3) 생산목적이 주문인 경우 수주량 필수
-    if (formData.productionReason === 'order') {
-      if (!formData.orderQuantity.trim()) {
-        errors.orderQuantity = '수주수량을 입력해주세요.';
-      } else {
-        const orderQtyNum = parseInt(formData.orderQuantity, 10);
-        if (isNaN(orderQtyNum) || orderQtyNum <= 0) {
-          errors.orderQuantity = '수주수량은 1 이상의 숫자여야 합니다.';
-        }
-      }
-    }
-
-    // 4) 요청수량
-    if (!formData.quantity.trim()) {
-      errors.quantity = '요청수량을 입력해주세요.';
-    } else {
-      const quantityNum = parseInt(formData.quantity, 10);
-      if (isNaN(quantityNum) || quantityNum <= 0) {
-        errors.quantity = '요청수량은 1 이상의 숫자여야 합니다.';
-      }
-    }
-
-    // 4-1) 계획수량 — 확정 이후 수정 시 필수
+    // 계획수량 — 확정 이후 수정 시 필수
     if (
       isEditMode &&
       (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress')
@@ -285,18 +246,6 @@ function AdminProductionRequestContent() {
         if (isNaN(plannedQtyNum) || plannedQtyNum <= 0) {
           errors.plannedQuantity = '계획수량은 1 이상의 숫자여야 합니다.';
         }
-      }
-    }
-
-    // 5) 완료요청일 (신규 등록 시에만 '오늘 이후' 검증 — 수정은 과거 작성 건 유지 허용)
-    if (!formData.requestedCompletionDate) {
-      errors.requestedCompletionDate = '완료요청일을 선택해주세요.';
-    } else if (!isEditMode) {
-      const completionDate = new Date(formData.requestedCompletionDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (completionDate < today) {
-        errors.requestedCompletionDate = '완료요청일은 오늘 이후여야 합니다.';
       }
     }
 
@@ -316,34 +265,54 @@ function AdminProductionRequestContent() {
     }
 
     try {
+      const linesForSave =
+        editProductIndex != null && allProductLinesRef.current
+          ? (() => {
+              const merged = [...allProductLinesRef.current];
+              merged[editProductIndex] = products[0];
+              return merged;
+            })()
+          : products;
+      const productsData = buildCertificateProductsFromLines(linesForSave);
+      const legacy = summarizeProductionLegacyFromProducts(productsData);
+
+      if (canEditRequestContent && productsData.length === 0) {
+        setError('제품 정보를 입력해주세요.');
+        setSubmitting(false);
+        return;
+      }
+
+      const rootMeta = summarizeProductionRequestRootFromProducts(productsData);
+      const hasOrderLine = productsData.some((p) => p.productionReason === 'order');
+      const totalOrderQuantity = summarizeOrderQuantityFromOrderLines(productsData);
+      const rootRequestedCompletionDate = summarizeRequestedCompletionDateFromProducts(productsData);
+      const { productionReason, salesRegion, customerName: rootCustomerName } = rootMeta;
+
       if (isEditMode && requestId) {
         // 수정 모드
         const productionRequestData: Record<string, unknown> = {
-          productName: formData.productName.trim().toUpperCase(),
-          productCode: formData.productCode.trim().toUpperCase(),
-          quantity: parseInt(formData.quantity, 10),
-          orderQuantity: formData.productionReason === 'order' && formData.orderQuantity.trim()
-            ? parseInt(formData.orderQuantity, 10)
-            : null,
-          requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
-          productionReason: formData.productionReason,
           updatedAt: Timestamp.now(),
         };
 
-        // customerName은 항상 저장
-        if (formData.customerName.trim()) {
-          productionRequestData.customerName = formData.customerName.trim();
-        }
-        if (formData.productionReason === 'order' && formData.orderQuantity.trim()) {
-          productionRequestData.orderQuantity = parseInt(formData.orderQuantity, 10);
-        }
-        if (formData.productionReason === 'order' && formData.orderQuantity.trim()) {
-          productionRequestData.orderQuantity = parseInt(formData.orderQuantity, 10);
-        }
-
-        // memo는 값이 있을 때만 추가
-        if (formData.memo.trim()) {
-          productionRequestData.memo = formData.memo.trim();
+        if (canEditRequestContent) {
+          Object.assign(productionRequestData, {
+            products: productsData,
+            productName: legacy.productName,
+            productCode: legacy.productCode,
+            quantity: legacy.quantity,
+            orderQuantity: hasOrderLine ? totalOrderQuantity : null,
+            productionReason,
+            salesRegion,
+            ...(rootRequestedCompletionDate
+              ? { requestedCompletionDate: Timestamp.fromDate(rootRequestedCompletionDate) }
+              : {}),
+          });
+          if (rootCustomerName) {
+            productionRequestData.customerName = rootCustomerName;
+          }
+          if (formData.memo.trim()) {
+            productionRequestData.memo = formData.memo.trim();
+          }
         }
 
         // adminMemo는 값이 있을 때만 추가
@@ -381,7 +350,10 @@ function AdminProductionRequestContent() {
           productionRequestData.status = 'confirmed';
         }
 
-        await updateDoc(doc(db, 'productionRequests', requestId), productionRequestData);
+        await updateDoc(
+          doc(db, 'productionRequests', requestId),
+          sanitizeForFirestore(productionRequestData)
+        );
         setSuccess('생산요청이 성공적으로 수정되었습니다.');
         
         // 수정 후 목록 페이지로 이동
@@ -396,16 +368,17 @@ function AdminProductionRequestContent() {
           userId: 'admin', // 관리자 ID
           userName: '관리자',
           userEmail: 'admin@sglok.com',
-          productName: formData.productName.trim().toUpperCase(),
-          productCode: formData.productCode.trim().toUpperCase(),
-          quantity: parseInt(formData.quantity, 10),
-          orderQuantity:
-            formData.productionReason === 'order' && formData.orderQuantity.trim()
-              ? parseInt(formData.orderQuantity, 10)
-              : null,
+          products: productsData,
+          productName: legacy.productName,
+          productCode: legacy.productCode,
+          quantity: legacy.quantity,
+          orderQuantity: hasOrderLine ? totalOrderQuantity : null,
           requestDate: Timestamp.now(),
-          requestedCompletionDate: Timestamp.fromDate(new Date(formData.requestedCompletionDate)),
-          productionReason: formData.productionReason,
+          requestedCompletionDate: rootRequestedCompletionDate
+            ? Timestamp.fromDate(rootRequestedCompletionDate)
+            : Timestamp.now(),
+          productionReason,
+          salesRegion,
           status: 'pending_review',
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
@@ -413,8 +386,8 @@ function AdminProductionRequestContent() {
         };
 
         // customerName은 항상 저장
-        if (formData.customerName.trim()) {
-          productionRequestData.customerName = formData.customerName.trim();
+        if (rootCustomerName) {
+          productionRequestData.customerName = rootCustomerName;
         }
 
         // memo는 값이 있을 때만 추가
@@ -422,13 +395,16 @@ function AdminProductionRequestContent() {
           productionRequestData.memo = formData.memo.trim();
         }
 
-        const createdRef = await addDoc(collection(db, 'productionRequests'), productionRequestData);
+        const createdRef = await addDoc(
+          collection(db, 'productionRequests'),
+          sanitizeForFirestore(productionRequestData)
+        );
         await postAdminNotification(
           buildProductionRequestNotification({
             userName: '관리자',
-            productName: formData.productName.trim().toUpperCase(),
-            quantity: parseInt(formData.quantity, 10),
-            customerName: formData.customerName.trim() || undefined,
+            productName: legacy.productName,
+            quantity: legacy.quantity,
+            customerName: rootCustomerName,
             refId: createdRef.id,
           })
         );
@@ -437,6 +413,7 @@ function AdminProductionRequestContent() {
       
       // 폼 초기화
       setFormData(INITIAL_FORM_DATA);
+      setProducts([createEmptyRequestProductLine()]);
 
       // 2초 후 목록 페이지로 이동
       setTimeout(() => {
@@ -453,191 +430,42 @@ function AdminProductionRequestContent() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
             {isEditMode ? '생산요청 수정' : '생산요청 등록'}
           </h1>
           <p className="text-gray-600">
-            {isEditMode ? '생산요청 정보를 수정합니다.' : '신규 생산요청을 등록합니다.'}
+            {isEditMode
+              ? editProductIndex != null
+                ? `선택한 제품(제품 ${editProductIndex + 1})만 수정합니다.`
+                : '생산요청 정보를 수정합니다.'
+              : '신규 생산요청을 등록합니다.'}
           </p>
         </div>
 
-        {error && (
-          <div className="bg-red-50 border-2 border-red-400 text-red-800 px-6 py-4 rounded-lg shadow-md mb-6">
-            <div className="flex items-center gap-3">
-              <svg className="w-6 h-6 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="font-semibold">{error}</p>
-            </div>
-          </div>
-        )}
-
-        {success && (
-          <div className="bg-green-50 border-2 border-green-400 text-green-800 px-6 py-4 rounded-lg shadow-md mb-6">
-            <div className="flex items-center gap-3">
-              <svg className="w-6 h-6 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <p className="font-semibold">{success}</p>
-            </div>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-6 space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="relative">
-              <Input
-                id="productName"
-                name="productName"
-                type="text"
-                label="제품명 *"
-                value={formData.productName}
-                onChange={handleChange}
-                onFocus={() => setShowProductSuggestions(formData.productName.length > 0)}
-                onBlur={isEditMode ? () => setTimeout(() => setShowProductSuggestions(false), 200) : handleProductNameBlur}
-                placeholder="제품명을 입력하세요"
-                error={fieldErrors.productName}
-                required
-                list="productNameList"
-                disabled={isEditMode}
-                className="uppercase"
-              />
-              <datalist id="productNameList">
-                {productNameSuggestions.map((name, index) => (
-                  <option key={index} value={name} />
-                ))}
-              </datalist>
-              
-              {/* 커스텀 자동완성 드롭다운 (datalist가 브라우저마다 다르게 동작할 수 있어서) */}
-              {showProductSuggestions && filteredProductSuggestions.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                  {filteredProductSuggestions.map((name: string, index: number) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => handleProductNameSelect(name)}
-                      className="w-full text-left px-4 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+          <RequestProductLinesSection
+            products={products}
+            onProductsChange={setProducts}
+            fieldErrors={fieldErrors}
+            onClearFieldError={clearFieldError}
+            onSetFieldError={setFieldError}
+            showProductGroup
+            showProductionContext
+            customerNameSuggestions={customerNameSuggestions}
+            showRequestedCompletionDate
+            requestedCompletionDateMin={
+              canEditRequestContent && !isEditMode
+                ? new Date().toISOString().split('T')[0]
+                : undefined
+            }
+            disabled={submitting || !canEditRequestContent}
+            allowMultipleProducts={editProductIndex == null}
+          />
 
-            <div>
-              <Input
-                id="productCode"
-                name="productCode"
-                type="text"
-                label="제품코드 *"
-                value={formData.productCode}
-                onChange={handleChange}
-                placeholder="제품코드를 입력하세요"
-                error={fieldErrors.productCode}
-                required
-                disabled={isEditMode}
-                className="uppercase"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label htmlFor="productionReason" className="block text-sm font-medium text-gray-700 mb-2">
-                생산목적 *
-              </label>
-              <select
-                id="productionReason"
-                name="productionReason"
-                value={formData.productionReason}
-                onChange={handleChange}
-                disabled={isEditMode}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
-              >
-                <option value="order">고객 주문</option>
-                <option value="inventory">재고 준비</option>
-              </select>
-            </div>
-
-            <div className="relative">
-              <Input
-                id="customerName"
-                name="customerName"
-                type="text"
-                label={formData.productionReason === 'order' ? '고객사명 *' : '고객사명'}
-                value={formData.customerName}
-                onChange={handleChange}
-                onFocus={() => setShowCustomerSuggestions(formData.customerName.length > 0)}
-                onBlur={() => setTimeout(() => setShowCustomerSuggestions(false), 200)}
-                placeholder="고객사명을 입력하세요"
-                error={fieldErrors.customerName}
-                required={formData.productionReason === 'order'}
-                list="customerNameList"
-                disabled={isEditMode}
-              />
-              <datalist id="customerNameList">
-                {customerNameSuggestions.map((name, index) => (
-                  <option key={index} value={name} />
-                ))}
-              </datalist>
-              
-              {/* 커스텀 자동완성 드롭다운 */}
-              {showCustomerSuggestions && filteredCustomerSuggestions.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                  {filteredCustomerSuggestions.map((name, index) => (
-                    <button
-                      key={index}
-                      type="button"
-                      onClick={() => handleCustomerNameSelect(name)}
-                      className="w-full text-left px-4 py-2 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none"
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {formData.productionReason === 'order' && (
-              <div>
-                <Input
-                  id="orderQuantity"
-                  name="orderQuantity"
-                  type="number"
-                  label="수주수량 *"
-                  value={formData.orderQuantity}
-                  onChange={handleChange}
-                  placeholder="수주수량을 입력하세요"
-                  error={fieldErrors.orderQuantity}
-                  min="1"
-                  required
-                  disabled={isEditMode}
-                />
-              </div>
-            )}
-          </div>
-
+          {showAdminPostReviewFields && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <Input
-                id="quantity"
-                name="quantity"
-                type="number"
-                label="요청수량 *"
-                value={formData.quantity}
-                onChange={handleChange}
-                placeholder="요청수량을 입력하세요"
-                error={fieldErrors.quantity}
-                min="1"
-                required
-                disabled={isEditMode}
-              />
-            </div>
-
-            {isEditMode && (
               <div>
                 <Input
                   id="plannedQuantity"
@@ -669,25 +497,8 @@ function AdminProductionRequestContent() {
                   }
                 />
               </div>
-            )}
 
-            <div>
-              <Input
-                id="requestedCompletionDate"
-                name="requestedCompletionDate"
-                type="date"
-                label="완료요청일 *"
-                value={formData.requestedCompletionDate}
-                onChange={handleChange}
-                error={fieldErrors.requestedCompletionDate}
-                min={new Date().toISOString().split('T')[0]}
-                required
-                disabled={isEditMode}
-              />
-            </div>
-
-            {isEditMode &&
-              (currentStatus === 'confirmed' ||
+            {(currentStatus === 'confirmed' ||
                 currentStatus === 'completed' ||
                 currentStatus === 'in_progress') && (
               <div>
@@ -706,9 +517,13 @@ function AdminProductionRequestContent() {
               </div>
             )}
           </div>
+          )}
 
           {/* 확정된 경우 또는 완료된 경우 또는 진행중인 경우 완료예정일 변경, 생산완료일 수정 가능 */}
-          {isEditMode && (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress') && (
+          {showAdminPostReviewFields &&
+            (currentStatus === 'confirmed' ||
+              currentStatus === 'completed' ||
+              currentStatus === 'in_progress') && (
             <div className="space-y-6">
               <div>
                 <label htmlFor="plannedCompletionDateChange" className="block text-sm font-medium text-gray-700 mb-2">
@@ -783,12 +598,12 @@ function AdminProductionRequestContent() {
               onChange={handleChange}
               rows={4}
               placeholder="비고를 입력하세요"
-              disabled={isEditMode}
+              disabled={submitting || !canEditRequestContent}
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 resize-none disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
             />
           </div>
 
-          {isEditMode && (
+          {showAdminPostReviewFields && (
             <div>
               <label htmlFor="adminMemo" className="block text-sm font-medium text-gray-700 mb-2">
                 관리자 비고
@@ -826,6 +641,7 @@ function AdminProductionRequestContent() {
           </div>
         </form>
       </div>
+      <FormPageAlert success={success} error={error} />
     </div>
   );
 }

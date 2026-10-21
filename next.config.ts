@@ -15,8 +15,10 @@ const nextConfig: NextConfig = {
   webpack: (config, { dev }) => {
     if (dev && process.platform === "win32") {
       config.watchOptions = {
-        poll: 2000,
-        aggregateTimeout: 500,
+        ...config.watchOptions,
+        poll: 1000,
+        aggregateTimeout: 300,
+        ignored: ["**/.next/**", "**/.next-dev/**", "**/node_modules/**", "**/.git/**"],
       };
     }
     return config;

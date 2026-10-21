@@ -14,6 +14,10 @@ import {
   buildCertificateRequestNotification,
   postAdminNotification,
 } from '@/lib/adminNotifications';
+import {
+  PRODUCT_CODE_NO_SPACE_MESSAGE,
+  productCodeHasWhitespace,
+} from '@/lib/products/requestProductLines';
 
 function CertificateRequestContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
@@ -197,12 +201,22 @@ function CertificateRequestContent() {
       }
       return newProducts;
     });
-    
-    // 해당 필드의 에러 초기화
-    if (fieldErrors[`${field}-${index}`]) {
-      setFieldErrors(prev => {
+
+    const errorKey = `${field}-${index}`;
+    if (field === 'productCode') {
+      if (productCodeHasWhitespace(value)) {
+        setFieldErrors((prev) => ({ ...prev, [errorKey]: PRODUCT_CODE_NO_SPACE_MESSAGE }));
+      } else if (fieldErrors[errorKey] === PRODUCT_CODE_NO_SPACE_MESSAGE) {
+        setFieldErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors[errorKey];
+          return newErrors;
+        });
+      }
+    } else if (fieldErrors[errorKey]) {
+      setFieldErrors((prev) => {
         const newErrors = { ...prev };
-        delete newErrors[`${field}-${index}`];
+        delete newErrors[errorKey];
         return newErrors;
       });
     }
@@ -407,6 +421,9 @@ function CertificateRequestContent() {
         }
         if (!product.productCode?.trim()) {
           errors[`productCode-${index}`] = '이 입력란을 작성하세요.';
+          hasError = true;
+        } else if (productCodeHasWhitespace(product.productCode)) {
+          errors[`productCode-${index}`] = PRODUCT_CODE_NO_SPACE_MESSAGE;
           hasError = true;
         }
         if (!product.quantity?.trim()) {
@@ -782,7 +799,7 @@ function CertificateRequestContent() {
                         value={product.productCode}
                         onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
                         onBlur={(e) => handleProductChange(index, 'productCode', e.target.value.toUpperCase())}
-                        placeholder={product.productNameCode ? `${product.productNameCode}-04-04N 또는 ${product.productNameCode} 04-04N 형식으로 입력` : "제품코드를 입력하세요"}
+                        placeholder={product.productNameCode ? `${product.productNameCode}-04-04N 또는 ${product.productNameCode} 04-04N 형식으로 입력` : "제품코드 입력"}
                         style={{ textTransform: 'uppercase' }}
                         disabled={submitting || uploadingFiles}
                       />
@@ -1202,8 +1219,7 @@ function AddMappingForm({
     setProductCode(e.target.value.toUpperCase());
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = () => {
     if (!productCode.trim() || !productName.trim()) {
       alert('제품명코드와 제품명을 모두 입력해주세요.');
       return;
@@ -1212,7 +1228,7 @@ function AddMappingForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           제품명코드 *
@@ -1246,11 +1262,11 @@ function AddMappingForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           취소
         </Button>
-        <Button type="submit" variant="primary">
+        <Button type="button" variant="primary" onClick={handleSave}>
           저장
         </Button>
       </div>
-    </form>
+    </div>
   );
 }
 
@@ -1266,8 +1282,7 @@ function EditMappingForm({
 }) {
   const [productName, setProductName] = useState(mapping.productName);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = () => {
     if (!productName.trim()) {
       alert('제품명을 입력해주세요.');
       return;
@@ -1276,7 +1291,7 @@ function EditMappingForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           제품명코드
@@ -1306,11 +1321,11 @@ function EditMappingForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           취소
         </Button>
-        <Button type="submit" variant="primary">
+        <Button type="button" variant="primary" onClick={handleSave}>
           저장
         </Button>
       </div>
-    </form>
+    </div>
   );
 }
 

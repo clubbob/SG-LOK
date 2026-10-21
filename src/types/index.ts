@@ -61,6 +61,15 @@ export interface InquiryAttachment {
 // 생산요청 관련 타입
 export type ProductionRequestStatus = 'pending_review' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
 export type ProductionReason = 'order' | 'inventory'; // 주문 / 재고
+export type ProductionSalesRegion = 'domestic' | 'overseas'; // 국내 / 해외
+
+export type ProductionProductGroup =
+  | 'Lok Fitting'
+  | 'Pipe Fitting'
+  | 'Lok Valve'
+  | 'UHP Fitting'
+  | 'UHP Valve'
+  | 'Others';
 
 export interface ProductionRequest {
   id: string;
@@ -70,14 +79,16 @@ export interface ProductionRequest {
   userCompany?: string;
   
   // 기본 정보
-  productName: string; // 제품명 (자유 입력, 임시 정보)
+  products?: CertificateProduct[]; // 제품 배열 (성적서요청과 동일 UI)
+  productName: string; // 제품명 (목록·알림용 요약, products 없을 때 단일 필드)
   productCode: string; // 제품코드
-  quantity: number; // 수량
+  quantity: number; // 수량 (다중 제품 시 합계)
   orderQuantity?: number; // 수주수량 (생산목적이 주문인 경우)
   plannedQuantity?: number; // 승인 시 계획수량
   requestDate: Date; // 생산요청일
   requestedCompletionDate: Date; // 완료요청일
   productionReason: ProductionReason; // 생산이유
+  salesRegion?: ProductionSalesRegion; // 국내 / 해외
   customerName?: string; // 고객사명 (생산이유가 주문인 경우)
   
   // 상태 및 관리
@@ -189,7 +200,13 @@ export interface CertificateProduct {
   productName: string;         // 제품명
   productCode?: string;         // 제품코드
   productNameCode?: string;     // 제품명코드 (예: GMC, GME 등)
-  quantity?: number;            // 수량
+  quantity?: number;            // 수량 (생산요청: 생산요청수량)
+  orderQuantity?: number;       // 생산요청: 수주수량 (제품별)
+  productGroup?: ProductionProductGroup; // 생산요청: 제품군
+  productionReason?: ProductionReason; // 생산요청: 제품별 생산목적
+  salesRegion?: ProductionSalesRegion; // 생산요청: 제품별 국내/해외
+  customerName?: string; // 생산요청: 제품별 고객사명
+  requestedCompletionDate?: Date; // 생산요청: 제품별 완료요청일
   lotNumber?: string;           // 로트번호
   heatNo?: string;              // HEAT NO.
   material?: string;            // MATERIAL (소재 정보, 예: 316/316L, 304)

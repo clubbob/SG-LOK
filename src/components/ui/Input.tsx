@@ -11,10 +11,29 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 }
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, label, error, helperText, warning, id, ...props }, ref) => {
+  ({ className, type, label, error, helperText, warning, id, onClick, ...props }, ref) => {
     const generatedId = useId();
     const inputId = id || generatedId;
-    
+    const isDate = type === 'date';
+
+    const openDatePicker = (el: HTMLInputElement) => {
+      if (el.disabled || el.readOnly) return;
+      if (typeof el.showPicker === 'function') {
+        try {
+          el.showPicker();
+        } catch {
+          // 일부 브라우저/상황에서 거부될 수 있음
+        }
+      }
+    };
+
+    const handleClick = (e: React.MouseEvent<HTMLInputElement>) => {
+      onClick?.(e);
+      if (isDate && !e.defaultPrevented) {
+        openDatePicker(e.currentTarget);
+      }
+    };
+
     return (
       <div className="w-full">
         {label && (
@@ -29,12 +48,15 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           type={type}
           className={cn(
             'flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
+            isDate &&
+              'relative cursor-pointer [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:left-0 [&::-webkit-calendar-picker-indicator]:top-0 [&::-webkit-calendar-picker-indicator]:z-[1] [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0',
             error && 'border-red-500 focus-visible:ring-red-500',
             className
           )}
           ref={ref}
           id={inputId}
           {...props}
+          onClick={isDate ? handleClick : onClick}
           value={props.value !== undefined ? props.value : ''}
         />
         {error && (

@@ -877,7 +877,7 @@ function AdminCertificateRequestContent() {
                       value={product.productCode}
                       onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
                       onBlur={(e) => handleProductChange(index, 'productCode', e.target.value.toUpperCase())}
-                      placeholder={product.productNameCode ? `${product.productNameCode}-04-04N 또는 ${product.productNameCode} 04-04N 형식으로 입력` : "제품코드를 입력하세요"}
+                      placeholder={product.productNameCode ? `${product.productNameCode}-04-04N 또는 ${product.productNameCode} 04-04N 형식으로 입력` : "제품코드 입력"}
                       style={{ textTransform: 'uppercase' }}
                       disabled={submitting || uploadingFiles}
                     />

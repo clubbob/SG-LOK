@@ -4940,7 +4940,7 @@ function MaterialTestCertificateContent() {
                         value={product.productCode}
                         onChange={(e) => handleProductChange(index, 'productCode', e.target.value)}
                         onBlur={(e) => handleProductBlur(index, 'productCode', e.target.value)}
-                        placeholder="제품코드를 입력하세요"
+                        placeholder="제품코드 입력"
                         style={{ textTransform: 'uppercase' }}
                         disabled={saving || generatingPDF}
                       />

@@ -17,11 +17,13 @@ import { sanitizeForFirestore } from '@/lib/firestoreSanitize';
 import { removeProductionRequestProductLine } from '@/lib/production/removeProductionRequestProductLine';
 import {
   ADMIN_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER,
-  PRODUCTION_REQUEST_SEARCH_HELP,
-  productionRequestMatchesSearch,
+  EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
+  filterProductionListRows,
+  type ProductionRequestPanelFilters,
 } from '@/lib/production/productionRequestSearch';
 import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 import { Button, DateInput } from '@/components/ui';
+import { ProductionRequestSearchPanel } from '@/components/production/ProductionRequestSearchPanel';
 import { ProductionRequestStatusSection } from '@/components/production/ProductionRequestStatusSection';
 
 const ADMIN_SESSION_KEY = 'admin_session';
@@ -108,11 +110,34 @@ export default function AdminProductionPage() {
   });
   const [approving, setApproving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredRequests, setFilteredRequests] = useState<ProductionRequest[]>([]);
+  const [filters, setFilters] = useState<ProductionRequestPanelFilters>(() => ({
+    ...EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
+    status: searchParams.get('status') || '',
+  }));
+  useEffect(() => {
+    const statusFromUrl = searchParams.get('status') || '';
+    setFilters((prev) => (prev.status === statusFromUrl ? prev : { ...prev, status: statusFromUrl }));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const statusFromUrl = searchParams.get('status') || '';
+    if (filters.status === statusFromUrl) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (filters.status) params.set('status', filters.status);
+    else params.delete('status');
+    const qs = params.toString();
+    router.replace(qs ? `/admin/production?${qs}` : '/admin/production', { scroll: false });
+  }, [filters.status, router, searchParams]);
+
+  const handleFiltersChange = (patch: Partial<ProductionRequestPanelFilters>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
+  };
 
   const filteredListRows = useMemo(
-    () => expandProductionRequestsToListRows(filteredRequests),
-    [filteredRequests]
+    () =>
+      filterProductionListRows(requests, searchQuery, filters, getListRowDisplayStatusLabel),
+    [requests, searchQuery, filters]
   );
 
   useEffect(() => {
@@ -209,37 +234,24 @@ export default function AdminProductionPage() {
     return () => unsubscribeSnapshot();
   }, [router]);
 
-  // 검색 필터링
+  // 검색·필터 변경 시 페이지
   useEffect(() => {
-    const statusFilterParam = searchParams.get('status');
-    const statusFiltered = statusFilterParam
-      ? requests.filter((request) => {
-          if (statusFilterParam === 'in_progress') {
-            return request.status === 'confirmed' || request.status === 'in_progress';
-          }
-          return request.status === statusFilterParam;
-        })
-      : requests;
+    const hasFilter =
+      Boolean(searchQuery.trim()) ||
+      Boolean(filters.productionReason) ||
+      Boolean(filters.salesRegion) ||
+      Boolean(filters.status);
 
-    if (!searchQuery.trim()) {
-      setFilteredRequests(statusFiltered);
-      // 검색어가 없을 때는 마지막 페이지로 이동 (최신 항목 표시)
-      if (statusFiltered.length > 0) {
-        const ITEMS_PER_PAGE = 10;
-        const expanded = expandProductionRequestsToListRows(statusFiltered);
-        const totalPages = Math.ceil(expanded.length / ITEMS_PER_PAGE);
+    if (!hasFilter) {
+      if (filteredListRows.length > 0) {
+        const totalPages = Math.ceil(filteredListRows.length / itemsPerPage);
         setCurrentPage(totalPages > 0 ? totalPages : 1);
       }
       return;
     }
 
-    const filtered = statusFiltered.filter((request) =>
-      productionRequestMatchesSearch(request, searchQuery, getRequestDisplayStatusLabel)
-    );
-
-    setFilteredRequests(filtered);
-    setCurrentPage(1); // 검색 시 첫 페이지로 리셋
-  }, [searchQuery, requests, searchParams]);
+    setCurrentPage(1);
+  }, [searchQuery, filters, requests, filteredListRows.length, itemsPerPage]);
 
   // 페이지네이션 (제품 1개 = 1행)
   useEffect(() => {
@@ -340,7 +352,7 @@ export default function AdminProductionPage() {
 
   // 엑셀(CSV) 다운로드
   const handleExportToExcel = () => {
-    if (filteredRequests.length === 0) {
+    if (filteredListRows.length === 0) {
       return;
     }
 
@@ -370,7 +382,7 @@ export default function AdminProductionPage() {
     ];
 
     // 엑셀은 최근 등록이 위쪽에 오도록 역순 출력, 번호는 목록과 동일(최신=가장 큰 번호)
-    const exportRows = [...expandProductionRequestsToListRows(filteredRequests)].reverse();
+    const exportRows = [...filteredListRows].reverse();
     const rows = exportRows.map((listRow, idx) => {
       const request = listRow.request;
       const rowNumber = exportRows.length - idx;
@@ -513,37 +525,13 @@ export default function AdminProductionPage() {
         </div>
       )}
 
-      {/* 검색 입력 필드 */}
-      <div className="mb-6">
-        <div className="relative">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={ADMIN_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER}
-            className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-          />
-          <svg
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          )}
-        </div>
-        <p className="mt-1.5 text-xs text-red-600 leading-relaxed">{PRODUCTION_REQUEST_SEARCH_HELP}</p>
-      </div>
+      <ProductionRequestSearchPanel
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        placeholder={ADMIN_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER}
+        filters={filters}
+        onFiltersChange={handleFiltersChange}
+      />
 
       {requests.length === 0 ? (
         <div className="bg-white rounded-lg shadow-sm p-12 text-center">

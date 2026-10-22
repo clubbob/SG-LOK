@@ -60,8 +60,8 @@ export function ProductionRequestStatusSection({
   const lineRequestedDate = listRow.requestedCompletionDate ?? request.requestedCompletionDate;
 
   return (
-    <article className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
-      <header className="flex items-center justify-between gap-3 px-3 py-2 bg-slate-50 border-b border-gray-200">
+    <article className="rounded-lg border border-slate-400 bg-white overflow-hidden">
+      <header className="flex items-center justify-between gap-3 px-3 py-2 bg-slate-50 border-b border-slate-300">
         <div className="flex items-center gap-2 min-w-0">
           <span className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-1.5 rounded-md bg-slate-700 text-white text-xs font-semibold">
             {rowNumber}
@@ -75,23 +75,21 @@ export function ProductionRequestStatusSection({
         </div>
       </header>
 
-      <div className="grid grid-cols-8 gap-x-3 gap-y-1 px-3 py-2.5">
+      <div
+        className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-x-3 gap-y-2 px-3 py-2.5 bg-sky-50/70 border-b border-slate-300"
+        aria-label="생산요청 등록"
+      >
         <Field label="요청자">{request.userName || '-'}</Field>
         <Field label="요청일">{formatDateShort(request.requestDate)}</Field>
-        <Field label="제품명" className="col-span-2">
+        <Field label="제품명">
           {listRow.productName}
           {request.itemName && listRow.productIndex === 0 && (
             <span className="block text-xs text-gray-500 font-normal">({request.itemName})</span>
           )}
         </Field>
-        <Field label="제품코드" className="col-span-2">
-          {listRow.productCode}
-        </Field>
+        <Field label="제품코드">{listRow.productCode}</Field>
         <Field label="생산목적">{formatProductionReasonLabel(listRow.productionReason)}</Field>
         <Field label="고객사명">{listRow.customerName || '-'}</Field>
-      </div>
-
-      <div className="grid grid-cols-8 gap-x-3 gap-y-1 px-3 py-2.5 border-t border-gray-100 bg-gray-50/80">
         <Field label="수주수량">
           {listRow.orderQuantity != null ? listRow.orderQuantity.toLocaleString() : '-'}
         </Field>
@@ -117,6 +115,12 @@ export function ProductionRequestStatusSection({
             '-'
           )}
         </Field>
+      </div>
+
+      <div
+        className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 px-3 py-2.5 bg-slate-100/90"
+        aria-label="생산 처리"
+      >
         <Field label="계획수량">
           {listRow.plannedQuantity != null ? (
             listRow.plannedQuantity.toLocaleString()

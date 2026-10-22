@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Header, Footer } from '@/components/layout';
 import { collection, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { hasEffectiveAdminAccess, isBootstrapAdminEmail } from '@/lib/auth/adminBootstrap';
@@ -166,6 +165,73 @@ const adminMenuItems: MenuItem[] = [
   },
 ];
 
+function normalizeMenuPath(path: string | undefined) {
+  return path ? path.replace(/\/$/, '') : '';
+}
+
+const GROUP_DEFAULT_PATH: Record<string, string> = {
+  production: '/admin/production',
+  certificate: '/admin/certificate/list2',
+  inventory: '/admin/inventory',
+  'dealer-customers': '/admin/dealer-customers',
+  substitute: '/admin/substitute/manage',
+};
+
+function menuItemHref(item: MenuItem): string {
+  if (item.subItems?.length) {
+    return GROUP_DEFAULT_PATH[item.id] || item.path || item.subItems[0].path;
+  }
+  return item.path || '#';
+}
+
+function isSubItemActive(
+  subItem: { path: string },
+  item: MenuItem,
+  pathname: string | null
+): boolean {
+  if (!subItem.path || !pathname) return false;
+  const normalizedSubPath = normalizeMenuPath(subItem.path);
+  const normalizedPathname = normalizeMenuPath(pathname);
+  const isCertificateV2WritePath =
+    normalizedPathname.startsWith('/admin/certificate/create2') ||
+    normalizedPathname.startsWith('/admin/certificate/edit2');
+
+  if (normalizedPathname === normalizedSubPath) return true;
+  if (subItem.path === '/admin/inventory') return false;
+  if (subItem.path === '/admin/certificate/list2' && isCertificateV2WritePath) return true;
+  if (subItem.path === '/admin/production' || subItem.path === '/admin/certificate/list2') {
+    const otherSubPaths =
+      item.subItems?.filter((s) => s.path !== subItem.path).map((s) => normalizeMenuPath(s.path)) || [];
+    const isOtherSubPath = otherSubPaths.some(
+      (otherPath) => normalizedPathname === otherPath || normalizedPathname.startsWith(`${otherPath}/`)
+    );
+    return normalizedPathname.startsWith(`${normalizedSubPath}/`) && !isOtherSubPath;
+  }
+  return normalizedPathname.startsWith(`${normalizedSubPath}/`);
+}
+
+function isMainItemActive(item: MenuItem, pathname: string | null): boolean {
+  if (!pathname) return false;
+  if (item.subItems?.length) {
+    return item.subItems.some((subItem) => isSubItemActive(subItem, item, pathname));
+  }
+  const itemPath = normalizeMenuPath(item.path);
+  const current = normalizeMenuPath(pathname);
+  return current === itemPath || (!!itemPath && current.startsWith(`${itemPath}/`));
+}
+
+/** 사용자 홈(일반 사이트). 운영 도메인은 NEXT_PUBLIC_PUBLIC_SITE_URL 로 지정 가능 */
+function resolvePublicHomeUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_PUBLIC_SITE_URL?.trim();
+  if (fromEnv) {
+    return fromEnv.endsWith('/') ? fromEnv : `${fromEnv}/`;
+  }
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/`;
+  }
+  return '/';
+}
+
 export default function AdminLayout({
   children,
 }: {
@@ -175,11 +241,16 @@ export default function AdminLayout({
   const pathname = usePathname();
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
   const [pendingUserCount, setPendingUserCount] = useState<number>(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [loginNotifications, setLoginNotifications] = useState<AdminNotification[]>([]);
   const [showLoginNotifModal, setShowLoginNotifModal] = useState(false);
+  const [publicHomeUrl, setPublicHomeUrl] = useState('/');
+
+  useEffect(() => {
+    setPublicHomeUrl(resolvePublicHomeUrl());
+  }, []);
 
   // 로그인 페이지는 레이아웃 적용 안 함
   const isLoginPage = pathname === '/admin/login' || pathname?.startsWith('/admin/login');
@@ -258,25 +329,6 @@ export default function AdminLayout({
         router.push('/admin/login');
         return;
       }
-
-      // 생산관리 관련 페이지일 때 메뉴 자동 확장
-      if (pathname?.startsWith('/admin/production')) {
-        setExpandedMenus(prev => new Set(prev).add('production'));
-      }
-      // 성적서관리 관련 페이지일 때 메뉴 자동 확장
-      if (pathname?.startsWith('/admin/certificate')) {
-        setExpandedMenus(prev => new Set(prev).add('certificate'));
-      }
-      // 재고관리 관련 페이지일 때 메뉴 자동 확장
-      if (pathname?.startsWith('/admin/inventory')) {
-        setExpandedMenus(prev => new Set(prev).add('inventory'));
-      }
-      if (pathname?.startsWith('/admin/substitute')) {
-        setExpandedMenus(prev => new Set(prev).add('substitute'));
-      }
-      if (pathname?.startsWith('/admin/dealer-customers')) {
-        setExpandedMenus(prev => new Set(prev).add('dealer-customers'));
-      }
     };
     verifyAdmin();
   }, [router, pathname]);
@@ -304,6 +356,7 @@ export default function AdminLayout({
 
   useEffect(() => {
     setMobileNavOpen(false);
+    setOpenMenuId(null);
   }, [pathname]);
 
   useEffect(() => {
@@ -385,18 +438,6 @@ export default function AdminLayout({
     router.push('/admin/login');
   };
 
-  const handleGoUserLogin = () => {
-    // 로컬 개발 환경에서만 host를 바꿔 세션 충돌을 피하고,
-    // 운영/스테이징 도메인에서는 현재 origin 그대로 이동한다.
-    const { protocol, port, hostname, origin } = window.location;
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    const targetOrigin = isLocalhost
-      ? `${protocol}//${hostname === 'localhost' ? '127.0.0.1' : 'localhost'}${port ? `:${port}` : ''}`
-      : origin;
-    const userLoginUrl = `${targetOrigin}/login`;
-    window.open(userLoginUrl, '_blank', 'noopener,noreferrer');
-  };
-
   // 로그인 페이지는 레이아웃 없이 그대로 표시 (pathname이 null이거나 로그인 페이지인 경우)
   if (!pathname || isLoginPage) {
     return <>{children}</>;
@@ -417,142 +458,49 @@ export default function AdminLayout({
     return null;
   }
 
+  const navItems = [
+    'home',
+    'production',
+    'certificate',
+    'inventory',
+    'dealer-customers',
+    'substitute',
+    'notices',
+    'inquiries',
+    'users',
+  ]
+    .map((id) => adminMenuItems.find((item) => item.id === id))
+    .filter((item): item is MenuItem => Boolean(item));
+
+  const navButtonClass = (active: boolean) =>
+    `px-3 py-1.5 rounded-md text-sm font-semibold transition-colors whitespace-nowrap ${
+      active ? 'bg-blue-700 text-white' : 'text-white hover:bg-blue-600 hover:text-white'
+    }`;
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      {/* 모바일: 메뉴 열기 */}
-      <div className="flex md:hidden items-center gap-2 px-3 py-2.5 bg-white border-b border-gray-200 shadow-sm shrink-0">
-        <button
-          type="button"
-          onClick={() => setMobileNavOpen(true)}
-          className="p-2 rounded-lg text-gray-700 hover:bg-gray-100 -ml-1"
-          aria-label="관리자 메뉴 열기"
-        >
-          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-          </svg>
-        </button>
-        <span className="text-sm font-semibold text-gray-900 truncate">관리자</span>
-      </div>
+      <header className="sticky top-0 z-50 overflow-visible bg-blue-500 shadow-lg">
+        <div className="w-full max-w-[1600px] mx-auto overflow-visible px-1 sm:px-2 lg:px-3">
+          <div className="flex justify-between items-center h-14 sm:h-16 min-w-0 gap-3 overflow-visible">
+            <Link href="/admin/dashboard" className="hover:opacity-80 transition-opacity shrink-0">
+              <h1 className="text-lg sm:text-xl font-bold text-white truncate">관리자</h1>
+            </Link>
 
-      <div className="flex flex-1 relative">
-        {mobileNavOpen ? (
-          <button
-            type="button"
-            className="fixed inset-0 z-40 bg-black/40 md:hidden"
-            aria-label="메뉴 닫기"
-            onClick={() => setMobileNavOpen(false)}
-          />
-        ) : null}
-
-        {/* 좌측 메뉴 (모바일: 오버레이 드로어, md+: 고정 사이드바) */}
-        <aside
-          className={[
-            'flex flex-col border-r border-gray-200 bg-white shadow-sm pb-12',
-            'w-48 md:w-52 shrink-0 overflow-y-auto overscroll-contain',
-            'fixed left-0 top-0 z-50 h-dvh transition-transform duration-200 ease-out',
-            'md:sticky md:top-0 md:z-auto md:h-screen md:translate-x-0 md:shadow-sm',
-            mobileNavOpen
-              ? 'translate-x-0 pointer-events-auto'
-              : '-translate-x-full md:translate-x-0 pointer-events-none md:pointer-events-auto',
-          ].join(' ')}
-        >
-          <div className="p-3 border-b border-gray-200 flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-gray-900">관리자 메뉴</h2>
-            <button
-              type="button"
-              onClick={() => setMobileNavOpen(false)}
-              className="md:hidden p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
-              aria-label="메뉴 닫기"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <nav className="p-2 flex-1 overflow-y-auto">
-            {adminMenuItems.map((item) => {
-              const hasSubItems = item.subItems && item.subItems.length > 0;
-              const isExpanded = expandedMenus.has(item.id);
-              
-              // 서브 메뉴가 있는 경우: 메인 메뉴 경로가 활성화되어 있거나 서브 메뉴 중 하나가 활성화되어 있으면 메인 메뉴도 활성화
-              // 서브 메뉴가 없는 경우: 메인 메뉴 경로가 정확히 일치하거나 하위 경로일 때 활성화
-              const normalizePath = (path: string | undefined) => path ? path.replace(/\/$/, '') : '';
-              const normalizedItemPath = normalizePath(item.path);
-              const normalizedPathname = normalizePath(pathname);
-              
-              const isMainActive = hasSubItems
-                ? (normalizedItemPath && normalizedPathname && (normalizedPathname === normalizedItemPath || normalizedPathname.startsWith(`${normalizedItemPath}/`))) ||
-                  item.subItems?.some(subItem => {
-                    const subPath = subItem.path;
-                    if (!subPath || !normalizedPathname) return false;
-                    const normalizedSubPath = normalizePath(subPath);
-                    // 정확한 경로 일치를 먼저 확인
-                    if (normalizedPathname === normalizedSubPath) return true;
-                    // /admin/production의 경우, 다른 서브 경로가 아닐 때만 활성화
-                    if (normalizedSubPath === '/admin/production') {
-                      const otherSubPaths = item.subItems
-                        ?.filter(s => s.path !== subPath)
-                        .map(s => normalizePath(s.path)) || [];
-                      const isOtherSubPath = otherSubPaths.some(otherPath => 
-                        normalizedPathname === otherPath || normalizedPathname.startsWith(`${otherPath}/`)
-                      );
-                      if (normalizedPathname.startsWith(`${normalizedSubPath}/`) && !isOtherSubPath) {
-                        return true;
-                      }
-                    } else {
-                      // 다른 서브 메뉴는 하위 경로일 때만 활성화
-                      if (normalizedPathname.startsWith(`${normalizedSubPath}/`)) {
-                        return true;
-                      }
-                    }
-                    return false;
-                  })
-                : normalizedItemPath 
-                  ? (normalizedPathname === normalizedItemPath || (normalizedItemPath && normalizedPathname?.startsWith(`${normalizedItemPath}/`)))
-                  : false;
-
-              return (
-                <React.Fragment key={item.id}>
-                  <div
-                    className={`mb-1 ${
-                      item.id === 'home'
-                        ? 'border-t border-gray-200 pt-3 mt-3'
-                        : ''
-                    }`}
-                  >
-                  {hasSubItems ? (
-                    <>
+            <nav className="hidden lg:flex items-center justify-center gap-3 min-w-0 flex-1 overflow-visible">
+              {navItems.map((item) => {
+                const active = isMainItemActive(item, pathname);
+                if (item.subItems?.length) {
+                  const open = openMenuId === item.id;
+                  return (
+                    <div key={item.id} className="relative overflow-visible">
                       <button
-                        onClick={() => {
-                          setExpandedMenus(prev => {
-                            const newSet = new Set(prev);
-                            if (newSet.has(item.id)) {
-                              newSet.delete(item.id);
-                            } else {
-                              newSet.add(item.id);
-                            }
-                            return newSet;
-                          });
-                        }}
-                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition-colors ${
-                          isMainActive
-                            ? 'bg-blue-50 text-blue-600 font-semibold'
-                            : 'text-gray-700 hover:bg-gray-50'
-                        }`}
+                        type="button"
+                        onClick={() => setOpenMenuId(open ? null : item.id)}
+                        className={`${navButtonClass(active)} flex items-center gap-1`}
                       >
-                        <div className="flex items-center gap-2">
-                          {item.icon}
-                          <span className="text-sm flex items-center gap-1">
-                            {item.label}
-                            {item.id === 'users' && pendingUserCount > 0 && (
-                              <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold">
-                                {pendingUserCount}
-                              </span>
-                            )}
-                          </span>
-                        </div>
+                        {item.label}
                         <svg
-                          className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-180' : ''}`}
+                          className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -560,110 +508,144 @@ export default function AdminLayout({
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </button>
-                      {isExpanded && item.subItems && (
-                        <div className="ml-3 mt-1 space-y-1">
-                          {item.subItems.map((subItem) => {
-                            // 정확한 경로 일치 확인
-                            let isSubActive = false;
-                            if (subItem.path && pathname) {
-                              const normalizedSubPath = normalizePath(subItem.path);
-                              const normalizedPathname = normalizePath(pathname);
-                              const isCertificateV2WritePath =
-                                normalizedPathname.startsWith('/admin/certificate/create2') ||
-                                normalizedPathname.startsWith('/admin/certificate/edit2');
-                              
-                              // 정확히 일치하는 경우
-                              if (normalizedPathname === normalizedSubPath) {
-                                isSubActive = true;
-                              } else if (subItem.path === '/admin/inventory') {
-                                // 재고관리 > 제품 등록은 정확히 /admin/inventory 일 때만 활성화
-                                isSubActive = false;
-                              } else if (subItem.path === '/admin/certificate/list2' && isCertificateV2WritePath) {
-                                // 작성2/수정2에서는 성적서 목록 메뉴를 활성화해 컨텍스트를 유지
-                                isSubActive = true;
-                              } else if (
-                                subItem.path === '/admin/production' ||
-                                subItem.path === '/admin/certificate/list2'
-                              ) {
-                                const otherSubPaths = item.subItems
-                                  ?.filter(s => s.path !== subItem.path)
-                                  .map(s => normalizePath(s.path)) || [];
-                                const isOtherSubPath = otherSubPaths.some(otherPath => 
-                                  normalizedPathname === otherPath || normalizedPathname.startsWith(`${otherPath}/`)
-                                );
-                                if (normalizedPathname.startsWith(`${normalizedSubPath}/`) && !isOtherSubPath) {
-                                  isSubActive = true;
-                                }
-                              } else {
-                                // 다른 서브 메뉴는 정확히 일치하거나 하위 경로일 때만 활성화
-                                if (normalizedPathname.startsWith(`${normalizedSubPath}/`)) {
-                                  isSubActive = true;
-                                }
-                              }
-                            }
-                            return (
-                              <Link
-                                key={subItem.id}
-                                href={subItem.path}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
-                                  isSubActive
-                                    ? 'bg-blue-50 text-blue-600 font-semibold'
-                                    : 'text-gray-600 hover:bg-gray-50'
-                                }`}
-                              >
-                                <span className="text-xs">{subItem.label}</span>
-                              </Link>
-                            );
-                          })}
-                        </div>
+                      {open && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-[60]"
+                            onClick={() => setOpenMenuId(null)}
+                          />
+                          <div
+                            className="absolute left-0 top-full mt-1 w-52 rounded-lg bg-white shadow-lg border border-gray-200 z-[70]"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="py-2">
+                              {item.subItems.map((subItem) => (
+                                <Link
+                                  key={subItem.id}
+                                  href={subItem.path}
+                                  className={`block px-4 py-2 text-sm hover:bg-gray-50 hover:text-blue-600 hover:font-semibold ${
+                                    isSubItemActive(subItem, item, pathname)
+                                      ? 'text-blue-600 font-semibold'
+                                      : 'text-gray-800'
+                                  }`}
+                                  onClick={() => setOpenMenuId(null)}
+                                >
+                                  {subItem.label}
+                                </Link>
+                              ))}
+                            </div>
+                          </div>
+                        </>
                       )}
+                    </div>
+                  );
+                }
+                return (
+                  <Link key={item.id} href={menuItemHref(item)} className={navButtonClass(active)}>
+                    <span className="inline-flex items-center gap-1">
+                      {item.label}
+                      {item.id === 'users' && pendingUserCount > 0 && (
+                        <span className="inline-flex items-center justify-center min-w-[18px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold">
+                          {pendingUserCount}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen((open) => !open)}
+                className="lg:hidden p-2 rounded-md text-white hover:bg-blue-600"
+                aria-label="관리자 메뉴"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+              <a
+                href={publicHomeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:inline-flex items-center rounded-md border border-white/50 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/20"
+              >
+                홈페이지
+              </a>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex items-center rounded-md px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-600"
+              >
+                로그아웃
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {mobileNavOpen && (
+          <div className="lg:hidden border-t border-blue-400 bg-blue-500 max-h-[70vh] overflow-y-auto">
+            {navItems.map((item) => {
+              const active = isMainItemActive(item, pathname);
+              return (
+                <div key={item.id} className="border-b border-blue-400/60">
+                  {item.subItems?.length ? (
+                    <>
+                      <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-blue-100/90">
+                        {item.label}
+                      </p>
+                      {item.subItems.map((subItem) => (
+                        <Link
+                          key={subItem.id}
+                          href={subItem.path}
+                          className={`block px-4 py-2 text-sm ${
+                            isSubItemActive(subItem, item, pathname)
+                              ? 'bg-blue-700 text-white font-semibold'
+                              : 'text-white hover:bg-blue-600'
+                          }`}
+                        >
+                          {subItem.label}
+                        </Link>
+                      ))}
                     </>
                   ) : (
                     <Link
-                      href={item.path || '#'}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                        isMainActive
-                          ? 'bg-blue-50 text-blue-600 font-semibold'
-                          : 'text-gray-700 hover:bg-gray-50'
+                      href={menuItemHref(item)}
+                      className={`block px-4 py-2.5 text-sm font-semibold ${
+                        active ? 'bg-blue-700 text-white' : 'text-white hover:bg-blue-600'
                       }`}
                     >
-                      {item.icon}
-                      <span className="text-sm">{item.label}</span>
+                      {item.label}
+                      {item.id === 'users' && pendingUserCount > 0 ? ` (${pendingUserCount})` : ''}
                     </Link>
                   )}
-                  </div>
-                </React.Fragment>
+                </div>
               );
             })}
-          </nav>
-          <div className="p-3 border-t border-gray-200 flex-shrink-0 space-y-2">
-            <button
-              type="button"
-              onClick={handleGoUserLogin}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-              </svg>
-              <span className="text-sm">홈페이지</span>
-            </button>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              <span className="text-sm">로그아웃</span>
-            </button>
+            <div className="px-4 py-3 flex gap-2">
+              <a
+                href={publicHomeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md border border-white/50 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white"
+              >
+                홈페이지
+              </a>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="rounded-md px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-600"
+              >
+                로그아웃
+              </button>
+            </div>
           </div>
-        </aside>
+        )}
+      </header>
 
-        {/* 우측 콘텐츠 영역: 문서(body) 스크롤 사용 */}
-        <main className="flex-1 min-w-0 overflow-x-auto">
-          {children}
-        </main>
-      </div>
+      <main className="flex-1 min-w-0">{children}</main>
 
       {showLoginNotifModal && loginNotifications.length > 0 && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4">

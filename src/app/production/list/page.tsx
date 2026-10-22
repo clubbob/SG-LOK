@@ -18,10 +18,12 @@ import {
 } from '@/lib/production/productionRequestDisplay';
 import { removeProductionRequestProductLine } from '@/lib/production/removeProductionRequestProductLine';
 import {
-  PRODUCTION_REQUEST_SEARCH_HELP,
+  EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
   USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER,
-  productionRequestMatchesSearch,
+  filterProductionListRows,
+  type ProductionRequestPanelFilters,
 } from '@/lib/production/productionRequestSearch';
+import { ProductionRequestSearchPanel } from '@/components/production/ProductionRequestSearchPanel';
 import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
@@ -50,6 +52,11 @@ const getDisplayStatusColor = (request: ProductionRequest): string => {
   return STATUS_COLORS[request.status];
 };
 
+const getListRowDisplayStatusLabel = (listRow: ProductionRequestListRow): string => {
+  if (listRow.request.cleaningEpCompletionDate) return '세정/EP 완료';
+  return STATUS_LABELS[listRow.lineStatus];
+};
+
 function ProductionRequestListPageContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
@@ -64,11 +71,33 @@ function ProductionRequestListPageContent() {
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string; adminMemo?: string } | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<ProductionRequest | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredRequests, setFilteredRequests] = useState<ProductionRequest[]>([]);
+  const [filters, setFilters] = useState<ProductionRequestPanelFilters>(() => ({
+    ...EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
+    status: searchParams.get('status') || '',
+  }));
+  useEffect(() => {
+    const statusFromUrl = searchParams.get('status') || '';
+    setFilters((prev) => (prev.status === statusFromUrl ? prev : { ...prev, status: statusFromUrl }));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const statusFromUrl = searchParams.get('status') || '';
+    if (filters.status === statusFromUrl) return;
+
+    const params = new URLSearchParams(searchParams.toString());
+    if (filters.status) params.set('status', filters.status);
+    else params.delete('status');
+    const qs = params.toString();
+    router.replace(qs ? `/production/list?${qs}` : '/production/list', { scroll: false });
+  }, [filters.status, router, searchParams]);
+
+  const handleFiltersChange = (patch: Partial<ProductionRequestPanelFilters>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
+  };
 
   const filteredListRows = useMemo(
-    () => expandProductionRequestsToListRows(filteredRequests),
-    [filteredRequests]
+    () => filterProductionListRows(requests, searchQuery, filters, getListRowDisplayStatusLabel),
+    [requests, searchQuery, filters]
   );
 
   const totalListRowCount = useMemo(
@@ -176,24 +205,16 @@ function ProductionRequestListPageContent() {
     };
   }, [isAuthenticated, userProfile?.id]);
 
-  // 상태(URL) + 검색 필터링 (관리자 생산 목록과 동일한 status 쿼리)
   useEffect(() => {
-    const statusFilterParam = searchParams.get('status');
-    const statusFiltered = statusFilterParam
-      ? requests.filter((request) => {
-          if (statusFilterParam === 'in_progress') {
-            return request.status === 'confirmed' || request.status === 'in_progress';
-          }
-          return request.status === statusFilterParam;
-        })
-      : requests;
+    const hasFilter =
+      Boolean(searchQuery.trim()) ||
+      Boolean(filters.productionReason) ||
+      Boolean(filters.salesRegion) ||
+      Boolean(filters.status);
 
-    if (!searchQuery.trim()) {
-      setFilteredRequests(statusFiltered);
-      if (statusFiltered.length > 0) {
-        const ITEMS_PER_PAGE = 10;
-        const expanded = expandProductionRequestsToListRows(statusFiltered);
-        const totalPages = Math.ceil(expanded.length / ITEMS_PER_PAGE);
+    if (!hasFilter) {
+      if (filteredListRows.length > 0) {
+        const totalPages = Math.ceil(filteredListRows.length / itemsPerPage);
         setCurrentPage(totalPages > 0 ? totalPages : 1);
       } else {
         setCurrentPage(1);
@@ -201,13 +222,8 @@ function ProductionRequestListPageContent() {
       return;
     }
 
-    const filtered = statusFiltered.filter((request) =>
-      productionRequestMatchesSearch(request, searchQuery, getDisplayStatusLabel)
-    );
-
-    setFilteredRequests(filtered);
     setCurrentPage(1);
-  }, [searchQuery, requests, searchParams]);
+  }, [searchQuery, filters, requests, filteredListRows.length, itemsPerPage]);
 
   // 페이지네이션 (제품 1개 = 1행)
   useEffect(() => {
@@ -258,7 +274,7 @@ function ProductionRequestListPageContent() {
 
   // 엑셀(CSV) 다운로드
   const handleExportToExcel = () => {
-    if (filteredRequests.length === 0) {
+    if (filteredListRows.length === 0) {
       return;
     }
 
@@ -288,12 +304,12 @@ function ProductionRequestListPageContent() {
     ];
 
     // 엑셀은 최근 등록이 위쪽에 오도록 역순 출력, 번호는 목록과 동일(최신=가장 큰 번호)
-    const exportRows = [...expandProductionRequestsToListRows(filteredRequests)].reverse();
+    const exportRows = [...filteredListRows].reverse();
     const rows = exportRows.map((listRow, idx) => {
       const request = listRow.request;
       const rowNumber = exportRows.length - idx;
       const productionReasonLabel = formatProductionReasonLabel(listRow.productionReason);
-      const statusLabel = getDisplayStatusLabel(request);
+      const statusLabel = getListRowDisplayStatusLabel(listRow);
 
       const requestedDateStr = listRow.requestedCompletionDate
         ? formatDateShort(listRow.requestedCompletionDate)
@@ -405,37 +421,13 @@ function ProductionRequestListPageContent() {
             </div>
           </div>
           
-          {/* 검색 입력 필드 */}
-          <div className="mb-6">
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER}
-                className="w-full rounded-md border border-gray-300 bg-white px-4 py-2 pl-10 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              />
-              <svg
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
-            <p className="mt-1.5 text-xs text-red-600 leading-relaxed">{PRODUCTION_REQUEST_SEARCH_HELP}</p>
-          </div>
+          <ProductionRequestSearchPanel
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            placeholder={USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER}
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+          />
 
           {error && (
             <div className="bg-red-50 border-2 border-red-400 text-red-800 px-6 py-4 rounded-lg shadow-md mb-6">

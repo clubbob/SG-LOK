@@ -1,5 +1,9 @@
-import { ProductionRequest } from '@/types';
-import { formatProductionReasonLabel } from '@/lib/production/productionRequestDisplay';
+import { ProductionReason, ProductionRequest, ProductionSalesRegion } from '@/types';
+import {
+  expandProductionRequestsToListRows,
+  formatProductionReasonLabel,
+  type ProductionRequestListRow,
+} from '@/lib/production/productionRequestDisplay';
 
 /** 등록 폼 입력 순서 (검색 가능 항목 안내) */
 const SEARCH_FIELD_HINT_ADMIN =
@@ -12,8 +16,55 @@ export const ADMIN_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER = `${SEARCH_FIELD_HINT_
 
 export const USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER = `${SEARCH_FIELD_HINT_USER} 검색...`;
 
-export const PRODUCTION_REQUEST_SEARCH_HELP =
-  '복합 검색 방법 (예): 주문, 고객사명, 제품명, ...';
+export type ProductionRequestPanelFilters = {
+  productionReason: '' | ProductionReason;
+  salesRegion: '' | ProductionSalesRegion;
+  status: '' | string;
+};
+
+export const EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS: ProductionRequestPanelFilters = {
+  productionReason: '',
+  salesRegion: '',
+  status: '',
+};
+
+export function productionRequestListRowMatchesPanelFilters(
+  listRow: ProductionRequestListRow,
+  filters: ProductionRequestPanelFilters
+): boolean {
+  if (filters.status) {
+    const lineStatus = listRow.lineStatus;
+    if (filters.status === 'in_progress') {
+      if (lineStatus !== 'confirmed' && lineStatus !== 'in_progress') return false;
+    } else if (lineStatus !== filters.status) {
+      return false;
+    }
+  }
+
+  if (filters.productionReason && listRow.productionReason !== filters.productionReason) {
+    return false;
+  }
+
+  if (filters.salesRegion && listRow.salesRegion !== filters.salesRegion) {
+    return false;
+  }
+
+  return true;
+}
+
+export function filterProductionListRows(
+  requests: ProductionRequest[],
+  searchQuery: string,
+  filters: ProductionRequestPanelFilters,
+  getLineStatusLabel: (listRow: ProductionRequestListRow) => string
+): ProductionRequestListRow[] {
+  const rows = expandProductionRequestsToListRows(requests);
+  return rows.filter((row) => {
+    if (!productionRequestListRowMatchesPanelFilters(row, filters)) return false;
+    if (!productionRequestListRowMatchesSearch(row, searchQuery, getLineStatusLabel)) return false;
+    return true;
+  });
+}
 
 function salesRegionLabel(region?: ProductionRequest['salesRegion']): string {
   if (region === 'domestic') return '국내';
@@ -21,41 +72,24 @@ function salesRegionLabel(region?: ProductionRequest['salesRegion']): string {
   return '';
 }
 
-function productLinesSearchText(request: ProductionRequest): string {
-  if (!request.products?.length) return '';
-  return request.products
-    .map((p) => {
-      const reason = p.productionReason ?? request.productionReason;
-      const region = p.salesRegion ?? request.salesRegion;
-      const reasonLabel = formatProductionReasonLabel(reason);
-      const regionLabel = salesRegionLabel(region);
-      const customer = p.customerName ?? request.customerName;
-      return [reasonLabel, reason, regionLabel, region, customer, p.productName, p.productCode, p.productNameCode, p.remark]
-        .filter(Boolean)
-        .join(' ');
-    })
-    .join(' ');
-}
-
-/** 한 요청에서 검색에 쓰는 전체 텍스트 */
-function buildSearchableText(
-  request: ProductionRequest,
-  getStatusLabel: (request: ProductionRequest) => string
+function buildListRowSearchableText(
+  listRow: ProductionRequestListRow,
+  getLineStatusLabel: (listRow: ProductionRequestListRow) => string
 ): string {
+  const request = listRow.request;
   const parts = [
-    formatProductionReasonLabel(request.productionReason),
-    request.productionReason,
-    salesRegionLabel(request.salesRegion),
-    request.salesRegion,
-    request.customerName,
+    formatProductionReasonLabel(listRow.productionReason),
+    listRow.productionReason,
+    salesRegionLabel(listRow.salesRegion),
+    listRow.salesRegion,
+    listRow.customerName,
     request.userName,
     request.userCompany,
-    request.productName,
-    request.productCode,
-    productLinesSearchText(request),
-    getStatusLabel(request),
-    request.status,
-    request.memo,
+    listRow.productName,
+    listRow.productCode,
+    listRow.remark,
+    getLineStatusLabel(listRow),
+    listRow.lineStatus,
   ];
   return parts
     .filter((p) => p != null && String(p).trim() !== '')
@@ -63,58 +97,29 @@ function buildSearchableText(
     .toLowerCase();
 }
 
-function parseSearchTerms(searchQuery: string): string[] {
-  return searchQuery
-    .split(/[,，]/)
-    .map((term) => term.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-function termMatchesRequest(
-  request: ProductionRequest,
+function termMatchesListRow(
+  listRow: ProductionRequestListRow,
   term: string,
-  getStatusLabel: (request: ProductionRequest) => string
+  getLineStatusLabel: (listRow: ProductionRequestListRow) => string
 ): boolean {
-  const haystack = buildSearchableText(request, getStatusLabel);
+  const haystack = buildListRowSearchableText(listRow, getLineStatusLabel);
   if (haystack.includes(term)) return true;
 
-  const lineReasons = (request.products ?? []).map(
-    (p) => p.productionReason ?? request.productionReason
-  );
-  const lineRegions = (request.products ?? []).map((p) => p.salesRegion ?? request.salesRegion);
-
-  // 생산목적·국내/해외 축약 검색 (제품 줄·문서 루트)
-  if (term === '주문') {
-    if (request.productionReason === 'order') return true;
-    if (lineReasons.some((r) => r === 'order')) return true;
-  }
-  if (term === '재고') {
-    if (request.productionReason === 'inventory') return true;
-    if (lineReasons.some((r) => r === 'inventory')) return true;
-  }
-  if (term === '국내' || term === 'domestic') {
-    if (request.salesRegion === 'domestic') return true;
-    if (lineRegions.some((r) => r === 'domestic')) return true;
-  }
-  if (term === '해외' || term === 'overseas') {
-    if (request.salesRegion === 'overseas') return true;
-    if (lineRegions.some((r) => r === 'overseas')) return true;
-  }
+  if (term === '주문') return listRow.productionReason === 'order';
+  if (term === '재고') return listRow.productionReason === 'inventory';
+  if (term === '국내' || term === 'domestic') return listRow.salesRegion === 'domestic';
+  if (term === '해외' || term === 'overseas') return listRow.salesRegion === 'overseas';
 
   return false;
 }
 
-export function productionRequestMatchesSearch(
-  request: ProductionRequest,
+export function productionRequestListRowMatchesSearch(
+  listRow: ProductionRequestListRow,
   searchQuery: string,
-  getStatusLabel: (request: ProductionRequest) => string
+  getLineStatusLabel: (listRow: ProductionRequestListRow) => string
 ): boolean {
-  const raw = searchQuery.trim();
-  if (!raw) return true;
+  const term = searchQuery.trim().toLowerCase();
+  if (!term) return true;
 
-  const hasComma = /[,，]/.test(raw);
-  const terms = hasComma ? parseSearchTerms(raw) : [raw.toLowerCase()];
-
-  if (terms.length === 0) return true;
-  return terms.every((term) => termMatchesRequest(request, term, getStatusLabel));
+  return termMatchesListRow(listRow, term, getLineStatusLabel);
 }

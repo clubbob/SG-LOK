@@ -296,7 +296,7 @@ function ProductionRequestListPageContent() {
       '요청수량',
       '완료요청일',
       '비고',
-      '계획수량',
+      '생산계획수량',
       '완료예정일',
       '생산완료일',
       '세정/EP 완료일',
@@ -637,7 +637,7 @@ function ProductionRequestListPageContent() {
                   </div>
                   {selectedRequest.plannedQuantity !== undefined && selectedRequest.plannedQuantity !== null && (
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">계획수량</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">생산계획수량</label>
                       <p className="text-sm text-gray-900">{selectedRequest.plannedQuantity.toLocaleString()}</p>
                     </div>
                   )}
@@ -680,14 +680,6 @@ function ProductionRequestListPageContent() {
                     <p className="text-sm text-gray-900 whitespace-pre-wrap bg-gray-50 p-3 rounded-md">{selectedRequest.memo}</p>
                   </div>
                 )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">관리자 비고</label>
-                  {selectedRequest.adminMemo ? (
-                    <p className="text-sm text-gray-900 whitespace-pre-wrap bg-blue-50 p-3 rounded-md border border-blue-200">{selectedRequest.adminMemo}</p>
-                  ) : (
-                    <p className="text-sm text-gray-400 italic">관리자 비고가 없습니다.</p>
-                  )}
-                </div>
               </div>
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
@@ -728,14 +720,6 @@ function ProductionRequestListPageContent() {
                   <p className="text-sm text-gray-400 italic">비고가 없습니다.</p>
                 )}
               </div>
-              {selectedMemo.adminMemo && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">관리자 비고</label>
-                  <div className="text-sm text-gray-900 whitespace-pre-wrap bg-blue-50 p-3 rounded-md border border-blue-200">
-                    {selectedMemo.adminMemo}
-                  </div>
-                </div>
-              )}
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
               <Button

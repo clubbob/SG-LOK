@@ -6,6 +6,14 @@ import {
   ProductionRequestStatus,
   ProductionSalesRegion,
 } from '@/types';
+import { formatDateShort } from '@/lib/utils';
+
+/** 생산요청 등록 폼(RequestProductLinesSection)과 동일한 항목·순서 */
+export type ProductionRequestRegistrationField = {
+  label: string;
+  value: string;
+  multiline?: boolean;
+};
 
 export type ProductionRequestListRow = {
   rowKey: string;
@@ -67,6 +75,74 @@ export function formatProductionSalesRegionLabel(region?: ProductionSalesRegion 
   if (region === 'domestic') return '국내';
   if (region === 'overseas') return '해외';
   return '-';
+}
+
+function lineProductGroup(product: CertificateProduct | undefined): string {
+  return product?.productGroup?.trim() || '';
+}
+
+/** 승인·상세 등에서 등록 폼과 같은 라벨·순서로 표시 */
+export function buildProductionRequestRegistrationFields(
+  listRow: ProductionRequestListRow,
+  options?: { includeRequestMeta?: boolean }
+): ProductionRequestRegistrationField[] {
+  const { request } = listRow;
+  const product = request.products?.[listRow.productIndex];
+  const isOrder = listRow.productionReason === 'order';
+  const completionDate =
+    listRow.requestedCompletionDate ?? request.requestedCompletionDate;
+  const remark = listRow.remark?.trim() ?? '';
+
+  const fields: ProductionRequestRegistrationField[] = [];
+
+  if (options?.includeRequestMeta) {
+    fields.push({ label: '요청자', value: request.userName?.trim() || '-' });
+    fields.push({
+      label: '요청일',
+      value: request.requestDate ? formatDateShort(request.requestDate) : '-',
+    });
+  }
+
+  fields.push({
+    label: '생산목적',
+    value: formatProductionReasonLabel(listRow.productionReason),
+  });
+  fields.push({
+    label: '국내/해외',
+    value: formatProductionSalesRegionLabel(listRow.salesRegion),
+  });
+  if (isOrder) {
+    fields.push({ label: '고객사명', value: listRow.customerName?.trim() || '-' });
+  }
+  fields.push({
+    label: '제품군',
+    value: lineProductGroup(product) || '-',
+  });
+  fields.push({ label: '제품명', value: listRow.productName || '-' });
+  fields.push({ label: '제품코드', value: listRow.productCode || '-' });
+  if (isOrder) {
+    fields.push({
+      label: '수주수량',
+      value:
+        listRow.orderQuantity != null ? listRow.orderQuantity.toLocaleString('ko-KR') : '-',
+    });
+  }
+  fields.push({
+    label: '생산요청수량',
+    value:
+      listRow.requestQuantity != null ? listRow.requestQuantity.toLocaleString('ko-KR') : '-',
+  });
+  fields.push({
+    label: '완료요청일',
+    value: completionDate ? formatDateShort(completionDate) : '-',
+  });
+  fields.push({
+    label: '비고',
+    value: remark || '-',
+    multiline: remark.includes('\n'),
+  });
+
+  return fields;
 }
 
 /** Firestore·레거시 status → 표준 값 */

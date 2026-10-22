@@ -2,7 +2,7 @@
 
 import React from 'react';
 import {
-  formatProductionReasonLabel,
+  buildProductionRequestRegistrationFields,
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
 import { formatDateShort } from '@/lib/utils';
@@ -76,52 +76,64 @@ export function ProductionRequestStatusSection({
       </header>
 
       <div
-        className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-x-3 gap-y-2 px-3 py-2.5 bg-sky-50/70 border-b border-slate-300"
+        className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-x-3 gap-y-2 px-3 py-2.5 bg-sky-50/70 border-b border-slate-300"
         aria-label="생산요청 등록"
       >
-        <Field label="요청자">{request.userName || '-'}</Field>
-        <Field label="요청일">{formatDateShort(request.requestDate)}</Field>
-        <Field label="제품명">
-          {listRow.productName}
-          {request.itemName && listRow.productIndex === 0 && (
-            <span className="block text-xs text-gray-500 font-normal">({request.itemName})</span>
-          )}
-        </Field>
-        <Field label="제품코드">{listRow.productCode}</Field>
-        <Field label="생산목적">{formatProductionReasonLabel(listRow.productionReason)}</Field>
-        <Field label="고객사명">{listRow.customerName || '-'}</Field>
-        <Field label="수주수량">
-          {listRow.orderQuantity != null ? listRow.orderQuantity.toLocaleString() : '-'}
-        </Field>
-        <Field label="요청수량">
-          {listRow.requestQuantity != null ? listRow.requestQuantity.toLocaleString() : '-'}
-        </Field>
-        <Field label="완료요청일">{lineRequestedDate ? formatDateShort(lineRequestedDate) : '-'}</Field>
-        <Field label="비고">
-          {listRow.remark?.trim() ? (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="min-w-0 truncate" title={listRow.remark.trim()}>
-                {truncateRemarkPreview(listRow.remark)}
-              </span>
-              <button
-                type="button"
-                onClick={onOpenMemo}
-                className="shrink-0 text-blue-600 hover:text-blue-800 text-sm font-medium"
-              >
-                보기
-              </button>
-            </div>
-          ) : (
-            '-'
-          )}
-        </Field>
+        {buildProductionRequestRegistrationFields(listRow, { includeRequestMeta: true }).map((field) => {
+          if (field.label === '제품명') {
+            return (
+              <Field key={field.label} label={field.label}>
+                {listRow.productName}
+                {request.itemName && listRow.productIndex === 0 && (
+                  <span className="block text-xs text-gray-500 font-normal">({request.itemName})</span>
+                )}
+              </Field>
+            );
+          }
+          if (field.label === '비고') {
+            return (
+              <Field key={field.label} label={field.label}>
+                {listRow.remark?.trim() ? (
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="min-w-0 truncate" title={listRow.remark.trim()}>
+                      {truncateRemarkPreview(listRow.remark)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={onOpenMemo}
+                      className="shrink-0 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                    >
+                      보기
+                    </button>
+                  </div>
+                ) : (
+                  '-'
+                )}
+              </Field>
+            );
+          }
+          return (
+            <Field key={field.label} label={field.label}>
+              {field.value}
+            </Field>
+          );
+        })}
       </div>
 
       <div
         className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 px-3 py-2.5 bg-slate-100/90"
         aria-label="생산 처리"
       >
-        <Field label="계획수량">
+        <Field
+          label="생산계획수량"
+          valueClassName={
+            listRow.plannedQuantity != null &&
+            listRow.requestQuantity != null &&
+            listRow.plannedQuantity < listRow.requestQuantity
+              ? 'text-red-500'
+              : ''
+          }
+        >
           {listRow.plannedQuantity != null ? (
             listRow.plannedQuantity.toLocaleString()
           ) : (

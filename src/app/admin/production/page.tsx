@@ -8,9 +8,9 @@ import { db } from '@/lib/firebase';
 import { CertificateProduct, ProductionRequest, ProductionRequestStatus, ProductionSalesRegion } from '@/types';
 import {
   buildProductionRequestLineApprovalPatch,
+  buildProductionRequestRegistrationFields,
   expandProductionRequestsToListRows,
   formatProductionReasonLabel,
-  formatProductionSalesRegionLabel,
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
 import { sanitizeForFirestore } from '@/lib/firestoreSanitize';
@@ -24,6 +24,7 @@ import {
 import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 import { Button, DateInput } from '@/components/ui';
 import { ProductionRequestSearchPanel } from '@/components/production/ProductionRequestSearchPanel';
+import { ProductionRequestRegistrationTable } from '@/components/production/ProductionRequestRegistrationTable';
 import { ProductionRequestStatusSection } from '@/components/production/ProductionRequestStatusSection';
 
 const ADMIN_SESSION_KEY = 'admin_session';
@@ -81,16 +82,6 @@ const getListRowDisplayStatusColor = (listRow: ProductionRequestListRow): string
   return STATUS_COLORS[listRow.lineStatus];
 };
 
-/** 날짜만 비교 (시분초 무시). a가 b보다 늦으면 true */
-function ApprovalSummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[6.5rem_1fr] gap-x-3 gap-y-0.5 items-start">
-      <span className="text-sm text-gray-600">{label}</span>
-      <span className="text-sm font-medium text-gray-900 min-w-0">{value}</span>
-    </div>
-  );
-}
-
 export default function AdminProductionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -101,12 +92,11 @@ export default function AdminProductionPage() {
   const itemsPerPage = 10; // 명시적으로 10개로 설정
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingRowKey, setDeletingRowKey] = useState<string | null>(null);
-  const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string; adminMemo?: string } | null>(null);
+  const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
   const [approvingListRow, setApprovingListRow] = useState<ProductionRequestListRow | null>(null);
   const [approvalForm, setApprovalForm] = useState({
     plannedQuantity: '',
     plannedCompletionDate: '',
-    adminMemo: '',
   });
   const [approving, setApproving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -282,7 +272,6 @@ export default function AdminProductionPage() {
   const emptyApprovalForm = {
     plannedQuantity: '',
     plannedCompletionDate: '',
-    adminMemo: '',
   };
 
   const toDateInputValue = (date: Date | undefined): string => {
@@ -295,13 +284,14 @@ export default function AdminProductionPage() {
     return `${year}-${month}-${day}`;
   };
 
+  const todayDateInputMin = toDateInputValue(new Date());
+
   const handleApprove = (listRow: ProductionRequestListRow) => {
     const request = listRow.request;
     setApprovingListRow(listRow);
     setApprovalForm({
       plannedQuantity: listRow.plannedQuantity?.toString() || '',
       plannedCompletionDate: toDateInputValue(listRow.plannedCompletionDate),
-      adminMemo: request.adminMemo || '',
     });
   };
 
@@ -321,6 +311,14 @@ export default function AdminProductionPage() {
       setError('완료예정일을 입력해주세요.');
       return;
     }
+    const plannedCompletion = new Date(approvalForm.plannedCompletionDate);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    plannedCompletion.setHours(0, 0, 0, 0);
+    if (Number.isNaN(plannedCompletion.getTime()) || plannedCompletion < todayStart) {
+      setError('완료예정일은 오늘 이후여야 합니다.');
+      return;
+    }
 
     setApproving(true);
     setError('');
@@ -329,7 +327,6 @@ export default function AdminProductionPage() {
       const updateData = buildProductionRequestLineApprovalPatch(approvingListRow, {
         plannedQuantity: plannedQuantityNum,
         plannedCompletionDate: new Date(approvalForm.plannedCompletionDate),
-        adminMemo: approvalForm.adminMemo.trim() || null,
       });
 
       await updateDoc(
@@ -373,7 +370,7 @@ export default function AdminProductionPage() {
       '요청수량',
       '완료요청일',
       '비고',
-      '계획수량',
+      '생산계획수량',
       '완료예정일',
       '생산완료일',
       '세정/EP 완료일',
@@ -594,7 +591,6 @@ export default function AdminProductionPage() {
                     setSelectedMemo({
                       id: request.id,
                       memo: listRow.remark || request.memo || '',
-                      adminMemo: request.adminMemo,
                     })
                   }
                 />
@@ -684,7 +680,7 @@ export default function AdminProductionPage() {
           }}
         >
           <div 
-            className="bg-white rounded-lg shadow-xl max-w-lg w-full flex flex-col relative max-h-[calc(100vh-2rem)] sm:max-h-[min(90vh,40rem)] min-h-0 my-auto" 
+            className="bg-white rounded-lg shadow-xl max-w-3xl w-full flex flex-col relative max-h-[calc(100vh-2rem)] sm:max-h-[min(90vh,40rem)] min-h-0 my-auto" 
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
             onMouseUp={(e) => e.stopPropagation()}
@@ -717,87 +713,24 @@ export default function AdminProductionPage() {
                 </div>
               )}
               <div className="space-y-4">
-                {(() => {
-                  const lineProduct =
-                    approvingListRow.request.products?.[approvingListRow.productIndex];
-                  const isOrder = approvingListRow.productionReason === 'order';
-                  return (
-                    <div className="rounded-md border border-gray-200 bg-gray-50 px-4 py-3 space-y-2.5">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide pb-1 border-b border-gray-200">
-                        제품 정보
-                      </p>
-                      <ApprovalSummaryRow
-                        label="생산목적"
-                        value={formatProductionReasonLabel(approvingListRow.productionReason)}
-                      />
-                      <ApprovalSummaryRow
-                        label="국내/해외"
-                        value={formatProductionSalesRegionLabel(approvingListRow.salesRegion)}
-                      />
-                      {isOrder && (
-                        <ApprovalSummaryRow
-                          label="고객사명"
-                          value={approvingListRow.customerName || '-'}
-                        />
-                      )}
-                      {lineProduct?.productGroup && (
-                        <ApprovalSummaryRow label="제품군" value={lineProduct.productGroup} />
-                      )}
-                      <ApprovalSummaryRow label="제품명" value={approvingListRow.productName} />
-                      <ApprovalSummaryRow label="제품코드" value={approvingListRow.productCode} />
-                      {isOrder && (
-                        <ApprovalSummaryRow
-                          label="수주수량"
-                          value={
-                            approvingListRow.orderQuantity != null
-                              ? approvingListRow.orderQuantity.toLocaleString()
-                              : '-'
-                          }
-                        />
-                      )}
-                      <ApprovalSummaryRow
-                        label="생산요청수량"
-                        value={
-                          approvingListRow.requestQuantity != null
-                            ? approvingListRow.requestQuantity.toLocaleString()
-                            : '-'
-                        }
-                      />
-                      <ApprovalSummaryRow
-                        label="완료요청일"
-                        value={
-                          (approvingListRow.requestedCompletionDate ??
-                          approvingListRow.request.requestedCompletionDate)
-                            ? formatDateShort(
-                                approvingListRow.requestedCompletionDate ??
-                                  approvingListRow.request.requestedCompletionDate
-                              )
-                            : '-'
-                        }
-                      />
-                      {approvingListRow.remark?.trim() && (
-                        <ApprovalSummaryRow
-                          label="비고"
-                          value={
-                            <span className="whitespace-pre-wrap break-words">{approvingListRow.remark}</span>
-                          }
-                        />
-                      )}
-                    </div>
-                  );
-                })()}
+                <ProductionRequestRegistrationTable
+                  caption="제품 정보"
+                  fields={buildProductionRequestRegistrationFields(approvingListRow)}
+                />
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">승인 입력</p>
                 <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                   <label htmlFor="plannedQuantity" className="block text-sm font-medium text-gray-700 mb-2">
                     생산계획수량 *
                   </label>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="numeric"
                     id="plannedQuantity"
                     value={approvalForm.plannedQuantity}
                     onChange={(e) => {
                       e.stopPropagation();
-                      setApprovalForm({ ...approvalForm, plannedQuantity: e.target.value });
+                      const digitsOnly = e.target.value.replace(/[^\d]/g, '');
+                      setApprovalForm({ ...approvalForm, plannedQuantity: digitsOnly });
                       if (error) setError('');
                     }}
                     onMouseDown={(e) => e.stopPropagation()}
@@ -805,8 +738,8 @@ export default function AdminProductionPage() {
                     placeholder="생산계획수량 입력"
                     className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                     disabled={approving}
-                    min="1"
-                    step="1"
+                    pattern="[0-9]*"
+                    autoComplete="off"
                     required
                   />
                 </div>
@@ -815,6 +748,7 @@ export default function AdminProductionPage() {
                     id="plannedCompletionDate"
                     label="완료예정일 *"
                     value={approvalForm.plannedCompletionDate}
+                    min={todayDateInputMin}
                     onChange={(e) => {
                       e.stopPropagation();
                       setApprovalForm({ ...approvalForm, plannedCompletionDate: e.target.value });
@@ -825,27 +759,6 @@ export default function AdminProductionPage() {
                     disabled={approving}
                     required
                   />
-                </div>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <label htmlFor="adminMemo" className="block text-sm font-medium text-gray-700 mb-2">
-                    관리자 비고 (선택)
-                  </label>
-                  <textarea
-                    id="adminMemo"
-                    name="adminMemo"
-                    rows={4}
-                    value={approvalForm.adminMemo}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      setApprovalForm({ ...approvalForm, adminMemo: e.target.value });
-                    }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                    onFocus={(e) => e.stopPropagation()}
-                    placeholder="관리자 비고 입력 (선택)"
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                    disabled={approving}
-                  ></textarea>
                 </div>
               </div>
             </div>
@@ -904,14 +817,6 @@ export default function AdminProductionPage() {
                   <p className="text-sm text-gray-400 italic">비고가 없습니다.</p>
                 )}
               </div>
-              {selectedMemo.adminMemo && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">관리자 비고</label>
-                  <div className="text-sm text-gray-900 whitespace-pre-wrap bg-blue-50 p-3 rounded-md border border-blue-200">
-                    {selectedMemo.adminMemo}
-                  </div>
-                </div>
-              )}
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
               <Button

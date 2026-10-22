@@ -36,7 +36,6 @@ const INITIAL_FORM_DATA = {
   plannedCompletionDate: '',
   actualCompletionDate: '',
   cleaningEpCompletionDate: '',
-  adminMemo: '',
 };
 
 // 관리자 인증 확인 함수
@@ -133,7 +132,6 @@ function AdminProductionRequestContent() {
             plannedCompletionDate: firestoreValueToDateInputString(data.plannedCompletionDate),
             actualCompletionDate: firestoreValueToDateInputString(data.actualCompletionDate),
             cleaningEpCompletionDate: firestoreValueToDateInputString(data.cleaningEpCompletionDate),
-            adminMemo: data.adminMemo || '',
           });
         } else {
           setError('생산요청을 찾을 수 없습니다.');
@@ -312,11 +310,6 @@ function AdminProductionRequestContent() {
           productionRequestData.memo = summarizeMemoFromProducts(productsData) || null;
         }
 
-        // adminMemo는 값이 있을 때만 추가
-        if (formData.adminMemo.trim()) {
-          productionRequestData.adminMemo = formData.adminMemo.trim();
-        }
-
         // 확정된 경우 또는 완료된 경우 완료예정일·계획수량 업데이트
         if (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress') {
           if (formData.plannedCompletionDate) {
@@ -464,7 +457,9 @@ function AdminProductionRequestContent() {
                 <Input
                   id="plannedQuantity"
                   name="plannedQuantity"
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   label={
                     currentStatus === 'confirmed' ||
                     currentStatus === 'completed' ||
@@ -473,10 +468,13 @@ function AdminProductionRequestContent() {
                       : '생산계획수량'
                   }
                   value={formData.plannedQuantity}
-                  onChange={handleChange}
+                  onChange={(e) => {
+                    const digitsOnly = e.target.value.replace(/[^\d]/g, '');
+                    setFormData((prev) => ({ ...prev, plannedQuantity: digitsOnly }));
+                    clearFieldError('plannedQuantity');
+                  }}
                   placeholder="생산계획수량을 입력하세요"
                   error={fieldErrors.plannedQuantity}
-                  min="1"
                   required={
                     currentStatus === 'confirmed' ||
                     currentStatus === 'completed' ||
@@ -573,24 +571,6 @@ function AdminProductionRequestContent() {
                   <p className="mt-1 text-xs text-gray-500">생산완료일을 먼저 등록해야 세정/EP 완료일을 입력할 수 있습니다.</p>
                 )}
               </div>
-            </div>
-          )}
-
-          {showAdminPostReviewFields && (
-            <div>
-              <label htmlFor="adminMemo" className="block text-sm font-medium text-gray-700 mb-2">
-                관리자 비고
-              </label>
-              <textarea
-                id="adminMemo"
-                name="adminMemo"
-                rows={4}
-                value={formData.adminMemo}
-                onChange={handleChange}
-                placeholder="관리자 비고를 입력하세요."
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={submitting}
-              ></textarea>
             </div>
           )}
 

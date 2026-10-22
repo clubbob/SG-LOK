@@ -95,6 +95,8 @@ export function RequestProductLinesSection({
   const [showMappingList, setShowMappingList] = useState(false);
   const [mappingSearchQuery, setMappingSearchQuery] = useState('');
   const [editingMapping, setEditingMapping] = useState<ProductMapping | null>(null);
+  const productCardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const pendingScrollIndexRef = useRef<number | null>(null);
 
   useEffect(() => {
     const loadMappings = async () => {
@@ -126,6 +128,11 @@ export function RequestProductLinesSection({
     const newProducts = [...products];
     if (field === 'quantity' || field === 'orderQuantity') {
       newProducts[index] = { ...newProducts[index], [field]: value.replace(/[^0-9]/g, '') };
+    } else if (field === 'remark') {
+      newProducts[index] = {
+        ...newProducts[index],
+        remark: value.split('\n').slice(0, 2).join('\n'),
+      };
     } else {
       newProducts[index] = { ...newProducts[index], [field]: value };
     }
@@ -149,8 +156,22 @@ export function RequestProductLinesSection({
   };
 
   const handleAddProduct = () => {
+    pendingScrollIndexRef.current = products.length;
     onProductsChange([...products, createEmptyRequestProductLine()]);
   };
+
+  useEffect(() => {
+    const index = pendingScrollIndexRef.current;
+    if (index == null) return;
+    pendingScrollIndexRef.current = null;
+    const card = productCardRefs.current[index];
+    if (!card) return;
+    requestAnimationFrame(() => {
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const firstField = card.querySelector<HTMLElement>('select, input:not([type="hidden"])');
+      firstField?.focus();
+    });
+  }, [products.length]);
 
   const handleRemoveProduct = (index: number) => {
     const productName = products[index]?.productName || `제품 ${index + 1}`;
@@ -252,8 +273,14 @@ export function RequestProductLinesSection({
         </div>
 
         {products.map((product, index) => (
-          <div key={index} className="border-2 border-gray-300 rounded-lg p-5 space-y-4 bg-white shadow-sm mb-6">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+          <div
+            key={index}
+            ref={(el) => {
+              productCardRefs.current[index] = el;
+            }}
+            className="border-2 border-gray-300 rounded-lg p-4 space-y-3 bg-white shadow-sm mb-4 scroll-mt-24"
+          >
+            <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white text-sm font-bold">
                   {index + 1}
@@ -516,6 +543,29 @@ export function RequestProductLinesSection({
                   />
                 </div>
               )}
+            </div>
+
+            <div>
+              <label
+                htmlFor={`product-remark-${index}`}
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                비고
+              </label>
+              <textarea
+                id={`product-remark-${index}`}
+                rows={2}
+                value={product.remark}
+                onChange={(e) => handleProductChange(index, 'remark', e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && product.remark.split('\n').length >= 2) {
+                    e.preventDefault();
+                  }
+                }}
+                placeholder="비고 입력 (선택)"
+                disabled={disabled}
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 resize-none disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
+              />
             </div>
           </div>
         ))}

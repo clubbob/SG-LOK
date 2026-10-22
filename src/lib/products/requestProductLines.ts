@@ -90,6 +90,7 @@ export function linesFromFirestoreProducts(
     productionReason?: unknown;
     salesRegion?: unknown;
     customerName?: string;
+    memo?: string;
   }
 ): RequestProductLine[] {
   const rootCompletionDate = firestoreValueToDateInput(data.requestedCompletionDate);
@@ -114,7 +115,7 @@ export function linesFromFirestoreProducts(
       requestedCompletionDate:
         firestoreValueToDateInput(p.requestedCompletionDate) ||
         (index === 0 ? rootCompletionDate : ''),
-      remark: p.remark || '',
+      remark: p.remark?.trim() || (index === 0 ? data.memo?.trim() || '' : ''),
       productNameCode: p.productNameCode || '',
     }));
   }
@@ -130,7 +131,7 @@ export function linesFromFirestoreProducts(
         orderQuantity: data.orderQuantity != null ? String(data.orderQuantity) : '',
         quantity: data.quantity != null ? String(data.quantity) : '',
         requestedCompletionDate: rootCompletionDate,
-        remark: '',
+        remark: data.memo?.trim() || '',
         productNameCode: '',
       },
     ];
@@ -256,7 +257,7 @@ export function buildCertificateProductsFromLines(products: RequestProductLine[]
       productData.productNameCode = product.productNameCode.trim().toUpperCase();
     }
     if (product.remark?.trim()) {
-      productData.remark = product.remark.trim().toUpperCase();
+      productData.remark = product.remark.trim();
     }
     if (product.requestedCompletionDate?.trim()) {
       productData.requestedCompletionDate = new Date(product.requestedCompletionDate);
@@ -305,6 +306,14 @@ export function summarizeProductionRequestRootFromProducts(productsData: Certifi
 
 export function requestHasOrderProductionLine(products: RequestProductLine[]): boolean {
   return products.some((p) => p.productionReason === 'order');
+}
+
+/** 목록 검색·레거시 문서 필드: 제품 비고를 모아 문서 memo에 저장 */
+export function summarizeMemoFromProducts(productsData: CertificateProduct[]): string {
+  return productsData
+    .map((p) => p.remark?.trim())
+    .filter((text): text is string => Boolean(text))
+    .join('\n');
 }
 
 export function summarizeOrderQuantityFromOrderLines(productsData: CertificateProduct[]): number {

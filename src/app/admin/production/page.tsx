@@ -22,6 +22,7 @@ import {
 } from '@/lib/production/productionRequestSearch';
 import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 import { Button, DateInput } from '@/components/ui';
+import { ProductionRequestStatusSection } from '@/components/production/ProductionRequestStatusSection';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -48,7 +49,7 @@ const checkAdminAuth = (): boolean => {
 };
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
-  pending_review: '대기중',
+  pending_review: '승인 대기중',
   confirmed: '진행중',
   in_progress: '진행중',
   completed: '생산 완료',
@@ -87,17 +88,6 @@ function ApprovalSummaryRow({ label, value }: { label: string; value: React.Reac
     </div>
   );
 }
-
-const isDateAfter = (a?: Date, b?: Date): boolean => {
-  if (!a || !b) return false;
-  const da = new Date(a);
-  const db = new Date(b);
-  if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return false;
-  da.setHours(0, 0, 0, 0);
-  db.setHours(0, 0, 0, 0);
-  return da.getTime() > db.getTime();
-};
-
 
 export default function AdminProductionPage() {
   const router = useRouter();
@@ -369,13 +359,13 @@ export default function AdminProductionPage() {
       '고객사명',
       '수주수량',
       '요청수량',
-      '계획 수량',
       '완료요청일',
+      '비고',
+      '계획수량',
       '완료예정일',
       '생산완료일',
       '세정/EP 완료일',
       '요청자',
-      '비고',
       '상태',
     ];
 
@@ -408,13 +398,13 @@ export default function AdminProductionPage() {
         listRow.customerName || '',
         listRow.orderQuantity ?? '',
         listRow.requestQuantity ?? '',
-        listRow.plannedQuantity ?? '',
         requestedDateStr,
+        listRow.remark || '',
+        listRow.plannedQuantity ?? '',
         plannedDateStr,
         actualDateStr,
         cleaningEpDateStr,
         request.userName || '',
-        request.memo || '',
         statusLabel,
       ];
 
@@ -564,194 +554,64 @@ export default function AdminProductionPage() {
         </div>
       ) : (
         <>
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap w-12">번호</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청자</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청일</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품명</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">제품코드</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산목적</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">고객사명</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">수주수량</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">요청수량</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">계획 수량</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료요청일</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">완료예정일</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">생산완료일</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">세정/EP 완료일</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">비고</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">상태</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">관리</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {displayedListRows.map((listRow, idx) => {
-                    const request = listRow.request;
-                    const itemsPerPageValue = 10;
-                    const reversedIdx = displayedListRows.length - 1 - idx;
-                    const absoluteIndex = (currentPage - 1) * itemsPerPageValue + reversedIdx;
-                    const rowNumber = absoluteIndex + 1;
-                    const lineRequestedDate =
-                      listRow.requestedCompletionDate ?? request.requestedCompletionDate;
-                    return (
-                    <tr key={listRow.rowKey} className="hover:bg-gray-50">
-                      <td className="px-3 py-4 text-sm text-gray-900 whitespace-nowrap text-center w-12">
-                        {rowNumber}
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{request.userName}</div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{formatDateShort(request.requestDate)}</div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{listRow.productName}</div>
-                        {request.itemName && listRow.productIndex === 0 && (
-                          <div className="text-xs text-gray-500 mt-0.5">({request.itemName})</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{listRow.productCode}</div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {formatProductionReasonLabel(listRow.productionReason)}
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{listRow.customerName || '-'}</div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {listRow.orderQuantity != null
-                            ? listRow.orderQuantity.toLocaleString()
-                            : '-'}
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 whitespace-nowrap">
-                          {listRow.requestQuantity != null
-                            ? listRow.requestQuantity.toLocaleString()
-                            : '-'}
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900 whitespace-nowrap">
-                          {listRow.plannedQuantity != null
-                            ? listRow.plannedQuantity.toLocaleString()
-                            : <span className="text-gray-400">-</span>}
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {lineRequestedDate ? formatDateShort(lineRequestedDate) : '-'}
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div
-                          className={`text-sm ${
-                            isDateAfter(listRow.plannedCompletionDate, lineRequestedDate)
-                              ? 'text-red-500'
-                              : 'text-gray-900'
-                          }`}
-                        >
-                          {listRow.plannedCompletionDate ? (
-                            formatDateShort(listRow.plannedCompletionDate)
-                          ) : (
-                            <span className="text-gray-400 font-normal">-</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div
-                          className={`text-sm ${
-                            isDateAfter(request.actualCompletionDate, request.plannedCompletionDate)
-                              ? 'text-red-500'
-                              : 'text-gray-900'
-                          }`}
-                        >
-                          {request.actualCompletionDate ? (
-                            formatDateShort(request.actualCompletionDate)
-                          ) : (
-                            <span className="text-gray-400 font-normal">-</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div
-                          className={`text-sm ${
-                            isDateAfter(request.cleaningEpCompletionDate, request.plannedCompletionDate)
-                              ? 'text-red-500'
-                              : 'text-gray-900'
-                          }`}
-                        >
-                          {request.cleaningEpCompletionDate ? (
-                            formatDateShort(request.cleaningEpCompletionDate)
-                          ) : (
-                            <span className="text-gray-400 font-normal">-</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
+          <div className="space-y-3">
+            {displayedListRows.map((listRow, idx) => {
+              const request = listRow.request;
+              const itemsPerPageValue = 10;
+              const reversedIdx = displayedListRows.length - 1 - idx;
+              const absoluteIndex = (currentPage - 1) * itemsPerPageValue + reversedIdx;
+              const rowNumber = absoluteIndex + 1;
+              return (
+                <ProductionRequestStatusSection
+                  key={listRow.rowKey}
+                  listRow={listRow}
+                  rowNumber={rowNumber}
+                  statusBadge={
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getListRowDisplayStatusColor(listRow)}`}>
+                      {getListRowDisplayStatusLabel(listRow)}
+                    </span>
+                  }
+                  actions={
+                    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                      {listRow.lineStatus === 'pending_review' && (
+                        <>
                           <button
-                            onClick={() => setSelectedMemo({ 
-                              id: request.id, 
-                              memo: request.memo || '', 
-                              adminMemo: request.adminMemo 
-                            })}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                          >
-                            보기
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getListRowDisplayStatusColor(listRow)}`}>
-                          {getListRowDisplayStatusLabel(listRow)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          {listRow.lineStatus === 'pending_review' && (
-                            <>
-                              <button
-                                onClick={() => handleApprove(listRow)}
-                                className="text-green-600 hover:text-green-800 text-sm font-medium"
-                                disabled={deletingRowKey === listRow.rowKey || approving}
-                              >
-                                승인
-                              </button>
-                              <span className="text-gray-300">|</span>
-                            </>
-                          )}
-                          <button
-                            onClick={() => handleEdit(listRow)}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            onClick={() => handleApprove(listRow)}
+                            className="text-green-600 hover:text-green-800 text-sm font-medium"
                             disabled={deletingRowKey === listRow.rowKey || approving}
                           >
-                            수정
+                            승인
                           </button>
                           <span className="text-gray-300">|</span>
-                          <button
-                            onClick={() => handleDeleteLine(listRow)}
-                            className="text-red-600 hover:text-red-800 text-sm font-medium"
-                            disabled={deletingRowKey === listRow.rowKey || approving}
-                          >
-                            {deletingRowKey === listRow.rowKey ? '삭제 중...' : '삭제'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </>
+                      )}
+                      <button
+                        onClick={() => handleEdit(listRow)}
+                        className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                        disabled={deletingRowKey === listRow.rowKey || approving}
+                      >
+                        수정
+                      </button>
+                      <span className="text-gray-300">|</span>
+                      <button
+                        onClick={() => handleDeleteLine(listRow)}
+                        className="text-red-600 hover:text-red-800 text-sm font-medium"
+                        disabled={deletingRowKey === listRow.rowKey || approving}
+                      >
+                        {deletingRowKey === listRow.rowKey ? '삭제 중...' : '삭제'}
+                      </button>
+                    </div>
+                  }
+                  onOpenMemo={() =>
+                    setSelectedMemo({
+                      id: request.id,
+                      memo: listRow.remark || request.memo || '',
+                      adminMemo: request.adminMemo,
+                    })
+                  }
+                />
+              );
+            })}
           </div>
 
           {/* 페이지네이션 */}
@@ -927,11 +787,11 @@ export default function AdminProductionPage() {
                             : '-'
                         }
                       />
-                      {approvingListRow.request.memo?.trim() && (
+                      {approvingListRow.remark?.trim() && (
                         <ApprovalSummaryRow
                           label="비고"
                           value={
-                            <span className="whitespace-pre-wrap break-words">{approvingListRow.request.memo}</span>
+                            <span className="whitespace-pre-wrap break-words">{approvingListRow.remark}</span>
                           }
                         />
                       )}

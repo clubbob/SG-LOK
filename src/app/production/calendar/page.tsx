@@ -19,7 +19,7 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
 };
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
-  pending_review: '대기중',
+  pending_review: '승인 대기중',
   confirmed: '진행중',
   in_progress: '진행중',
   completed: '생산 완료',

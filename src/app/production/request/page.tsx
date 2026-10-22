@@ -20,14 +20,11 @@ import {
   summarizeOrderQuantityFromOrderLines,
   summarizeProductionLegacyFromProducts,
   summarizeProductionRequestRootFromProducts,
+  summarizeMemoFromProducts,
   summarizeRequestedCompletionDateFromProducts,
   validateRequestProductLines,
   type RequestProductLine,
 } from '@/lib/products/requestProductLines';
-
-const INITIAL_FORM_DATA = {
-  memo: '',
-};
 
 function ProductionRequestContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
@@ -43,7 +40,6 @@ function ProductionRequestContent() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   
-  const [formData, setFormData] = useState(INITIAL_FORM_DATA);
   const [products, setProducts] = useState<RequestProductLine[]>([createEmptyRequestProductLine()]);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -100,9 +96,6 @@ function ProductionRequestContent() {
           setIsEditMode(true);
           setEditProductIndex(singleLineIndex);
           setProducts(singleLineIndex != null ? [allLines[singleLineIndex]] : allLines);
-          setFormData({
-            memo: data.memo || '',
-          });
         } else {
           setError('생산요청을 찾을 수 없습니다.');
           router.push('/production/list');
@@ -167,23 +160,6 @@ function ProductionRequestContent() {
   if (!isAuthenticated || !userProfile) {
     return null;
   }
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData({
-      ...formData,
-      [name]: value
-    });
-    
-    if (fieldErrors[name]) {
-      setFieldErrors({
-        ...fieldErrors,
-        [name]: ''
-      });
-    }
-    if (error) setError('');
-    if (success) setSuccess('');
-  };
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -255,10 +231,7 @@ function ProductionRequestContent() {
         if (rootCustomerName) {
           productionRequestData.customerName = rootCustomerName;
         }
-        // memo는 값이 있을 때만 추가
-        if (formData.memo.trim()) {
-          productionRequestData.memo = formData.memo.trim();
-        }
+        productionRequestData.memo = summarizeMemoFromProducts(productsData) || null;
 
         await updateDoc(
           doc(db, 'productionRequests', requestId),
@@ -299,11 +272,7 @@ function ProductionRequestContent() {
         if (rootCustomerName) {
           productionRequestData.customerName = rootCustomerName;
         }
-
-        // memo는 값이 있을 때만 추가
-        if (formData.memo.trim()) {
-          productionRequestData.memo = formData.memo.trim();
-        }
+        productionRequestData.memo = summarizeMemoFromProducts(productsData) || null;
 
         const createdRef = await addDoc(
           collection(db, 'productionRequests'),
@@ -327,7 +296,6 @@ function ProductionRequestContent() {
         return;
       }
       
-      setFormData(INITIAL_FORM_DATA);
       setProducts([createEmptyRequestProductLine()]);
     } catch (error) {
       console.error('생산요청 등록 오류:', error);
@@ -373,21 +341,6 @@ function ProductionRequestContent() {
               disabled={submitting}
               allowMultipleProducts={editProductIndex == null}
             />
-
-            <div>
-              <label htmlFor="memo" className="block text-sm font-medium text-gray-700 mb-2">
-                비고
-              </label>
-              <textarea
-                id="memo"
-                name="memo"
-                value={formData.memo}
-                onChange={handleChange}
-                rows={4}
-                placeholder="비고를 입력하세요"
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 resize-none"
-              />
-            </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button

@@ -22,6 +22,7 @@ export type ProductionRequestListRow = {
   lineStatus: ProductionRequestStatus;
   plannedQuantity: number | null;
   plannedCompletionDate?: Date;
+  remark?: string;
 };
 
 export function lineProductionReason(
@@ -48,6 +49,10 @@ export function lineCustomerName(
   product: CertificateProduct | undefined,
   request: ProductionRequest
 ): string | undefined {
+  if (lineProductionReason(product, request) === 'inventory') {
+    const name = product?.customerName?.trim();
+    return name || undefined;
+  }
   const name = product?.customerName?.trim() || request.customerName?.trim();
   return name || undefined;
 }
@@ -251,6 +256,7 @@ export function expandProductionRequestsToListRows(
           lineStatus: resolveProductionLineStatus(product, request, multiProduct),
           plannedQuantity: linePlannedQuantity(product, request, multiProduct),
           plannedCompletionDate: linePlannedCompletionDate(product, request, multiProduct),
+          remark: product.remark?.trim() || (productIndex === 0 ? request.memo : undefined),
         });
       });
     } else {
@@ -270,6 +276,7 @@ export function expandProductionRequestsToListRows(
         lineStatus: normalizeProductionRequestStatus(request.status),
         plannedQuantity: request.plannedQuantity ?? null,
         plannedCompletionDate: request.plannedCompletionDate,
+        remark: request.memo,
       });
     }
   }

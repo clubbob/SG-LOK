@@ -30,7 +30,7 @@ function productLinesSearchText(request: ProductionRequest): string {
       const reasonLabel = formatProductionReasonLabel(reason);
       const regionLabel = salesRegionLabel(region);
       const customer = p.customerName ?? request.customerName;
-      return [reasonLabel, reason, regionLabel, region, customer, p.productName, p.productCode, p.productNameCode]
+      return [reasonLabel, reason, regionLabel, region, customer, p.productName, p.productCode, p.productNameCode, p.remark]
         .filter(Boolean)
         .join(' ');
     })

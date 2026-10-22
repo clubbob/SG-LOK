@@ -23,6 +23,7 @@ import {
   summarizeOrderQuantityFromOrderLines,
   summarizeProductionLegacyFromProducts,
   summarizeProductionRequestRootFromProducts,
+  summarizeMemoFromProducts,
   summarizeRequestedCompletionDateFromProducts,
   validateRequestProductLines,
   type RequestProductLine,
@@ -32,7 +33,6 @@ const ADMIN_SESSION_KEY = 'admin_session';
 
 const INITIAL_FORM_DATA = {
   plannedQuantity: '',
-  memo: '',
   plannedCompletionDate: '',
   actualCompletionDate: '',
   cleaningEpCompletionDate: '',
@@ -130,7 +130,6 @@ function AdminProductionRequestContent() {
           setProducts(singleLineIndex != null ? [allLines[singleLineIndex]] : allLines);
           setFormData({
             plannedQuantity: data.plannedQuantity?.toString() || '',
-            memo: data.memo || '',
             plannedCompletionDate: firestoreValueToDateInputString(data.plannedCompletionDate),
             actualCompletionDate: firestoreValueToDateInputString(data.actualCompletionDate),
             cleaningEpCompletionDate: firestoreValueToDateInputString(data.cleaningEpCompletionDate),
@@ -310,9 +309,7 @@ function AdminProductionRequestContent() {
           if (rootCustomerName) {
             productionRequestData.customerName = rootCustomerName;
           }
-          if (formData.memo.trim()) {
-            productionRequestData.memo = formData.memo.trim();
-          }
+          productionRequestData.memo = summarizeMemoFromProducts(productsData) || null;
         }
 
         // adminMemo는 값이 있을 때만 추가
@@ -390,10 +387,7 @@ function AdminProductionRequestContent() {
           productionRequestData.customerName = rootCustomerName;
         }
 
-        // memo는 값이 있을 때만 추가
-        if (formData.memo.trim()) {
-          productionRequestData.memo = formData.memo.trim();
-        }
+        productionRequestData.memo = summarizeMemoFromProducts(productsData) || null;
 
         const createdRef = await addDoc(
           collection(db, 'productionRequests'),
@@ -581,22 +575,6 @@ function AdminProductionRequestContent() {
               </div>
             </div>
           )}
-
-          <div>
-            <label htmlFor="memo" className="block text-sm font-medium text-gray-700 mb-2">
-              비고
-            </label>
-            <textarea
-              id="memo"
-              name="memo"
-              value={formData.memo}
-              onChange={handleChange}
-              rows={4}
-              placeholder="비고를 입력하세요"
-              disabled={submitting || !canEditRequestContent}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 resize-none disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
-            />
-          </div>
 
           {showAdminPostReviewFields && (
             <div>

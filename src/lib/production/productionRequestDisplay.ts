@@ -724,6 +724,7 @@ export function productionRequestForListStatsFromFirestore(
     memo: data.memo || '',
     createdAt: data.createdAt?.toDate?.() ?? new Date(),
     updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
+    createdBy: data.createdBy ?? data.userId ?? '',
   };
 }
 

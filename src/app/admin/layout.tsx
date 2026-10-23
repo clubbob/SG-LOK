@@ -29,8 +29,8 @@ const checkAdminAuth = (): { ok: boolean; uid?: string } => {
       uid?: string;
     };
     const now = new Date().getTime();
-    
-    if (now > session.expiresAt) {
+    const expiresAt = session.expiresAt;
+    if (typeof expiresAt !== 'number' || now > expiresAt) {
       localStorage.removeItem(ADMIN_SESSION_KEY);
       return { ok: false };
     }
@@ -386,20 +386,21 @@ export default function AdminLayout({
     const loadNotifications = async () => {
       try {
         const res = await fetch(`/api/admin/notifications?uid=${encodeURIComponent(adminUid)}`);
-        const data = await readResponseJsonSafe<{ items?: unknown[] }>(res);
+        type LoginNotifApiItem = {
+          id: string;
+          type: AdminNotification['type'];
+          title: string;
+          message: string;
+          refId?: string;
+          createdAt: string;
+        };
+        const data = await readResponseJsonSafe<{ items?: LoginNotifApiItem[] }>(res);
         const items = Array.isArray(data?.items) ? data.items : [];
         if (cancelled) return;
         sessionStorage.removeItem(ADMIN_NOTIF_CHECK_KEY);
         if (items.length === 0) return;
         setLoginNotifications(
-          items.map((item: {
-            id: string;
-            type: AdminNotification['type'];
-            title: string;
-            message: string;
-            refId?: string;
-            createdAt: string;
-          }) => ({
+          items.map((item) => ({
             id: item.id,
             type: item.type,
             title: item.title,

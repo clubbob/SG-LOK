@@ -69,6 +69,8 @@ type RequestProductLinesSectionProps = {
   requestedCompletionDateMin?: string;
   /** false: 목록에서 한 제품 줄만 수정 (추가·삭제 숨김) */
   allowMultipleProducts?: boolean;
+  /** 카드에 표시할 제품 번호 시작값 (목록에서 2번째 줄 수정 시 2) */
+  productLineDisplayStart?: number;
 };
 
 export function RequestProductLinesSection({
@@ -84,6 +86,7 @@ export function RequestProductLinesSection({
   showRequestedCompletionDate = false,
   requestedCompletionDateMin,
   allowMultipleProducts = true,
+  productLineDisplayStart = 1,
 }: RequestProductLinesSectionProps) {
   const [activeCustomerSuggestionIndex, setActiveCustomerSuggestionIndex] = useState<number | null>(
     null
@@ -283,9 +286,11 @@ export function RequestProductLinesSection({
             <div className="flex items-center justify-between mb-2 pb-2 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white text-sm font-bold">
-                  {index + 1}
+                  {productLineDisplayStart + index}
                 </span>
-                <h3 className="text-base font-semibold text-gray-900">제품 {index + 1}</h3>
+                <h3 className="text-base font-semibold text-gray-900">
+                  제품 {productLineDisplayStart + index}
+                </h3>
               </div>
               {allowMultipleProducts && (
                 <button

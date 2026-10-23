@@ -9,6 +9,10 @@ import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firesto
 import { db } from '@/lib/firebase';
 import { MANUFACTURER } from '@/lib/substitute/constants';
 import { fetchAllMappings } from '@/lib/substitute/firestoreMapping';
+import {
+  productionRequestForListStatsFromFirestore,
+  summarizeProductionRequestStats,
+} from '@/lib/production/productionRequestDisplay';
 
 function isPermissionDeniedError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
@@ -91,28 +95,16 @@ export default function DashboardPage() {
       const requestsQuery = query(requestsRef, where('userId', '==', userProfile.id));
       const requestsSnapshot = await getDocs(requestsQuery);
       
-      let pendingCount = 0;
-      let inProgressCount = 0;
-      let completedCount = 0;
-
-      requestsSnapshot.forEach((doc) => {
-        const data = doc.data();
-        const status = data.status;
-        
-        if (status === 'pending_review') {
-          pendingCount++;
-        } else if (status === 'confirmed' || status === 'in_progress') {
-          inProgressCount++;
-        } else if (status === 'completed') {
-          completedCount++;
-        }
-      });
+      const requests = requestsSnapshot.docs.map((doc) =>
+        productionRequestForListStatsFromFirestore(doc.id, doc.data())
+      );
+      const stats = summarizeProductionRequestStats(requests);
 
       setProductionStats({
-        totalRequests: requestsSnapshot.size,
-        pendingReview: pendingCount,
-        inProgress: inProgressCount,
-        completed: completedCount,
+        totalRequests: stats.total,
+        pendingReview: stats.pendingReview,
+        inProgress: stats.inProgress,
+        completed: stats.completed,
       });
 
       // 문의하기 통계
@@ -465,7 +457,7 @@ export default function DashboardPage() {
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200 hover:shadow-md transition-all hover:scale-[1.02] h-full">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium text-gray-600 mb-0.5">전체 요청</p>
+                      <p className="text-xs font-medium text-gray-600 mb-0.5">요청 제품</p>
                       <p className="text-2xl font-bold text-gray-900">{productionStats.totalRequests}</p>
                     </div>
                     <div className="bg-blue-500 rounded-lg p-2">

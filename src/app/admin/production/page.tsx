@@ -10,6 +10,7 @@ import {
   buildProductionRequestLineApprovalPatch,
   buildProductionRequestRegistrationFields,
   expandProductionRequestsToListRows,
+  formatProductionCompletionRoundDisplay,
   formatProductionReasonLabel,
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
@@ -34,7 +35,7 @@ const checkAdminAuth = (): boolean => {
   if (typeof window === 'undefined') return false;
   
   const sessionData = localStorage.getItem(ADMIN_SESSION_KEY);
-  if (!sessionData) return false;
+  if (!sessionData?.trim()) return false;
   
   try {
     const session = JSON.parse(sessionData);
@@ -47,6 +48,7 @@ const checkAdminAuth = (): boolean => {
     
     return session.authenticated === true;
   } catch {
+    localStorage.removeItem(ADMIN_SESSION_KEY);
     return false;
   }
 };
@@ -55,7 +57,7 @@ const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   pending_review: '승인 대기중',
   confirmed: '진행중',
   in_progress: '진행중',
-  completed: '생산 완료',
+  completed: '생산완료',
   cancelled: '취소',
 };
 
@@ -67,20 +69,14 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
   cancelled: 'bg-red-500 text-white',
 };
 
-const getRequestDisplayStatusLabel = (request: ProductionRequest): string => {
-  if (request.cleaningEpCompletionDate) return '세정/EP 완료';
-  return STATUS_LABELS[request.status];
-};
+const getRequestDisplayStatusLabel = (request: ProductionRequest): string =>
+  STATUS_LABELS[request.status];
 
-const getListRowDisplayStatusLabel = (listRow: ProductionRequestListRow): string => {
-  if (listRow.request.cleaningEpCompletionDate) return '세정/EP 완료';
-  return STATUS_LABELS[listRow.lineStatus];
-};
+const getListRowDisplayStatusLabel = (listRow: ProductionRequestListRow): string =>
+  STATUS_LABELS[listRow.lineStatus];
 
-const getListRowDisplayStatusColor = (listRow: ProductionRequestListRow): string => {
-  if (listRow.request.cleaningEpCompletionDate) return 'bg-teal-600 text-white';
-  return STATUS_COLORS[listRow.lineStatus];
-};
+const getListRowDisplayStatusColor = (listRow: ProductionRequestListRow): string =>
+  STATUS_COLORS[listRow.lineStatus];
 
 export default function AdminProductionPage() {
   const router = useRouter();
@@ -188,7 +184,7 @@ export default function AdminProductionPage() {
             plannedCompletionDate: data.plannedCompletionDate?.toDate(),
             actualStartDate: data.actualStartDate?.toDate(),
             actualCompletionDate: data.actualCompletionDate?.toDate(),
-            cleaningEpCompletionDate: data.cleaningEpCompletionDate?.toDate(),
+            actualCompletionQuantity: data.actualCompletionQuantity,
           priority: data.priority,
           memo: data.memo || '',
           adminMemo: data.adminMemo || '',
@@ -372,8 +368,10 @@ export default function AdminProductionPage() {
       '비고',
       '생산계획수량',
       '완료예정일',
-      '생산완료일',
-      '세정/EP 완료일',
+      '1차 완료일 (수량)',
+      '2차 완료일 (수량)',
+      '3차 완료일 (수량)',
+      '생산완료일 (수량)',
       '요청자',
       '상태',
     ];
@@ -392,10 +390,8 @@ export default function AdminProductionPage() {
       const plannedDateStr = listRow.plannedCompletionDate
         ? formatDateShort(listRow.plannedCompletionDate)
         : '';
-      const actualDateStr = request.actualCompletionDate ? formatDateShort(request.actualCompletionDate) : '';
-      const cleaningEpDateStr = request.cleaningEpCompletionDate
-        ? formatDateShort(request.cleaningEpCompletionDate)
-        : '';
+      const actualDateStr = formatProductionCompletionRoundDisplay(listRow.actualCompletion);
+      const actualDateStrForCsv = actualDateStr === '-' ? '' : actualDateStr;
       const requestDateStr = request.requestDate ? formatDateShort(request.requestDate) : '';
 
       const cols = [
@@ -411,8 +407,10 @@ export default function AdminProductionPage() {
         listRow.remark || '',
         listRow.plannedQuantity ?? '',
         plannedDateStr,
-        actualDateStr,
-        cleaningEpDateStr,
+        formatProductionCompletionRoundDisplay(listRow.completionRounds[0] ?? {}),
+        formatProductionCompletionRoundDisplay(listRow.completionRounds[1] ?? {}),
+        formatProductionCompletionRoundDisplay(listRow.completionRounds[2] ?? {}),
+        actualDateStrForCsv,
         request.userName || '',
         statusLabel,
       ];
@@ -575,7 +573,7 @@ export default function AdminProductionPage() {
                         className="text-blue-600 hover:text-blue-800 text-sm font-medium"
                         disabled={deletingRowKey === listRow.rowKey || approving}
                       >
-                        수정
+                        업데이트
                       </button>
                       <span className="text-gray-300">|</span>
                       <button

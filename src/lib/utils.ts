@@ -86,14 +86,33 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
   };
 }
 
+/** 빈 문자열·잘못된 JSON 파싱 시 fallback (Unexpected end of JSON input 방지) */
+export function parseJsonSafe<T>(text: string | null | undefined, fallback: T | null = null): T | null {
+  if (text == null || !String(text).trim()) return fallback;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function readResponseJsonSafe<T>(res: Response): Promise<T | null> {
+  try {
+    const text = await res.text();
+    return parseJsonSafe<T>(text, null);
+  } catch {
+    return null;
+  }
+}
+
 // 로컬 스토리지 유틸리티
 export const storage = {
   get: <T>(key: string, defaultValue?: T): T | null => {
     try {
       const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : defaultValue || null;
+      return parseJsonSafe<T>(item, defaultValue ?? null);
     } catch {
-      return defaultValue || null;
+      return defaultValue ?? null;
     }
   },
   set: <T>(key: string, value: T): void => {

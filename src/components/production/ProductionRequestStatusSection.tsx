@@ -3,6 +3,7 @@
 import React from 'react';
 import {
   buildProductionRequestRegistrationFields,
+  formatProductionCompletionRoundDisplay,
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
 import { formatDateShort } from '@/lib/utils';
@@ -53,7 +54,7 @@ export function ProductionRequestStatusSection({
   listRow: ProductionRequestListRow;
   rowNumber: number;
   statusBadge: React.ReactNode;
-  actions: React.ReactNode;
+  actions?: React.ReactNode;
   onOpenMemo: () => void;
 }) {
   const request = listRow.request;
@@ -112,16 +113,18 @@ export function ProductionRequestStatusSection({
               </Field>
             );
           }
+          const displayValue =
+            field.value !== '' ? field.value : <span className="text-gray-400">-</span>;
           return (
             <Field key={field.label} label={field.label}>
-              {field.value}
+              {displayValue}
             </Field>
           );
         })}
       </div>
 
       <div
-        className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1 px-3 py-2.5 bg-slate-100/90"
+        className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-x-3 gap-y-2 px-3 py-2.5 bg-slate-100/90"
         aria-label="생산 처리"
       >
         <Field
@@ -152,31 +155,26 @@ export function ProductionRequestStatusSection({
             <span className="text-gray-400">-</span>
           )}
         </Field>
+        {listRow.completionRounds.map((round, index) => {
+          const display = formatProductionCompletionRoundDisplay(round);
+          return (
+            <Field key={`completion-round-${index + 1}`} label={`${index + 1}차 완료일 (수량)`}>
+              {display === '-' ? <span className="text-gray-400">-</span> : display}
+            </Field>
+          );
+        })}
         <Field
-          label="생산완료일"
+          label="생산완료일 (수량)"
           valueClassName={
-            isDateAfter(request.actualCompletionDate, request.plannedCompletionDate) ? 'text-red-500' : ''
-          }
-        >
-          {request.actualCompletionDate ? (
-            formatDateShort(request.actualCompletionDate)
-          ) : (
-            <span className="text-gray-400">-</span>
-          )}
-        </Field>
-        <Field
-          label="세정/EP 완료일"
-          valueClassName={
-            isDateAfter(request.cleaningEpCompletionDate, request.plannedCompletionDate)
+            isDateAfter(listRow.actualCompletion.date, listRow.plannedCompletionDate)
               ? 'text-red-500'
               : ''
           }
         >
-          {request.cleaningEpCompletionDate ? (
-            formatDateShort(request.cleaningEpCompletionDate)
-          ) : (
-            <span className="text-gray-400">-</span>
-          )}
+          {(() => {
+            const display = formatProductionCompletionRoundDisplay(listRow.actualCompletion);
+            return display === '-' ? <span className="text-gray-400">-</span> : display;
+          })()}
         </Field>
       </div>
     </article>

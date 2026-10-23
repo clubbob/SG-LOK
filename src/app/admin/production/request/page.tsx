@@ -7,10 +7,17 @@ import { collection, addDoc, Timestamp, getDocs, query, limit, doc, getDoc, upda
 import { db } from '@/lib/firebase';
 import { sanitizeForFirestore } from '@/lib/firestoreSanitize';
 import {
+  applyCompletionRoundFormToProduct,
+  completionRoundFormFromLine,
+  completionRoundRootPatchFromProduct,
+  deriveProductionRequestStatusFromProducts,
+  EMPTY_COMPLETION_ROUND_FORM,
   firestoreValueToDateInputString,
-  isProductionRequestContentEditable,
+  mergeProductionProductsPreservingLineMeta,
   normalizeProductionRequestStatus,
+  PRODUCTION_COMPLETION_ROUND_COUNT,
 } from '@/lib/production/productionRequestDisplay';
+import type { CertificateProduct, ProductionRequest } from '@/types';
 import {
   buildProductionRequestNotification,
   postAdminNotification,
@@ -35,7 +42,8 @@ const INITIAL_FORM_DATA = {
   plannedQuantity: '',
   plannedCompletionDate: '',
   actualCompletionDate: '',
-  cleaningEpCompletionDate: '',
+  actualCompletionQuantity: '',
+  ...EMPTY_COMPLETION_ROUND_FORM,
 };
 
 // 관리자 인증 확인 함수
@@ -68,6 +76,7 @@ function AdminProductionRequestContent() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editProductIndex, setEditProductIndex] = useState<number | null>(null);
   const allProductLinesRef = useRef<RequestProductLine[] | null>(null);
+  const firestoreProductsRef = useRef<CertificateProduct[]>([]);
   const [loadingRequest, setLoadingRequest] = useState(() => Boolean(requestId));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -111,7 +120,11 @@ function AdminProductionRequestContent() {
         if (requestDoc.exists()) {
           const data = requestDoc.data();
           
-          const status = normalizeProductionRequestStatus(data.status);
+          const docStatus = normalizeProductionRequestStatus(data.status);
+          const rawProducts = Array.isArray(data.products)
+            ? (data.products as CertificateProduct[])
+            : [];
+          firestoreProductsRef.current = rawProducts;
           const allLines = linesFromFirestoreProducts(data);
           allProductLinesRef.current = allLines;
           const parsedIndex =
@@ -123,15 +136,60 @@ function AdminProductionRequestContent() {
               ? parsedIndex
               : null;
 
+          const lineIdx = singleLineIndex ?? 0;
+          const lineDoc = rawProducts[lineIdx];
+          const multiProduct = rawProducts.length > 1;
+          const lineStatus = normalizeProductionRequestStatus(
+            lineDoc?.lineStatus ?? docStatus
+          );
+
           setIsEditMode(true);
-          setCurrentStatus(status);
+          setCurrentStatus(singleLineIndex != null ? lineStatus : docStatus);
           setEditProductIndex(singleLineIndex);
           setProducts(singleLineIndex != null ? [allLines[singleLineIndex]] : allLines);
+          const requestForLine: ProductionRequest = {
+            id: requestDoc.id,
+            userId: data.userId ?? '',
+            userName: data.userName ?? '',
+            userEmail: data.userEmail ?? '',
+            productName: data.productName ?? '',
+            productCode: data.productCode ?? '',
+            quantity: data.quantity ?? 0,
+            requestDate: data.requestDate?.toDate?.() ?? new Date(),
+            requestedCompletionDate: data.requestedCompletionDate?.toDate?.() ?? new Date(),
+            productionReason: data.productionReason ?? 'inventory',
+            status: docStatus,
+            completionRound1Date: data.completionRound1Date?.toDate?.(),
+            completionRound1Quantity: data.completionRound1Quantity,
+            completionRound2Date: data.completionRound2Date?.toDate?.(),
+            completionRound2Quantity: data.completionRound2Quantity,
+            completionRound3Date: data.completionRound3Date?.toDate?.(),
+            completionRound3Quantity: data.completionRound3Quantity,
+            createdAt: data.createdAt?.toDate?.() ?? new Date(),
+            updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
+            createdBy: data.createdBy ?? '',
+          };
+
           setFormData({
-            plannedQuantity: data.plannedQuantity?.toString() || '',
-            plannedCompletionDate: firestoreValueToDateInputString(data.plannedCompletionDate),
-            actualCompletionDate: firestoreValueToDateInputString(data.actualCompletionDate),
-            cleaningEpCompletionDate: firestoreValueToDateInputString(data.cleaningEpCompletionDate),
+            plannedQuantity:
+              lineDoc?.plannedQuantity != null
+                ? String(lineDoc.plannedQuantity)
+                : !multiProduct && data.plannedQuantity != null
+                  ? String(data.plannedQuantity)
+                  : '',
+            plannedCompletionDate: firestoreValueToDateInputString(
+              lineDoc?.plannedCompletionDate ?? (!multiProduct ? data.plannedCompletionDate : undefined)
+            ),
+            actualCompletionDate: firestoreValueToDateInputString(
+              lineDoc?.actualCompletionDate ?? (!multiProduct ? data.actualCompletionDate : undefined)
+            ),
+            actualCompletionQuantity:
+              lineDoc?.actualCompletionQuantity != null
+                ? String(lineDoc.actualCompletionQuantity)
+                : !multiProduct && data.actualCompletionQuantity != null
+                  ? String(data.actualCompletionQuantity)
+                  : '',
+            ...completionRoundFormFromLine(lineDoc, requestForLine, multiProduct),
           });
         } else {
           setError('생산요청을 찾을 수 없습니다.');
@@ -194,10 +252,13 @@ function AdminProductionRequestContent() {
     );
   }
 
-  const canEditRequestContent =
-    !isEditMode || isProductionRequestContentEditable(currentStatus);
-  /** 확정 이후 수정: 계획수량·완료일·관리자 비고 등 (대기중 수정은 등록 화면과 동일) */
-  const showAdminPostReviewFields = isEditMode && !canEditRequestContent;
+  /** 관리자 화면: 승인 대기·진행중 등 모든 상태에서 제품·요청 내용 수정 */
+  const canEditRequestContent = true;
+  const isPostReviewStatus =
+    currentStatus === 'confirmed' ||
+    currentStatus === 'in_progress' ||
+    currentStatus === 'completed';
+  const showAdminPostReviewFields = isEditMode && isPostReviewStatus;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -232,10 +293,7 @@ function AdminProductionRequestContent() {
     }
 
     // 계획수량 — 확정 이후 수정 시 필수
-    if (
-      isEditMode &&
-      (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress')
-    ) {
+    if (isEditMode && isPostReviewStatus) {
       if (!formData.plannedQuantity.trim()) {
         errors.plannedQuantity = '생산계획수량을 입력해주세요.';
       } else {
@@ -291,54 +349,104 @@ function AdminProductionRequestContent() {
           updatedAt: Timestamp.now(),
         };
 
-        if (canEditRequestContent) {
-          Object.assign(productionRequestData, {
-            products: productsData,
-            productName: legacy.productName,
-            productCode: legacy.productCode,
-            quantity: legacy.quantity,
-            orderQuantity: hasOrderLine ? totalOrderQuantity : null,
-            productionReason,
-            salesRegion,
-            ...(rootRequestedCompletionDate
-              ? { requestedCompletionDate: Timestamp.fromDate(rootRequestedCompletionDate) }
-              : {}),
+        let finalProducts = mergeProductionProductsPreservingLineMeta(
+          firestoreProductsRef.current,
+          productsData
+        );
+
+        if (isPostReviewStatus) {
+          const plannedQty = formData.plannedQuantity.trim()
+            ? parseInt(formData.plannedQuantity, 10)
+            : undefined;
+          const plannedDate = formData.plannedCompletionDate.trim()
+            ? new Date(formData.plannedCompletionDate)
+            : undefined;
+          const targetIndex = editProductIndex ?? 0;
+          const actualDateStr = formData.actualCompletionDate.trim();
+          const actualQtyStr = formData.actualCompletionQuantity.trim();
+          finalProducts = finalProducts.map((p, i) => {
+            if (i !== targetIndex) return p;
+            let updated: CertificateProduct = {
+              ...p,
+              ...(plannedQty != null && !Number.isNaN(plannedQty)
+                ? { plannedQuantity: plannedQty }
+                : {}),
+              ...(plannedDate && !Number.isNaN(plannedDate.getTime())
+                ? { plannedCompletionDate: plannedDate }
+                : {}),
+            };
+            updated = applyCompletionRoundFormToProduct(updated, formData);
+            if (actualDateStr) {
+              const d = new Date(actualDateStr);
+              if (!Number.isNaN(d.getTime())) {
+                const q = actualQtyStr ? parseInt(actualQtyStr, 10) : undefined;
+                updated = {
+                  ...updated,
+                  actualCompletionDate: d,
+                  ...(q != null && !Number.isNaN(q) ? { actualCompletionQuantity: q } : {}),
+                  lineStatus: 'completed',
+                };
+              }
+            } else if (p.lineStatus === 'completed' || p.actualCompletionDate) {
+              const { actualCompletionDate: _d, actualCompletionQuantity: _q, ...rest } = updated;
+              updated = { ...rest, lineStatus: 'confirmed' };
+            }
+            return updated;
           });
-          if (rootCustomerName) {
-            productionRequestData.customerName = rootCustomerName;
-          }
-          productionRequestData.memo = summarizeMemoFromProducts(productsData) || null;
         }
 
-        // 확정된 경우 또는 완료된 경우 완료예정일·계획수량 업데이트
-        if (currentStatus === 'confirmed' || currentStatus === 'completed' || currentStatus === 'in_progress') {
-          if (formData.plannedCompletionDate) {
-            productionRequestData.plannedCompletionDate = Timestamp.fromDate(new Date(formData.plannedCompletionDate));
-          }
-          if (formData.plannedQuantity.trim()) {
-            productionRequestData.plannedQuantity = parseInt(formData.plannedQuantity, 10);
-          }
+        Object.assign(productionRequestData, {
+          products: finalProducts,
+          productName: legacy.productName,
+          productCode: legacy.productCode,
+          quantity: legacy.quantity,
+          orderQuantity: hasOrderLine ? totalOrderQuantity : null,
+          productionReason,
+          salesRegion,
+          ...(rootRequestedCompletionDate
+            ? { requestedCompletionDate: Timestamp.fromDate(rootRequestedCompletionDate) }
+            : {}),
+        });
+        if (rootCustomerName) {
+          productionRequestData.customerName = rootCustomerName;
         }
+        productionRequestData.memo = summarizeMemoFromProducts(finalProducts) || null;
 
-        // 생산완료일이 입력되면 상태를 완료로 변경
-        if (formData.actualCompletionDate) {
-          productionRequestData.actualCompletionDate = Timestamp.fromDate(new Date(formData.actualCompletionDate));
-          productionRequestData.status = 'completed';
-
-          // 세정/EP 완료일 (생산완료일 다음에 등록)
-          if (formData.cleaningEpCompletionDate) {
-            productionRequestData.cleaningEpCompletionDate = Timestamp.fromDate(
-              new Date(formData.cleaningEpCompletionDate)
+        if (isPostReviewStatus && finalProducts.length === 1) {
+          const only = finalProducts[0];
+          if (only.plannedQuantity != null) {
+            productionRequestData.plannedQuantity = only.plannedQuantity;
+          }
+          if (only.plannedCompletionDate) {
+            productionRequestData.plannedCompletionDate = Timestamp.fromDate(
+              only.plannedCompletionDate instanceof Date
+                ? only.plannedCompletionDate
+                : new Date(only.plannedCompletionDate)
             );
-          } else {
-            productionRequestData.cleaningEpCompletionDate = null;
           }
-        } else if (currentStatus === 'completed' && !formData.actualCompletionDate) {
-          // 생산완료일이 제거되면 상태를 확정으로 변경하고 세정/EP 완료일도 함께 제거
-          productionRequestData.actualCompletionDate = null;
-          productionRequestData.cleaningEpCompletionDate = null;
-          productionRequestData.status = 'confirmed';
+          Object.assign(productionRequestData, completionRoundRootPatchFromProduct(only));
         }
+
+        productionRequestData.status = deriveProductionRequestStatusFromProducts(finalProducts);
+        if (finalProducts.length === 1) {
+          const only = finalProducts[0];
+          if (only.actualCompletionDate) {
+            const d =
+              only.actualCompletionDate instanceof Date
+                ? only.actualCompletionDate
+                : new Date(only.actualCompletionDate);
+            productionRequestData.actualCompletionDate = Timestamp.fromDate(d);
+            productionRequestData.actualCompletionQuantity =
+              only.actualCompletionQuantity != null ? only.actualCompletionQuantity : null;
+          } else {
+            productionRequestData.actualCompletionDate = null;
+            productionRequestData.actualCompletionQuantity = null;
+          }
+        } else {
+          productionRequestData.actualCompletionDate = null;
+          productionRequestData.actualCompletionQuantity = null;
+        }
+        productionRequestData.products = finalProducts;
 
         await updateDoc(
           doc(db, 'productionRequests', requestId),
@@ -447,8 +555,9 @@ function AdminProductionRequestContent() {
                 ? new Date().toISOString().split('T')[0]
                 : undefined
             }
-            disabled={submitting || !canEditRequestContent}
+            disabled={submitting}
             allowMultipleProducts={editProductIndex == null}
+            productLineDisplayStart={editProductIndex != null ? editProductIndex + 1 : 1}
           />
 
           {showAdminPostReviewFields && (
@@ -460,13 +569,7 @@ function AdminProductionRequestContent() {
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  label={
-                    currentStatus === 'confirmed' ||
-                    currentStatus === 'completed' ||
-                    currentStatus === 'in_progress'
-                      ? '생산계획수량 *'
-                      : '생산계획수량'
-                  }
+                  label="생산계획수량 *"
                   value={formData.plannedQuantity}
                   onChange={(e) => {
                     const digitsOnly = e.target.value.replace(/[^\d]/g, '');
@@ -475,101 +578,94 @@ function AdminProductionRequestContent() {
                   }}
                   placeholder="생산계획수량을 입력하세요"
                   error={fieldErrors.plannedQuantity}
-                  required={
-                    currentStatus === 'confirmed' ||
-                    currentStatus === 'completed' ||
-                    currentStatus === 'in_progress'
-                  }
-                  disabled={
-                    !(
-                      currentStatus === 'confirmed' ||
-                      currentStatus === 'completed' ||
-                      currentStatus === 'in_progress'
-                    )
-                  }
+                  required
                 />
               </div>
 
-            {(currentStatus === 'confirmed' ||
-                currentStatus === 'completed' ||
-                currentStatus === 'in_progress') && (
               <div>
-                <label htmlFor="plannedCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
-                  완료예정일
-                </label>
                 <DateInput
                   id="plannedCompletionDate"
                   name="plannedCompletionDate"
+                  label="완료예정일 *"
                   value={formData.plannedCompletionDate}
                   onChange={handleChange}
-                  disabled={true}
-                  className="bg-gray-50 cursor-not-allowed opacity-50"
+                  disabled={!!formData.actualCompletionDate}
+                  className="disabled:bg-gray-50"
+                  required
                 />
+                {formData.actualCompletionDate && (
+                  <p className="mt-1 text-xs text-gray-500">생산완료일 (수량)이 등록되어 있어 완료예정일을 변경할 수 없습니다.</p>
+                )}
               </div>
-            )}
           </div>
           )}
 
-          {/* 확정된 경우 또는 완료된 경우 또는 진행중인 경우 완료예정일 변경, 생산완료일 수정 가능 */}
-          {showAdminPostReviewFields &&
-            (currentStatus === 'confirmed' ||
-              currentStatus === 'completed' ||
-              currentStatus === 'in_progress') && (
-            <div className="space-y-6">
-              <div>
-                <label htmlFor="plannedCompletionDateChange" className="block text-sm font-medium text-gray-700 mb-2">
-                  완료예정일 변경
-                </label>
-                <DateInput
-                  id="plannedCompletionDateChange"
-                  name="plannedCompletionDateChange"
-                  value={formData.plannedCompletionDate}
-                  onChange={(e) => {
-                    setFormData(prev => ({ ...prev, plannedCompletionDate: e.target.value }));
-                  }}
-                  disabled={!!formData.actualCompletionDate}
-                  className="disabled:bg-gray-50"
-                />
-                {formData.actualCompletionDate && (
-                  <p className="mt-1 text-xs text-gray-500">생산완료일이 등록되어 있어 완료예정일을 변경할 수 없습니다.</p>
-                )}
-              </div>
-              
-              <div>
-                <label htmlFor="actualCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
-                  생산완료일
-                </label>
-                <DateInput
-                  id="actualCompletionDate"
-                  name="actualCompletionDate"
-                  value={formData.actualCompletionDate}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setFormData((prev) => ({
-                      ...prev,
-                      actualCompletionDate: value,
-                      // 생산완료일이 없으면 세정/EP 완료일도 함께 비움
-                      cleaningEpCompletionDate: value ? prev.cleaningEpCompletionDate : '',
-                    }));
-                  }}
-                />
-              </div>
-
-              <div>
-                <label htmlFor="cleaningEpCompletionDate" className="block text-sm font-medium text-gray-700 mb-2">
-                  세정/EP 완료일
-                </label>
-                <DateInput
-                  id="cleaningEpCompletionDate"
-                  name="cleaningEpCompletionDate"
-                  value={formData.cleaningEpCompletionDate}
-                  onChange={handleChange}
-                  disabled={!formData.actualCompletionDate}
-                  className="disabled:bg-gray-50"
-                />
-                {!formData.actualCompletionDate && (
-                  <p className="mt-1 text-xs text-gray-500">생산완료일을 먼저 등록해야 세정/EP 완료일을 입력할 수 있습니다.</p>
-                )}
+          {showAdminPostReviewFields && (
+            <div className="space-y-4 border-t border-gray-200 pt-6">
+              <h3 className="text-sm font-semibold text-gray-900">차수별 부분 완료</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+                {Array.from({ length: PRODUCTION_COMPLETION_ROUND_COUNT }, (_, i) => {
+                  const n = i + 1;
+                  const dateName = `completionRound${n}Date`;
+                  const qtyName = `completionRound${n}Quantity`;
+                  return (
+                    <div key={n} className="space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50/80">
+                      <p className="text-sm font-medium text-gray-800">{n}차 완료일 (수량)</p>
+                      <DateInput
+                        id={dateName}
+                        name={dateName}
+                        label="완료일"
+                        value={formData[dateName as keyof typeof formData] as string}
+                        onChange={handleChange}
+                      />
+                      <Input
+                        id={qtyName}
+                        name={qtyName}
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        label="수량"
+                        value={formData[qtyName as keyof typeof formData] as string}
+                        onChange={(e) => {
+                          const digitsOnly = e.target.value.replace(/[^\d]/g, '');
+                          setFormData((prev) => ({ ...prev, [qtyName]: digitsOnly }));
+                        }}
+                        placeholder="수량"
+                      />
+                    </div>
+                  );
+                })}
+                <div className="space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50/80">
+                  <p className="text-sm font-medium text-gray-800">생산완료일 (수량)</p>
+                  <DateInput
+                    id="actualCompletionDate"
+                    name="actualCompletionDate"
+                    label="완료일"
+                    value={formData.actualCompletionDate}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setFormData((prev) => ({
+                        ...prev,
+                        actualCompletionDate: value,
+                        actualCompletionQuantity: value ? prev.actualCompletionQuantity : '',
+                      }));
+                    }}
+                  />
+                  <Input
+                    id="actualCompletionQuantity"
+                    name="actualCompletionQuantity"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    label="수량"
+                    value={formData.actualCompletionQuantity}
+                    onChange={(e) => {
+                      const digitsOnly = e.target.value.replace(/[^\d]/g, '');
+                      setFormData((prev) => ({ ...prev, actualCompletionQuantity: digitsOnly }));
+                    }}
+                    placeholder="수량"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -589,7 +685,7 @@ function AdminProductionRequestContent() {
               loading={submitting}
               disabled={submitting}
             >
-              {isEditMode ? '수정' : '등록'}
+              {isEditMode ? '업데이트' : '등록'}
             </Button>
           </div>
         </form>

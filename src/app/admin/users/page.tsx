@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { collection, query, orderBy, getDocs, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { User } from '@/types';
-import { formatDateTime24 } from '@/lib/utils';
+import { formatDateTime24, readResponseJsonSafe } from '@/lib/utils';
 import { Button } from '@/components/ui';
 import { MENU_ACCESS_KEYS, MENU_ACCESS_LABELS, type MenuAccessKey, normalizeAllowedMenus } from '@/lib/auth/menuAccess';
 import { isBootstrapAdminEmail } from '@/lib/auth/adminBootstrap';
@@ -258,9 +258,9 @@ export default function AdminUsersPage() {
         }),
       });
 
-      const payload = (await response.json()) as { message?: string; tempPassword?: string };
-      if (!response.ok || !payload.tempPassword) {
-        throw new Error(payload.message || 'FAILED');
+      const payload = await readResponseJsonSafe<{ message?: string; tempPassword?: string }>(response);
+      if (!response.ok || !payload?.tempPassword) {
+        throw new Error(payload?.message || 'FAILED');
       }
 
       setError('');

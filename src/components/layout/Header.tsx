@@ -34,7 +34,27 @@ export default function Header() {
     setIsInventoryMenuOpen(false);
     setIsDealerMenuOpen(false);
     setIsSubstituteMenuOpen(false);
+    setIsUserMenuOpen(false);
   }, [pathname]);
+
+  const [adminEntryHref, setAdminEntryHref] = useState('/admin/login');
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('admin_session');
+      if (!raw?.trim()) {
+        setAdminEntryHref('/admin/login');
+        return;
+      }
+      const session = JSON.parse(raw) as { authenticated?: boolean; expiresAt?: number };
+      if (session.authenticated === true && Date.now() < (session.expiresAt ?? 0)) {
+        setAdminEntryHref('/admin/dashboard');
+      } else {
+        setAdminEntryHref('/admin/login');
+      }
+    } catch {
+      setAdminEntryHref('/admin/login');
+    }
+  }, [pathname, isAuthenticated]);
 
   useLayoutEffect(() => {
     if (!pathname) return;
@@ -153,50 +173,33 @@ export default function Header() {
                 </button>
                 {isProdMenuOpen && (
                   <>
-                    {/* 배경 클릭 시 메뉴 닫기 */}
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsProdMenuOpen(false);
-                      }}
-                    />
-                    <div className="absolute left-0 mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200 z-20" onClick={(e) => e.stopPropagation()}>
+                    <div className="absolute left-0 mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200 z-20">
                       <div className="py-2">
                         <Link
                           href="/production"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsProdMenuOpen(false)}
                         >
                           생산관리 메인
                         </Link>
                         <Link
                           href="/production/request"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsProdMenuOpen(false)}
                         >
                           생산요청 등록
                         </Link>
                         <Link
                           href="/production/list"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsProdMenuOpen(false)}
                         >
                           생산요청 현황
                         </Link>
-                        <Link
-                          href="/production/calendar"
-                          className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            alert('사용 중단된 메뉴입니다.');
-                            setIsProdMenuOpen(false);
-                          }}
-                        >
-                          생산일정 캘린더
-                        </Link>
                       </div>
                     </div>
+                    <div
+                      className="fixed inset-0 z-10"
+                      aria-hidden
+                      onClick={() => setIsProdMenuOpen(false)}
+                    />
                   </>
                 )}
               </div>
@@ -229,39 +232,33 @@ export default function Header() {
                 </button>
                 {isCertMenuOpen && (
                   <>
-                    {/* 배경 클릭 시 메뉴 닫기 */}
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsCertMenuOpen(false);
-                      }}
-                    />
-                    <div className="absolute left-0 mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200 z-20" onClick={(e) => e.stopPropagation()}>
+                    <div className="absolute left-0 mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200 z-20">
                       <div className="py-2">
                         <Link
                           href="/certificate"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsCertMenuOpen(false)}
                         >
                           성적서관리 메인
                         </Link>
                         <Link
                           href="/certificate/request"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsCertMenuOpen(false)}
                         >
                           성적서요청 등록
                         </Link>
                         <Link
                           href="/certificate/list"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsCertMenuOpen(false)}
                         >
                           성적서 목록
                         </Link>
                       </div>
                     </div>
+                    <div
+                      className="fixed inset-0 z-10"
+                      aria-hidden
+                      onClick={() => setIsCertMenuOpen(false)}
+                    />
                   </>
                 )}
               </div>
@@ -294,45 +291,39 @@ export default function Header() {
                 </button>
                 {isInventoryMenuOpen && (
                   <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsInventoryMenuOpen(false);
-                      }}
-                    />
-                    <div className="absolute left-0 mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200 z-20" onClick={(e) => e.stopPropagation()}>
+                    <div className="absolute left-0 mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200 z-20">
                       <div className="py-2">
                         <Link
                           href="/inventory"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsInventoryMenuOpen(false)}
                         >
                           재고관리 메인
                         </Link>
                         <Link
                           href="/inventory/erp-status"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsInventoryMenuOpen(false)}
                         >
                           재고 현황
                         </Link>
                         <Link
                           href="/inventory/scan"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsInventoryMenuOpen(false)}
                         >
                           바코드·QR 스캔
                         </Link>
                         <Link
                           href="/inventory/status"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsInventoryMenuOpen(false)}
                         >
                           UHP 재고현황
                         </Link>
                       </div>
                     </div>
+                    <div
+                      className="fixed inset-0 z-10"
+                      aria-hidden
+                      onClick={() => setIsInventoryMenuOpen(false)}
+                    />
                   </>
                 )}
               </div>
@@ -361,14 +352,7 @@ export default function Header() {
                 </button>
                 {isDealerMenuOpen && (
                   <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsDealerMenuOpen(false);
-                      }}
-                    />
-                    <div className="absolute left-0 mt-1 w-52 rounded-lg bg-white shadow-lg border border-gray-200 z-20" onClick={(e) => e.stopPropagation()}>
+                    <div className="absolute left-0 mt-1 w-52 rounded-lg bg-white shadow-lg border border-gray-200 z-20">
                       <div className="py-2">
                         <Link
                           href="/dealer-customers"
@@ -377,12 +361,16 @@ export default function Header() {
                               ? 'bg-blue-50 text-blue-600 font-semibold'
                               : 'text-gray-800'
                           }`}
-                          onClick={() => setIsDealerMenuOpen(false)}
                         >
                           대리점 담당고객
                         </Link>
                       </div>
                     </div>
+                    <div
+                      className="fixed inset-0 z-10"
+                      aria-hidden
+                      onClick={() => setIsDealerMenuOpen(false)}
+                    />
                   </>
                 )}
               </div>
@@ -415,41 +403,33 @@ export default function Header() {
                 </button>
                 {isSubstituteMenuOpen && (
                   <>
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsSubstituteMenuOpen(false);
-                      }}
-                    />
-                    <div
-                      className="absolute left-0 mt-1 w-52 rounded-lg bg-white shadow-lg border border-gray-200 z-20"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <div className="absolute left-0 mt-1 w-52 rounded-lg bg-white shadow-lg border border-gray-200 z-20">
                       <div className="py-2">
                         <Link
                           href="/substitute"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsSubstituteMenuOpen(false)}
                         >
                           대체품코드 메인
                         </Link>
                         <Link
                           href="/substitute/menu"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsSubstituteMenuOpen(false)}
                         >
                           코드 등록
                         </Link>
                         <Link
                           href="/substitute/list"
                           className="block px-4 py-2 text-sm text-gray-800 hover:bg-gray-50 hover:text-blue-600 hover:font-semibold"
-                          onClick={() => setIsSubstituteMenuOpen(false)}
                         >
                           코드 목록
                         </Link>
                       </div>
                     </div>
+                    <div
+                      className="fixed inset-0 z-10"
+                      aria-hidden
+                      onClick={() => setIsSubstituteMenuOpen(false)}
+                    />
                   </>
                 )}
               </div>
@@ -471,7 +451,7 @@ export default function Header() {
           <div className="flex items-center space-x-4">
             {!loading && isAuthenticated && canShowAdminEntry && !isAuthPage && (
               <Link
-                href="/admin/login"
+                href={adminEntryHref}
                 className="hidden sm:inline-flex items-center rounded-md border border-white/50 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/20"
               >
                 관리자
@@ -506,12 +486,7 @@ export default function Header() {
                 {/* 사용자 드롭다운 메뉴 */}
                 {isUserMenuOpen && (
                   <>
-                    {/* 배경 클릭 시 메뉴 닫기 */}
-                    <div
-                      className="fixed inset-0 z-10"
-                      onClick={() => setIsUserMenuOpen(false)}
-                    />
-                    <div className="absolute right-0 mt-2 w-[min(16rem,calc(100vw-1.5rem))] sm:w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-[60]">
+                    <div className="absolute right-0 mt-2 w-[min(16rem,calc(100vw-1.5rem))] sm:w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-20">
                       <div className="p-4 border-b border-gray-200">
                         <div className="flex items-center justify-between">
                           <h3 className="font-semibold text-gray-900">{getDisplayUserName()}</h3>
@@ -530,14 +505,12 @@ export default function Header() {
                         <Link
                           href="/inquiry"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          onClick={() => setIsUserMenuOpen(false)}
                         >
                           문의하기
                         </Link>
                         <Link
                           href="/mypage"
                           className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                          onClick={() => setIsUserMenuOpen(false)}
                         >
                           회원정보 관리
                         </Link>
@@ -551,6 +524,11 @@ export default function Header() {
                         </button>
                       </div>
                     </div>
+                    <div
+                      className="fixed inset-0 z-10"
+                      aria-hidden
+                      onClick={() => setIsUserMenuOpen(false)}
+                    />
                   </>
                 )}
               </div>
@@ -654,21 +632,6 @@ export default function Header() {
                 onClick={() => setIsMobileMenuOpen(false)}
               >
                 생산요청 현황
-              </Link>
-              <Link
-                href="/production/calendar"
-                className={`mx-2 px-4 py-2.5 rounded-lg text-[15px] font-medium transition-colors ${
-                  isActivePath('/production/calendar')
-                    ? 'bg-blue-700 text-white'
-                    : 'text-white/95 hover:bg-blue-600'
-                }`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  alert('사용 중단된 메뉴입니다.');
-                  setIsMobileMenuOpen(false);
-                }}
-              >
-                생산일정 캘린더
               </Link>
 
               <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-blue-100/90">성적서관리</p>

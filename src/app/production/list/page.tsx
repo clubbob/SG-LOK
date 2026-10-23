@@ -2,21 +2,19 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { CertificateProduct, ProductionRequest, ProductionRequestStatus, ProductionSalesRegion } from '@/types';
-import { ProductionRequestProductLines } from '@/components/production/ProductionRequestProductLines';
 import { ProductionRequestStatusSection } from '@/components/production/ProductionRequestStatusSection';
 import {
   expandProductionRequestsToListRows,
+  formatProductionCompletionRoundDisplay,
   formatProductionReasonLabel,
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
-import { removeProductionRequestProductLine } from '@/lib/production/removeProductionRequestProductLine';
 import {
   EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
   USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER,
@@ -30,7 +28,7 @@ const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   pending_review: '승인 대기중',
   confirmed: '진행중',
   in_progress: '진행중',
-  completed: '생산 완료',
+  completed: '생산완료',
   cancelled: '취소',
 };
 
@@ -42,20 +40,11 @@ const STATUS_COLORS: Record<ProductionRequestStatus, string> = {
   cancelled: 'bg-red-500 text-white',
 };
 
-const getDisplayStatusLabel = (request: ProductionRequest): string => {
-  if (request.cleaningEpCompletionDate) return '세정/EP 완료';
-  return STATUS_LABELS[request.status];
-};
+const getListRowDisplayStatusLabel = (listRow: ProductionRequestListRow): string =>
+  STATUS_LABELS[listRow.lineStatus];
 
-const getDisplayStatusColor = (request: ProductionRequest): string => {
-  if (request.cleaningEpCompletionDate) return 'bg-teal-600 text-white';
-  return STATUS_COLORS[request.status];
-};
-
-const getListRowDisplayStatusLabel = (listRow: ProductionRequestListRow): string => {
-  if (listRow.request.cleaningEpCompletionDate) return '세정/EP 완료';
-  return STATUS_LABELS[listRow.lineStatus];
-};
+const getListRowDisplayStatusColor = (listRow: ProductionRequestListRow): string =>
+  STATUS_COLORS[listRow.lineStatus];
 
 function ProductionRequestListPageContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
@@ -67,9 +56,7 @@ function ProductionRequestListPageContent() {
   const [displayedListRows, setDisplayedListRows] = useState<ProductionRequestListRow[]>([]);
   const itemsPerPage = 10; // 명시적으로 10개로 설정
   const [currentPage, setCurrentPage] = useState(1);
-  const [deletingRowKey, setDeletingRowKey] = useState<string | null>(null);
-  const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string; adminMemo?: string } | null>(null);
-  const [selectedRequest, setSelectedRequest] = useState<ProductionRequest | null>(null);
+  const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<ProductionRequestPanelFilters>(() => ({
     ...EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
@@ -113,7 +100,7 @@ function ProductionRequestListPageContent() {
     }
   }, [loading, isAuthenticated, router]);
 
-  // 생산요청 목록: 로그인 사용자 본인이 등록한 요청만 조회
+  // 생산요청 목록: 로그인 사용자 — 전체 생산요청 조회 (조회 전용)
   useEffect(() => {
     if (!isAuthenticated) {
       setLoadingRequests(false);
@@ -127,9 +114,9 @@ function ProductionRequestListPageContent() {
 
     setLoadingRequests(true);
     setError('');
-    
+
     const requestsRef = collection(db, 'productionRequests');
-    const q = query(requestsRef, where('userId', '==', userProfile.id));
+    const q = query(requestsRef, orderBy('createdAt', 'desc'));
     
     const unsubscribeSnapshot = onSnapshot(
       q,
@@ -172,7 +159,7 @@ function ProductionRequestListPageContent() {
             plannedCompletionDate: data.plannedCompletionDate?.toDate(),
             actualStartDate: data.actualStartDate?.toDate(),
             actualCompletionDate: data.actualCompletionDate?.toDate(),
-            cleaningEpCompletionDate: data.cleaningEpCompletionDate?.toDate(),
+            actualCompletionQuantity: data.actualCompletionQuantity,
             plannedQuantity: data.plannedQuantity,
             priority: data.priority,
             memo: data.memo || '',
@@ -241,35 +228,10 @@ function ProductionRequestListPageContent() {
 
   const totalPages = Math.ceil(filteredListRows.length / itemsPerPage);
 
-  const handleEdit = (listRow: ProductionRequestListRow) => {
-    router.push(
-      `/production/request?id=${listRow.request.id}&productIndex=${listRow.productIndex}`
-    );
-  };
-
-  const handleDeleteLine = async (listRow: ProductionRequestListRow) => {
-    const request = listRow.request;
-    if (userProfile?.id && request.userId !== userProfile.id) {
-      return;
-    }
-    const multiProduct = (request.products?.length ?? 0) > 1;
-    const confirmMessage = multiProduct
-      ? `"${listRow.productName}" 제품만 삭제하시겠습니까? (다른 제품은 유지됩니다)`
-      : `정말로 "${listRow.productName}" 생산요청을 삭제하시겠습니까?`;
-    if (!confirm(confirmMessage)) {
-      return;
-    }
-
-    setDeletingRowKey(listRow.rowKey);
-    try {
-      await removeProductionRequestProductLine(listRow);
-    } catch (error) {
-      console.error('생산요청 삭제 오류:', error);
-      const firebaseError = error as { code?: string; message?: string };
-      setError(`삭제에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
-    } finally {
-      setDeletingRowKey(null);
-    }
+  const handleRefresh = () => {
+    setLoadingRequests(true);
+    setError('');
+    window.location.reload();
   };
 
   // 엑셀(CSV) 다운로드
@@ -298,8 +260,10 @@ function ProductionRequestListPageContent() {
       '비고',
       '생산계획수량',
       '완료예정일',
-      '생산완료일',
-      '세정/EP 완료일',
+      '1차 완료일 (수량)',
+      '2차 완료일 (수량)',
+      '3차 완료일 (수량)',
+      '생산완료일 (수량)',
       '상태',
     ];
 
@@ -314,11 +278,11 @@ function ProductionRequestListPageContent() {
       const requestedDateStr = listRow.requestedCompletionDate
         ? formatDateShort(listRow.requestedCompletionDate)
         : '';
-      const plannedDateStr = request.plannedCompletionDate ? formatDateShort(request.plannedCompletionDate) : '';
-      const actualDateStr = request.actualCompletionDate ? formatDateShort(request.actualCompletionDate) : '';
-      const cleaningEpDateStr = request.cleaningEpCompletionDate
-        ? formatDateShort(request.cleaningEpCompletionDate)
+      const plannedDateStr = listRow.plannedCompletionDate
+        ? formatDateShort(listRow.plannedCompletionDate)
         : '';
+      const actualDateStr = formatProductionCompletionRoundDisplay(listRow.actualCompletion);
+      const actualDateStrForCsv = actualDateStr === '-' ? '' : actualDateStr;
       const requestDateStr = request.requestDate ? formatDateShort(request.requestDate) : '';
 
       const cols = [
@@ -333,10 +297,12 @@ function ProductionRequestListPageContent() {
         listRow.requestQuantity ?? '',
         requestedDateStr,
         listRow.remark || '',
-        request.plannedQuantity ?? '',
+        listRow.plannedQuantity ?? '',
         plannedDateStr,
-        actualDateStr,
-        cleaningEpDateStr,
+        formatProductionCompletionRoundDisplay(listRow.completionRounds[0] ?? {}),
+        formatProductionCompletionRoundDisplay(listRow.completionRounds[1] ?? {}),
+        formatProductionCompletionRoundDisplay(listRow.completionRounds[2] ?? {}),
+        actualDateStrForCsv,
         statusLabel,
       ];
 
@@ -376,21 +342,20 @@ function ProductionRequestListPageContent() {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 bg-gray-50">
-        <div className="w-full max-w-[95%] mx-auto px-3 sm:px-6 lg:px-8 py-6 sm:py-12">
+        <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-8 py-6 sm:py-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
             <div className="min-w-0">
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">생산요청 현황</h1>
-              <p className="text-gray-600 mt-2 text-sm sm:text-base">생산요청 현황을 확인할 수 있습니다</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">생산요청 현황</h1>
+              <p className="text-gray-600 mt-2 text-sm sm:text-base">
+                전체 생산요청 현황을 확인할 수 있습니다 (조회 전용)
+              </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto sm:flex-shrink-0">
               <Button
                 variant="outline"
                 size="sm"
                 className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap"
-                onClick={() => {
-                  // 실시간 업데이트가 작동 중이지만, 사용자 요청에 따라 버튼 제공
-                  window.location.reload();
-                }}
+                onClick={handleRefresh}
                 disabled={loadingRequests}
               >
                 <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -410,14 +375,6 @@ function ProductionRequestListPageContent() {
                 </svg>
                 엑셀 다운로드
               </Button>
-              <Link href="/production/request" className="w-full sm:w-auto">
-                <Button size="sm" className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap">
-                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  새 생산요청 등록
-                </Button>
-              </Link>
             </div>
           </div>
           
@@ -445,22 +402,12 @@ function ProductionRequestListPageContent() {
               <svg className="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">등록된 생산요청이 없습니다</h3>
-              <p className="text-gray-600 mb-6">새 생산요청을 등록해보세요</p>
-              <Link href="/production/request">
-                <Button>
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  생산요청 등록하기
-                </Button>
-              </Link>
+              <h3 className="text-sm font-normal text-gray-500 mb-2">등록된 생산요청이 없습니다</h3>
             </div>
           ) : (
             <>
               <div className="space-y-3">
                 {displayedListRows.map((listRow, idx) => {
-                  const request = listRow.request;
                   const itemsPerPageValue = 10;
                   const reversedIdx = displayedListRows.length - 1 - idx;
                   const absoluteIndex = (currentPage - 1) * itemsPerPageValue + reversedIdx;
@@ -471,40 +418,16 @@ function ProductionRequestListPageContent() {
                       listRow={listRow}
                       rowNumber={rowNumber}
                       statusBadge={
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDisplayStatusColor(request)}`}>
-                          {getDisplayStatusLabel(request)}
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getListRowDisplayStatusColor(listRow)}`}
+                        >
+                          {getListRowDisplayStatusLabel(listRow)}
                         </span>
-                      }
-                      actions={
-                        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-                          {userProfile && request.userId === userProfile.id && request.status === 'pending_review' ? (
-                            <>
-                              <button
-                                onClick={() => handleEdit(listRow)}
-                                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                                disabled={deletingRowKey === listRow.rowKey}
-                              >
-                                수정
-                              </button>
-                              <span className="text-gray-300">|</span>
-                              <button
-                                onClick={() => handleDeleteLine(listRow)}
-                                className="text-red-600 hover:text-red-800 text-sm font-medium"
-                                disabled={deletingRowKey === listRow.rowKey}
-                              >
-                                {deletingRowKey === listRow.rowKey ? '삭제 중...' : '삭제'}
-                              </button>
-                            </>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </div>
                       }
                       onOpenMemo={() =>
                         setSelectedMemo({
-                          id: request.id,
-                          memo: listRow.remark || request.memo || '',
-                          adminMemo: request.adminMemo,
+                          id: listRow.request.id,
+                          memo: listRow.remark || listRow.request.memo || '',
                         })
                       }
                     />
@@ -584,115 +507,6 @@ function ProductionRequestListPageContent() {
         </div>
       </main>
       <Footer />
-
-      {/* 생산요청 상세 모달 */}
-      {selectedRequest && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setSelectedRequest(null)}>
-          <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
-              <h3 className="text-lg font-semibold text-gray-900">생산요청 상세</h3>
-              <button
-                onClick={() => setSelectedRequest(null)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="px-6 py-4 overflow-y-auto flex-1">
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">제품명</label>
-                    <ProductionRequestProductLines request={selectedRequest} field="name" nameClassName="text-sm text-gray-900" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">제품코드</label>
-                    <ProductionRequestProductLines request={selectedRequest} field="code" codeClassName="text-sm text-gray-900" />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">생산목적</label>
-                    <p className="text-sm text-gray-900">
-                      {formatProductionReasonLabel(selectedRequest.productionReason)}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">고객사명</label>
-                    <p className="text-sm text-gray-900">{selectedRequest.customerName || '-'}</p>
-                  </div>
-                  {selectedRequest.productionReason === 'order' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">수주수량</label>
-                      <p className="text-sm text-gray-900">
-                        {selectedRequest.orderQuantity
-                          ? selectedRequest.orderQuantity.toLocaleString()
-                          : '-'}
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">요청수량</label>
-                    <p className="text-sm text-gray-900">{selectedRequest.quantity.toLocaleString()}</p>
-                  </div>
-                  {selectedRequest.plannedQuantity !== undefined && selectedRequest.plannedQuantity !== null && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">생산계획수량</label>
-                      <p className="text-sm text-gray-900">{selectedRequest.plannedQuantity.toLocaleString()}</p>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">요청일</label>
-                    <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.requestDate)}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">완료요청일</label>
-                    <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.requestedCompletionDate)}</p>
-                  </div>
-                  {selectedRequest.plannedCompletionDate && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">완료예정일</label>
-                      <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.plannedCompletionDate)}</p>
-                    </div>
-                  )}
-                  {selectedRequest.actualCompletionDate && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">생산완료일</label>
-                      <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.actualCompletionDate)}</p>
-                    </div>
-                  )}
-                  {selectedRequest.cleaningEpCompletionDate && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">세정/EP 완료일</label>
-                      <p className="text-sm text-gray-900">{formatDateShort(selectedRequest.cleaningEpCompletionDate)}</p>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">상태</label>
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDisplayStatusColor(selectedRequest)}`}>
-                      {getDisplayStatusLabel(selectedRequest)}
-                    </span>
-                  </div>
-                </div>
-                {selectedRequest.memo && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">비고</label>
-                    <p className="text-sm text-gray-900 whitespace-pre-wrap bg-gray-50 p-3 rounded-md">{selectedRequest.memo}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
-              <Button
-                variant="primary"
-                onClick={() => setSelectedRequest(null)}
-              >
-                닫기
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 비고 상세 모달 */}
       {selectedMemo && (

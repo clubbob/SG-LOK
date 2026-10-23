@@ -26,15 +26,11 @@ const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   cancelled: '취소',
 };
 
-const getDisplayStatusLabel = (request: { status: ProductionRequestStatus; cleaningEpCompletionDate?: Date }): string => {
-  if (request.cleaningEpCompletionDate) return '세정/EP 완료';
-  return STATUS_LABELS[request.status];
-};
+const getDisplayStatusLabel = (request: { status: ProductionRequestStatus }): string =>
+  STATUS_LABELS[request.status];
 
-const getDisplayStatusColor = (request: { status: ProductionRequestStatus; cleaningEpCompletionDate?: Date }): string => {
-  if (request.cleaningEpCompletionDate) return 'bg-teal-600';
-  return STATUS_COLORS[request.status];
-};
+const getDisplayStatusColor = (request: { status: ProductionRequestStatus }): string =>
+  STATUS_COLORS[request.status];
 
 const PRODUCTION_STATUS_LABELS: Record<string, string> = {
   production_waiting: '진행중',
@@ -612,10 +608,6 @@ function ProductionCalendarContent() {
                   <div className="flex items-center gap-2">
                     <div className={`w-4 h-4 rounded ${STATUS_COLORS['completed']}`}></div>
                     <span className="text-sm text-gray-700">{STATUS_LABELS['completed']}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded bg-teal-600"></div>
-                    <span className="text-sm text-gray-700">세정/EP 완료</span>
                   </div>
                 </div>
               </div>

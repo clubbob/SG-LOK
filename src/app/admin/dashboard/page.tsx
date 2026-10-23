@@ -5,6 +5,10 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { collection, doc, query, where, onSnapshot, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import {
+  productionRequestForListStatsFromFirestore,
+  summarizeProductionRequestStats,
+} from '@/lib/production/productionRequestDisplay';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -151,27 +155,15 @@ export default function AdminPage() {
     const unsubscribeProduction = onSnapshot(
       productionRequestsRef,
       (snapshot) => {
-        let pendingReviewCount = 0;
-        let inProgressCount = 0;
-        let completedCount = 0;
-
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          const status = data.status;
-          if (status === 'pending_review') {
-            pendingReviewCount++;
-          } else if (status === 'confirmed' || status === 'in_progress') {
-            inProgressCount++;
-          } else if (status === 'completed') {
-            completedCount++;
-          }
-        });
-
+        const requests = snapshot.docs.map((doc) =>
+          productionRequestForListStatsFromFirestore(doc.id, doc.data())
+        );
+        const stats = summarizeProductionRequestStats(requests);
         setProductionStats({
-          total: snapshot.size,
-          pendingReview: pendingReviewCount,
-          inProgress: inProgressCount,
-          completed: completedCount,
+          total: stats.total,
+          pendingReview: stats.pendingReview,
+          inProgress: stats.inProgress,
+          completed: stats.completed,
         });
       },
       (error) => {
@@ -521,7 +513,7 @@ export default function AdminPage() {
               <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-3 border border-blue-200 hover:shadow-md transition-all hover:scale-[1.02]">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-gray-600 mb-0.5">전체 요청</p>
+                    <p className="text-xs font-medium text-gray-600 mb-0.5">요청 제품</p>
                     <p className="text-2xl font-bold text-gray-900">{productionStats.total}</p>
                   </div>
                   <div className="bg-blue-500 rounded-lg p-2">

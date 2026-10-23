@@ -11,6 +11,7 @@ import {
   type AdminNotification,
 } from '@/lib/adminNotifications';
 import { Button } from '@/components/ui';
+import { readResponseJsonSafe } from '@/lib/utils';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -19,10 +20,14 @@ const checkAdminAuth = (): { ok: boolean; uid?: string } => {
   if (typeof window === 'undefined') return { ok: false };
   
   const sessionData = localStorage.getItem(ADMIN_SESSION_KEY);
-  if (!sessionData) return { ok: false };
+  if (!sessionData?.trim()) return { ok: false };
   
   try {
-    const session = JSON.parse(sessionData);
+    const session = JSON.parse(sessionData) as {
+      expiresAt?: number;
+      authenticated?: boolean;
+      uid?: string;
+    };
     const now = new Date().getTime();
     
     if (now > session.expiresAt) {
@@ -34,6 +39,7 @@ const checkAdminAuth = (): { ok: boolean; uid?: string } => {
       uid: typeof session.uid === 'string' ? session.uid : undefined,
     };
   } catch {
+    localStorage.removeItem(ADMIN_SESSION_KEY);
     return { ok: false };
   }
 };
@@ -252,6 +258,11 @@ export default function AdminLayout({
     setPublicHomeUrl(resolvePublicHomeUrl());
   }, []);
 
+  useEffect(() => {
+    setOpenMenuId(null);
+    setMobileNavOpen(false);
+  }, [pathname]);
+
   // 로그인 페이지는 레이아웃 적용 안 함
   const isLoginPage = pathname === '/admin/login' || pathname?.startsWith('/admin/login');
 
@@ -375,7 +386,7 @@ export default function AdminLayout({
     const loadNotifications = async () => {
       try {
         const res = await fetch(`/api/admin/notifications?uid=${encodeURIComponent(adminUid)}`);
-        const data = await res.json();
+        const data = await readResponseJsonSafe<{ items?: unknown[] }>(res);
         const items = Array.isArray(data?.items) ? data.items : [];
         if (cancelled) return;
         sessionStorage.removeItem(ADMIN_NOTIF_CHECK_KEY);
@@ -511,12 +522,7 @@ export default function AdminLayout({
                       {open && (
                         <>
                           <div
-                            className="fixed inset-0 z-[60]"
-                            onClick={() => setOpenMenuId(null)}
-                          />
-                          <div
                             className="absolute left-0 top-full mt-1 w-52 rounded-lg bg-white shadow-lg border border-gray-200 z-[70]"
-                            onClick={(e) => e.stopPropagation()}
                           >
                             <div className="py-2">
                               {item.subItems.map((subItem) => (
@@ -528,13 +534,17 @@ export default function AdminLayout({
                                       ? 'text-blue-600 font-semibold'
                                       : 'text-gray-800'
                                   }`}
-                                  onClick={() => setOpenMenuId(null)}
                                 >
                                   {subItem.label}
                                 </Link>
                               ))}
                             </div>
                           </div>
+                          <div
+                            className="fixed inset-0 z-[60]"
+                            aria-hidden
+                            onClick={() => setOpenMenuId(null)}
+                          />
                         </>
                       )}
                     </div>

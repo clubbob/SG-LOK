@@ -1,4 +1,4 @@
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, type DocumentData } from 'firebase/firestore';
 import {
   CertificateProduct,
   ProductionReason,
@@ -30,8 +30,179 @@ export type ProductionRequestListRow = {
   lineStatus: ProductionRequestStatus;
   plannedQuantity: number | null;
   plannedCompletionDate?: Date;
+  /** 1~3차 부분 완료 (날짜·수량) */
+  completionRounds: ProductionCompletionRound[];
+  actualCompletion: ProductionCompletionRound;
   remark?: string;
 };
+
+export type ProductionCompletionRound = {
+  date?: Date;
+  quantity?: number | null;
+};
+
+export const PRODUCTION_COMPLETION_ROUND_COUNT = 3;
+
+const COMPLETION_ROUND_FIELD_NAMES: {
+  date: keyof CertificateProduct;
+  quantity: keyof CertificateProduct;
+}[] = [
+  { date: 'completionRound1Date', quantity: 'completionRound1Quantity' },
+  { date: 'completionRound2Date', quantity: 'completionRound2Quantity' },
+  { date: 'completionRound3Date', quantity: 'completionRound3Quantity' },
+];
+
+const COMPLETION_ROUND_REQUEST_KEYS: {
+  date: keyof ProductionRequest;
+  quantity: keyof ProductionRequest;
+}[] = [
+  { date: 'completionRound1Date', quantity: 'completionRound1Quantity' },
+  { date: 'completionRound2Date', quantity: 'completionRound2Quantity' },
+  { date: 'completionRound3Date', quantity: 'completionRound3Quantity' },
+];
+
+export function lineCompletionRound(
+  product: CertificateProduct | undefined,
+  request: ProductionRequest,
+  multiProduct: boolean,
+  roundIndex: number
+): ProductionCompletionRound {
+  const keys = COMPLETION_ROUND_FIELD_NAMES[roundIndex];
+  const reqKeys = COMPLETION_ROUND_REQUEST_KEYS[roundIndex];
+  if (!keys || !reqKeys) return {};
+
+  const fromProductDate = firestoreDateToDate(product?.[keys.date]);
+  const fromProductQty = product?.[keys.quantity];
+  const quantity =
+    typeof fromProductQty === 'number' && !Number.isNaN(fromProductQty) ? fromProductQty : null;
+
+  if (fromProductDate != null || quantity != null) {
+    return { date: fromProductDate, quantity };
+  }
+
+  if (!multiProduct) {
+    const fromReqDate = firestoreDateToDate(request[reqKeys.date]);
+    const fromReqQty = request[reqKeys.quantity];
+    const reqQuantity =
+      typeof fromReqQty === 'number' && !Number.isNaN(fromReqQty) ? fromReqQty : null;
+    return { date: fromReqDate, quantity: reqQuantity };
+  }
+
+  return {};
+}
+
+export function formatProductionCompletionRoundDisplay(round: ProductionCompletionRound): string {
+  const hasDate = round.date != null && !Number.isNaN(round.date.getTime());
+  const hasQty = round.quantity != null;
+  if (!hasDate && !hasQty) return '-';
+  const dateStr = hasDate ? formatDateShort(round.date!) : '-';
+  const qtyStr = hasQty ? round.quantity!.toLocaleString('ko-KR') : '-';
+  return `${dateStr} (${qtyStr})`;
+}
+
+export type ProductionCompletionRoundFormFields = {
+  completionRound1Date: string;
+  completionRound1Quantity: string;
+  completionRound2Date: string;
+  completionRound2Quantity: string;
+  completionRound3Date: string;
+  completionRound3Quantity: string;
+};
+
+export const EMPTY_COMPLETION_ROUND_FORM: ProductionCompletionRoundFormFields = {
+  completionRound1Date: '',
+  completionRound1Quantity: '',
+  completionRound2Date: '',
+  completionRound2Quantity: '',
+  completionRound3Date: '',
+  completionRound3Quantity: '',
+};
+
+export function completionRoundFormFromLine(
+  product: CertificateProduct | undefined,
+  request: ProductionRequest,
+  multiProduct: boolean
+): ProductionCompletionRoundFormFields {
+  const out = { ...EMPTY_COMPLETION_ROUND_FORM };
+  for (let i = 0; i < PRODUCTION_COMPLETION_ROUND_COUNT; i++) {
+    const round = lineCompletionRound(product, request, multiProduct, i);
+    const n = i + 1;
+    const dateKey = `completionRound${n}Date` as keyof ProductionCompletionRoundFormFields;
+    const qtyKey = `completionRound${n}Quantity` as keyof ProductionCompletionRoundFormFields;
+    out[dateKey] = round.date ? firestoreValueToDateInputString(round.date) : '';
+    out[qtyKey] =
+      round.quantity != null && !Number.isNaN(round.quantity) ? String(round.quantity) : '';
+  }
+  return out;
+}
+
+function applySingleCompletionRoundToProduct(
+  product: CertificateProduct,
+  round: 1 | 2 | 3,
+  dateStr: string,
+  qtyStr: string
+): void {
+  const dateKey =
+    round === 1 ? 'completionRound1Date' : round === 2 ? 'completionRound2Date' : 'completionRound3Date';
+  const qtyKey =
+    round === 1
+      ? 'completionRound1Quantity'
+      : round === 2
+        ? 'completionRound2Quantity'
+        : 'completionRound3Quantity';
+
+  if (dateStr) {
+    const d = new Date(dateStr);
+    if (!Number.isNaN(d.getTime())) {
+      product[dateKey] = d;
+    } else {
+      delete product[dateKey];
+    }
+  } else {
+    delete product[dateKey];
+  }
+
+  if (qtyStr) {
+    const q = parseInt(qtyStr, 10);
+    if (!Number.isNaN(q) && q >= 0) {
+      product[qtyKey] = q;
+    } else {
+      delete product[qtyKey];
+    }
+  } else {
+    delete product[qtyKey];
+  }
+}
+
+export function applyCompletionRoundFormToProduct(
+  product: CertificateProduct,
+  form: ProductionCompletionRoundFormFields
+): CertificateProduct {
+  const next: CertificateProduct = { ...product };
+  for (let i = 0; i < PRODUCTION_COMPLETION_ROUND_COUNT; i++) {
+    const n = (i + 1) as 1 | 2 | 3;
+    const dateStr = form[`completionRound${n}Date` as keyof ProductionCompletionRoundFormFields]?.trim() ?? '';
+    const qtyStr =
+      form[`completionRound${n}Quantity` as keyof ProductionCompletionRoundFormFields]?.trim() ?? '';
+    applySingleCompletionRoundToProduct(next, n, dateStr, qtyStr);
+  }
+  return next;
+}
+
+export function completionRoundRootPatchFromProduct(
+  product: CertificateProduct
+): Record<string, Timestamp | number | null> {
+  const patch: Record<string, Timestamp | number | null> = {};
+  for (const keys of COMPLETION_ROUND_FIELD_NAMES) {
+    const dateVal = product[keys.date];
+    const d = dateVal instanceof Date ? dateVal : firestoreDateToDate(dateVal);
+    patch[keys.date] = d && !Number.isNaN(d.getTime()) ? Timestamp.fromDate(d) : null;
+    const qty = product[keys.quantity];
+    patch[keys.quantity] =
+      typeof qty === 'number' && !Number.isNaN(qty) ? qty : null;
+  }
+  return patch;
+}
 
 export function lineProductionReason(
   product: CertificateProduct | undefined,
@@ -111,22 +282,23 @@ export function buildProductionRequestRegistrationFields(
     label: '국내/해외',
     value: formatProductionSalesRegionLabel(listRow.salesRegion),
   });
-  if (isOrder) {
-    fields.push({ label: '고객사명', value: listRow.customerName?.trim() || '-' });
-  }
+  fields.push({
+    label: '고객사명',
+    value: isOrder ? listRow.customerName?.trim() || '-' : '',
+  });
   fields.push({
     label: '제품군',
     value: lineProductGroup(product) || '-',
   });
   fields.push({ label: '제품명', value: listRow.productName || '-' });
   fields.push({ label: '제품코드', value: listRow.productCode || '-' });
-  if (isOrder) {
-    fields.push({
-      label: '수주수량',
-      value:
-        listRow.orderQuantity != null ? listRow.orderQuantity.toLocaleString('ko-KR') : '-',
-    });
-  }
+  fields.push({
+    label: '수주수량',
+    value:
+      isOrder && listRow.orderQuantity != null
+        ? listRow.orderQuantity.toLocaleString('ko-KR')
+        : '',
+  });
   fields.push({
     label: '생산요청수량',
     value:
@@ -160,7 +332,34 @@ export function normalizeProductionRequestStatus(status: unknown): ProductionReq
   return 'pending_review';
 }
 
-/** 확정·진행·완료·취소 이후에는 제품·요청 내용 수정 불가 */
+/** 승인·저장 시 제품 배열 병합 — 줄별 lineStatus·계획 필드 유지 */
+export function mergeProductionProductsPreservingLineMeta(
+  previous: CertificateProduct[],
+  fromLines: CertificateProduct[]
+): CertificateProduct[] {
+  return fromLines.map((row, i) => {
+    const old = previous[i];
+    if (!old) return row;
+    const merged: CertificateProduct = {
+      ...old,
+      ...row,
+      lineStatus: old.lineStatus ?? row.lineStatus,
+      plannedQuantity: old.plannedQuantity ?? row.plannedQuantity,
+      plannedCompletionDate: old.plannedCompletionDate ?? row.plannedCompletionDate,
+    };
+    if (old.completionRound1Date != null) merged.completionRound1Date = old.completionRound1Date;
+    if (old.completionRound1Quantity != null) merged.completionRound1Quantity = old.completionRound1Quantity;
+    if (old.completionRound2Date != null) merged.completionRound2Date = old.completionRound2Date;
+    if (old.completionRound2Quantity != null) merged.completionRound2Quantity = old.completionRound2Quantity;
+    if (old.completionRound3Date != null) merged.completionRound3Date = old.completionRound3Date;
+    if (old.completionRound3Quantity != null) merged.completionRound3Quantity = old.completionRound3Quantity;
+    if (old.actualCompletionDate != null) merged.actualCompletionDate = old.actualCompletionDate;
+    if (old.actualCompletionQuantity != null) merged.actualCompletionQuantity = old.actualCompletionQuantity;
+    return merged;
+  });
+}
+
+/** 확정·진행·완료·취소 이후에는 제품·요청 내용 수정 불가 (사용자 화면) */
 export function isProductionRequestContentEditable(status?: string): boolean {
   if (status === '' || status == null) return true;
   return normalizeProductionRequestStatus(status) === 'pending_review';
@@ -212,19 +411,99 @@ function productLineCompletionDate(
   return firestoreDateToDate(product.requestedCompletionDate) ?? request.requestedCompletionDate;
 }
 
+export function lineActualCompletion(
+  product: CertificateProduct | undefined,
+  productIndex: number,
+  request: ProductionRequest,
+  multiProduct: boolean
+): ProductionCompletionRound {
+  const fromProductDate = firestoreDateToDate(product?.actualCompletionDate);
+  const fromProductQty = product?.actualCompletionQuantity;
+  const productQty =
+    typeof fromProductQty === 'number' && !Number.isNaN(fromProductQty) ? fromProductQty : null;
+
+  if (fromProductDate != null || productQty != null) {
+    return { date: fromProductDate, quantity: productQty };
+  }
+
+  if (!multiProduct) {
+    return {
+      date: firestoreDateToDate(request.actualCompletionDate),
+      quantity:
+        typeof request.actualCompletionQuantity === 'number' &&
+        !Number.isNaN(request.actualCompletionQuantity)
+          ? request.actualCompletionQuantity
+          : null,
+    };
+  }
+
+  const products = request.products ?? [];
+  const docDate = firestoreDateToDate(request.actualCompletionDate);
+  if (docDate && products.some((p) => firestoreDateToDate(p.actualCompletionDate))) {
+    return {};
+  }
+  if (docDate) {
+    const completedLineIndexes = products
+      .map((p, i) => (normalizeProductionRequestStatus(p.lineStatus ?? '') === 'completed' ? i : -1))
+      .filter((i) => i >= 0);
+    if (completedLineIndexes.length === 1 && completedLineIndexes[0] === productIndex) {
+      return {
+        date: docDate,
+        quantity:
+          typeof request.actualCompletionQuantity === 'number' &&
+          !Number.isNaN(request.actualCompletionQuantity)
+            ? request.actualCompletionQuantity
+            : null,
+      };
+    }
+  }
+
+  return {};
+}
+
 /** 다중 제품 문서에서 줄별 상태 (미승인 줄은 대기중) */
 export function resolveProductionLineStatus(
   product: CertificateProduct | undefined,
+  productIndex: number,
   request: ProductionRequest,
   multiProduct: boolean
 ): ProductionRequestStatus {
+  if (lineActualCompletion(product, productIndex, request, multiProduct).date) {
+    return 'completed';
+  }
   if (product?.lineStatus) {
-    return normalizeProductionRequestStatus(product.lineStatus);
+    let status = normalizeProductionRequestStatus(product.lineStatus);
+    if (multiProduct && status === 'completed') {
+      status = 'in_progress';
+    }
+    return status;
   }
   if (multiProduct && request.status === 'pending_review') {
     return 'pending_review';
   }
-  return normalizeProductionRequestStatus(request.status);
+  const docStatus = normalizeProductionRequestStatus(request.status);
+  if (!multiProduct && docStatus === 'completed') {
+    return 'completed';
+  }
+  return docStatus;
+}
+
+export function deriveProductionRequestStatusFromProducts(
+  products: CertificateProduct[]
+): ProductionRequestStatus {
+  if (!products.length) return 'pending_review';
+
+  const lineStatuses = products.map((p) => {
+    if (firestoreDateToDate(p.actualCompletionDate)) return 'completed' as const;
+    return normalizeProductionRequestStatus(p.lineStatus ?? 'pending_review');
+  });
+
+  if (lineStatuses.every((s) => s === 'completed')) return 'completed';
+  if (lineStatuses.some((s) => s === 'pending_review')) return 'pending_review';
+  if (lineStatuses.some((s) => s === 'confirmed' || s === 'in_progress')) {
+    return 'in_progress';
+  }
+  return 'confirmed';
 }
 
 function linePlannedQuantity(
@@ -329,9 +608,13 @@ export function expandProductionRequestsToListRows(
             reason === 'order' && product.orderQuantity != null ? product.orderQuantity : null,
           requestQuantity: product.quantity != null ? product.quantity : null,
           requestedCompletionDate: productLineCompletionDate(product, request),
-          lineStatus: resolveProductionLineStatus(product, request, multiProduct),
+          lineStatus: resolveProductionLineStatus(product, productIndex, request, multiProduct),
           plannedQuantity: linePlannedQuantity(product, request, multiProduct),
           plannedCompletionDate: linePlannedCompletionDate(product, request, multiProduct),
+          completionRounds: Array.from({ length: PRODUCTION_COMPLETION_ROUND_COUNT }, (_, i) =>
+            lineCompletionRound(product, request, multiProduct, i)
+          ),
+          actualCompletion: lineActualCompletion(product, productIndex, request, multiProduct),
           remark: product.remark?.trim() || (productIndex === 0 ? request.memo : undefined),
         });
       });
@@ -349,14 +632,99 @@ export function expandProductionRequestsToListRows(
           request.productionReason === 'order' ? request.orderQuantity ?? null : null,
         requestQuantity: request.quantity ?? null,
         requestedCompletionDate: request.requestedCompletionDate,
-        lineStatus: normalizeProductionRequestStatus(request.status),
+        lineStatus: resolveProductionLineStatus(undefined, 0, request, false),
         plannedQuantity: request.plannedQuantity ?? null,
         plannedCompletionDate: request.plannedCompletionDate,
+        completionRounds: Array.from({ length: PRODUCTION_COMPLETION_ROUND_COUNT }, (_, i) =>
+          lineCompletionRound(undefined, request, false, i)
+        ),
+        actualCompletion: lineActualCompletion(undefined, 0, request, false),
         remark: request.memo,
       });
     }
   }
   return rows;
+}
+
+export type ProductionDashboardStats = {
+  total: number;
+  pendingReview: number;
+  inProgress: number;
+  completed: number;
+};
+
+/** 목록·대시보드와 동일: 제품(목록 행) 단위 상태 집계 */
+export function summarizeProductionListRowStats(
+  rows: ProductionRequestListRow[]
+): ProductionDashboardStats {
+  let pendingReview = 0;
+  let inProgress = 0;
+  let completed = 0;
+
+  for (const row of rows) {
+    const status = row.lineStatus;
+    if (status === 'pending_review') {
+      pendingReview++;
+    } else if (status === 'confirmed' || status === 'in_progress') {
+      inProgress++;
+    } else if (status === 'completed') {
+      completed++;
+    }
+  }
+
+  return {
+    total: rows.length,
+    pendingReview,
+    inProgress,
+    completed,
+  };
+}
+
+export function summarizeProductionRequestStats(
+  requests: ProductionRequest[]
+): ProductionDashboardStats {
+  return summarizeProductionListRowStats(expandProductionRequestsToListRows(requests));
+}
+
+/** 대시보드 집계용 — expand 목록 행에 필요한 필드만 매핑 */
+export function productionRequestForListStatsFromFirestore(
+  id: string,
+  data: DocumentData
+): ProductionRequest {
+  const rawOrderQty = data.orderQuantity ?? data.orderqty ?? data.order_qty;
+  const parsedOrderQty =
+    typeof rawOrderQty === 'number'
+      ? rawOrderQty
+      : rawOrderQty
+        ? Number(rawOrderQty)
+        : undefined;
+
+  return {
+    id,
+    userId: data.userId ?? '',
+    userName: data.userName ?? '',
+    userEmail: data.userEmail ?? '',
+    userCompany: data.userCompany,
+    productName: data.productName ?? '',
+    productCode: data.productCode || '',
+    quantity: data.quantity ?? 0,
+    orderQuantity: parsedOrderQty,
+    plannedQuantity: data.plannedQuantity,
+    requestDate: data.requestDate?.toDate?.() ?? new Date(),
+    requestedCompletionDate: data.requestedCompletionDate?.toDate?.() ?? new Date(),
+    productionReason: data.productionReason ?? 'inventory',
+    salesRegion:
+      data.salesRegion === 'overseas' || data.salesRegion === 'domestic'
+        ? data.salesRegion
+        : undefined,
+    products: Array.isArray(data.products) ? (data.products as CertificateProduct[]) : undefined,
+    customerName: data.customerName,
+    status: data.status || 'pending_review',
+    plannedCompletionDate: data.plannedCompletionDate?.toDate?.(),
+    memo: data.memo || '',
+    createdAt: data.createdAt?.toDate?.() ?? new Date(),
+    updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
+  };
 }
 
 export function getProductionRequestProductRows(

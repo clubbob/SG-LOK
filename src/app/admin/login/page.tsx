@@ -64,6 +64,19 @@ export default function AdminLoginPage() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ADMIN_SESSION_KEY);
+      if (!raw?.trim()) return;
+      const session = JSON.parse(raw) as { authenticated?: boolean; expiresAt?: number };
+      if (session.authenticated === true && Date.now() < (session.expiresAt ?? 0)) {
+        router.replace('/admin/dashboard');
+      }
+    } catch {
+      // ignore
+    }
+  }, [router]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
       ...formData,

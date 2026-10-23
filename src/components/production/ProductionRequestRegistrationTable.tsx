@@ -10,9 +10,9 @@ const valueCell =
 
 function FieldValue({ field }: { field: ProductionRequestRegistrationField }) {
   if (field.multiline) {
-    return <span className="whitespace-pre-wrap">{field.value}</span>;
+    return <span className="whitespace-pre-wrap">{field.value || '-'}</span>;
   }
-  return field.value;
+  return field.value !== '' ? field.value : '-';
 }
 
 type TableRow =

@@ -105,7 +105,15 @@ export interface ProductionRequest {
   // 실제 생산 정보
   actualStartDate?: Date; // 실제 생산개시일
   actualCompletionDate?: Date; // 실제 생산완료일
+  actualCompletionQuantity?: number; // 생산완료 수량
   cleaningEpCompletionDate?: Date; // 세정/EP 완료일
+  /** 단일 제품(레거시) 차수별 부분 완료 — products 사용 시 제품별 필드 우선 */
+  completionRound1Date?: Date;
+  completionRound1Quantity?: number;
+  completionRound2Date?: Date;
+  completionRound2Quantity?: number;
+  completionRound3Date?: Date;
+  completionRound3Quantity?: number;
   
   // 우선순위 및 메모
   priority?: number; // 우선순위
@@ -210,6 +218,16 @@ export interface CertificateProduct {
   lineStatus?: ProductionRequestStatus; // 생산요청: 제품별 승인·진행 상태 (다중 제품)
   plannedQuantity?: number; // 생산요청: 제품별 계획수량 (승인 시)
   plannedCompletionDate?: Date; // 생산요청: 제품별 완료예정일 (승인 시)
+  /** 생산요청: 차수별 부분 완료 (날짜·수량) */
+  completionRound1Date?: Date;
+  completionRound1Quantity?: number;
+  completionRound2Date?: Date;
+  completionRound2Quantity?: number;
+  completionRound3Date?: Date;
+  completionRound3Quantity?: number;
+  /** 생산요청: 제품별 최종 생산완료 */
+  actualCompletionDate?: Date;
+  actualCompletionQuantity?: number;
   lotNumber?: string;           // 로트번호
   heatNo?: string;              // HEAT NO.
   material?: string;            // MATERIAL (소재 정보, 예: 316/316L, 304)

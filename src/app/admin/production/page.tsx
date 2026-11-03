@@ -10,8 +10,8 @@ import {
   buildProductionRequestLineApprovalPatch,
   buildProductionRequestRegistrationFields,
   expandProductionRequestsToListRows,
-  formatProductionCompletionRoundDisplay,
-  formatProductionReasonLabel,
+  PRODUCTION_REQUEST_CSV_HEADERS,
+  buildProductionRequestListRowCsvValues,
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
 import { sanitizeForFirestore } from '@/lib/firestoreSanitize';
@@ -20,9 +20,9 @@ import {
   ADMIN_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER,
   EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
   filterProductionListRows,
+  normalizeProductionRequestPanelStatusFilter,
   type ProductionRequestPanelFilters,
 } from '@/lib/production/productionRequestSearch';
-import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 import { Button, DateInput } from '@/components/ui';
 import { ProductionRequestSearchPanel } from '@/components/production/ProductionRequestSearchPanel';
 import { ProductionRequestRegistrationTable } from '@/components/production/ProductionRequestRegistrationTable';
@@ -98,15 +98,15 @@ export default function AdminProductionPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<ProductionRequestPanelFilters>(() => ({
     ...EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
-    status: searchParams.get('status') || '',
+    status: normalizeProductionRequestPanelStatusFilter(searchParams.get('status')),
   }));
   useEffect(() => {
-    const statusFromUrl = searchParams.get('status') || '';
+    const statusFromUrl = normalizeProductionRequestPanelStatusFilter(searchParams.get('status'));
     setFilters((prev) => (prev.status === statusFromUrl ? prev : { ...prev, status: statusFromUrl }));
   }, [searchParams]);
 
   useEffect(() => {
-    const statusFromUrl = searchParams.get('status') || '';
+    const statusFromUrl = normalizeProductionRequestPanelStatusFilter(searchParams.get('status'));
     if (filters.status === statusFromUrl) return;
 
     const params = new URLSearchParams(searchParams.toString());
@@ -355,66 +355,14 @@ export default function AdminProductionPage() {
       return `"${str}"`;
     };
 
-    const headers = [
-      '번호',
-      '요청일',
-      '제품명',
-      '제품코드',
-      '생산목적',
-      '고객사명',
-      '수주수량',
-      '요청수량',
-      '완료요청일',
-      '비고',
-      '생산계획수량',
-      '완료예정일',
-      '1차 완료일 (수량)',
-      '2차 완료일 (수량)',
-      '3차 완료일 (수량)',
-      '생산완료일 (수량)',
-      '요청자',
-      '상태',
-    ];
+    const headers = PRODUCTION_REQUEST_CSV_HEADERS;
 
     // 엑셀은 최근 등록이 위쪽에 오도록 역순 출력, 번호는 목록과 동일(최신=가장 큰 번호)
     const exportRows = [...filteredListRows].reverse();
     const rows = exportRows.map((listRow, idx) => {
-      const request = listRow.request;
       const rowNumber = exportRows.length - idx;
-      const productionReasonLabel = formatProductionReasonLabel(listRow.productionReason);
       const statusLabel = getListRowDisplayStatusLabel(listRow);
-
-      const requestedDateStr = listRow.requestedCompletionDate
-        ? formatDateShort(listRow.requestedCompletionDate)
-        : '';
-      const plannedDateStr = listRow.plannedCompletionDate
-        ? formatDateShort(listRow.plannedCompletionDate)
-        : '';
-      const actualDateStr = formatProductionCompletionRoundDisplay(listRow.actualCompletion);
-      const actualDateStrForCsv = actualDateStr === '-' ? '' : actualDateStr;
-      const requestDateStr = request.requestDate ? formatDateShort(request.requestDate) : '';
-
-      const cols = [
-        rowNumber,
-        requestDateStr,
-        listRow.productName,
-        listRow.productCode,
-        productionReasonLabel,
-        listRow.customerName || '',
-        listRow.orderQuantity ?? '',
-        listRow.requestQuantity ?? '',
-        requestedDateStr,
-        listRow.remark || '',
-        listRow.plannedQuantity ?? '',
-        plannedDateStr,
-        formatProductionCompletionRoundDisplay(listRow.completionRounds[0] ?? {}),
-        formatProductionCompletionRoundDisplay(listRow.completionRounds[1] ?? {}),
-        formatProductionCompletionRoundDisplay(listRow.completionRounds[2] ?? {}),
-        actualDateStrForCsv,
-        request.userName || '',
-        statusLabel,
-      ];
-
+      const cols = buildProductionRequestListRowCsvValues(listRow, rowNumber, statusLabel);
       return cols.map(escapeCSV).join(',');
     });
 

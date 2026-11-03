@@ -5,16 +5,11 @@ import {
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
 
-/** 등록 폼 입력 순서 (검색 가능 항목 안내) */
-const SEARCH_FIELD_HINT_ADMIN =
-  '주문/재고, 국내/해외, 고객사명, 제품명, 제품코드, 요청자, 상태';
+export const PRODUCTION_REQUEST_SEARCH_PLACEHOLDER = '검색어 입력';
 
-const SEARCH_FIELD_HINT_USER =
-  '주문/재고, 국내/해외, 고객사명, 제품명, 제품코드, 상태';
+export const ADMIN_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER = PRODUCTION_REQUEST_SEARCH_PLACEHOLDER;
 
-export const ADMIN_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER = `${SEARCH_FIELD_HINT_ADMIN} 검색...`;
-
-export const USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER = `${SEARCH_FIELD_HINT_USER} 검색...`;
+export const USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER = PRODUCTION_REQUEST_SEARCH_PLACEHOLDER;
 
 export type ProductionRequestPanelFilters = {
   productionReason: '' | ProductionReason;
@@ -27,6 +22,15 @@ export const EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS: ProductionRequestPanelFilte
   salesRegion: '',
   status: '',
 };
+
+/** 검색 패널 진행 상태 — 취소는 필터 옵션에서 제외 */
+export function normalizeProductionRequestPanelStatusFilter(status: string | null | undefined): string {
+  const s = (status ?? '').trim();
+  if (!s || s === 'cancelled') return '';
+  if (s === 'pending_review' || s === 'in_progress' || s === 'completed') return s;
+  if (s === 'confirmed') return 'in_progress';
+  return '';
+}
 
 export function productionRequestListRowMatchesPanelFilters(
   listRow: ProductionRequestListRow,
@@ -77,11 +81,14 @@ function buildListRowSearchableText(
   getLineStatusLabel: (listRow: ProductionRequestListRow) => string
 ): string {
   const request = listRow.request;
+  const productGroup =
+    listRow.request.products?.[listRow.productIndex]?.productGroup?.trim() || '';
   const parts = [
     formatProductionReasonLabel(listRow.productionReason),
     listRow.productionReason,
     salesRegionLabel(listRow.salesRegion),
     listRow.salesRegion,
+    productGroup,
     listRow.customerName,
     request.userName,
     request.userCompany,

@@ -6,7 +6,7 @@ import {
   ProductionRequestStatus,
   ProductionSalesRegion,
 } from '@/types';
-import { formatDateShort } from '@/lib/utils';
+import { formatDateShort, normalizeCustomerNameInput } from '@/lib/utils';
 
 /** 생산요청 등록 폼(RequestProductLinesSection)과 동일한 항목·순서 */
 export type ProductionRequestRegistrationField = {
@@ -230,10 +230,10 @@ export function lineCustomerName(
 ): string | undefined {
   if (lineProductionReason(product, request) === 'inventory') {
     const name = product?.customerName?.trim();
-    return name || undefined;
+    return name ? normalizeCustomerNameInput(name) : undefined;
   }
   const name = product?.customerName?.trim() || request.customerName?.trim();
-  return name || undefined;
+  return name ? normalizeCustomerNameInput(name) : undefined;
 }
 
 export function formatProductionReasonLabel(reason?: ProductionReason | string): string {
@@ -249,7 +249,8 @@ export function formatProductionSalesRegionLabel(region?: ProductionSalesRegion 
 }
 
 function lineProductGroup(product: CertificateProduct | undefined): string {
-  return product?.productGroup?.trim() || '';
+  const raw = product?.productGroup?.trim() || '';
+  return raw ? raw.toUpperCase() : '';
 }
 
 /** 승인·상세 등에서 등록 폼과 같은 라벨·순서로 표시 */
@@ -315,6 +316,74 @@ export function buildProductionRequestRegistrationFields(
   });
 
   return fields;
+}
+
+/** 목록·엑셀(CSV) — 화면 카드와 동일한 열 순서 (앞에 번호, 끝에 상태) */
+export const PRODUCTION_REQUEST_CSV_HEADERS: string[] = [
+  '번호',
+  '요청자',
+  '요청일',
+  '생산목적',
+  '국내/해외',
+  '고객사명',
+  '제품군',
+  '제품명',
+  '제품코드',
+  '수주수량',
+  '생산요청수량',
+  '완료요청일',
+  '비고',
+  '생산계획수량',
+  '완료예정일',
+  '1차 완료일 (수량)',
+  '2차 완료일 (수량)',
+  '3차 완료일 (수량)',
+  '생산완료일 (수량)',
+  '상태',
+];
+
+function completionRoundDisplayForCsv(round: ProductionCompletionRound): string {
+  const display = formatProductionCompletionRoundDisplay(round);
+  return display === '-' ? '' : display;
+}
+
+export function buildProductionRequestListRowCsvValues(
+  listRow: ProductionRequestListRow,
+  rowNumber: number,
+  statusLabel: string
+): (string | number)[] {
+  const request = listRow.request;
+  const product = request.products?.[listRow.productIndex];
+  const isOrder = listRow.productionReason === 'order';
+  const requestedDateStr = listRow.requestedCompletionDate
+    ? formatDateShort(listRow.requestedCompletionDate)
+    : '';
+  const plannedDateStr = listRow.plannedCompletionDate
+    ? formatDateShort(listRow.plannedCompletionDate)
+    : '';
+
+  return [
+    rowNumber,
+    request.userName?.trim() || '',
+    request.requestDate ? formatDateShort(request.requestDate) : '',
+    formatProductionReasonLabel(listRow.productionReason),
+    formatProductionSalesRegionLabel(listRow.salesRegion),
+    isOrder ? lineCustomerName(product, request) || '' : '',
+    lineProductGroup(product) || '',
+    listRow.productName,
+    listRow.productCode,
+    isOrder && listRow.orderQuantity != null ? listRow.orderQuantity : '',
+    listRow.requestQuantity ?? '',
+    requestedDateStr,
+    listRow.remark?.trim() || '',
+    listRow.plannedQuantity ?? '',
+    plannedDateStr,
+    completionRoundDisplayForCsv(listRow.completionRounds[0] ?? {}),
+    completionRoundDisplayForCsv(listRow.completionRounds[1] ?? {}),
+    completionRoundDisplayForCsv(listRow.completionRounds[2] ?? {}),
+    completionRoundDisplayForCsv(listRow.actualCompletion),
+    statusLabel,
+  ];
 }
 
 /** Firestore·레거시 status → 표준 값 */

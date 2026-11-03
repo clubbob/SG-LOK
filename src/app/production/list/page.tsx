@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui';
@@ -11,18 +12,18 @@ import { CertificateProduct, ProductionRequest, ProductionRequestStatus, Product
 import { ProductionRequestStatusSection } from '@/components/production/ProductionRequestStatusSection';
 import {
   expandProductionRequestsToListRows,
-  formatProductionCompletionRoundDisplay,
-  formatProductionReasonLabel,
+  PRODUCTION_REQUEST_CSV_HEADERS,
+  buildProductionRequestListRowCsvValues,
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
 import {
   EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
   USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER,
   filterProductionListRows,
+  normalizeProductionRequestPanelStatusFilter,
   type ProductionRequestPanelFilters,
 } from '@/lib/production/productionRequestSearch';
 import { ProductionRequestSearchPanel } from '@/components/production/ProductionRequestSearchPanel';
-import { formatDate, formatDateTime, formatDateShort } from '@/lib/utils';
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   pending_review: '승인 대기중',
@@ -60,15 +61,15 @@ function ProductionRequestListPageContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<ProductionRequestPanelFilters>(() => ({
     ...EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
-    status: searchParams.get('status') || '',
+    status: normalizeProductionRequestPanelStatusFilter(searchParams.get('status')),
   }));
   useEffect(() => {
-    const statusFromUrl = searchParams.get('status') || '';
+    const statusFromUrl = normalizeProductionRequestPanelStatusFilter(searchParams.get('status'));
     setFilters((prev) => (prev.status === statusFromUrl ? prev : { ...prev, status: statusFromUrl }));
   }, [searchParams]);
 
   useEffect(() => {
-    const statusFromUrl = searchParams.get('status') || '';
+    const statusFromUrl = normalizeProductionRequestPanelStatusFilter(searchParams.get('status'));
     if (filters.status === statusFromUrl) return;
 
     const params = new URLSearchParams(searchParams.toString());
@@ -81,6 +82,13 @@ function ProductionRequestListPageContent() {
   const handleFiltersChange = (patch: Partial<ProductionRequestPanelFilters>) => {
     setFilters((prev) => ({ ...prev, ...patch }));
   };
+
+  const canUserEditListRow = (listRow: ProductionRequestListRow): boolean =>
+    Boolean(
+      userProfile?.id &&
+        listRow.request.userId === userProfile.id &&
+        listRow.lineStatus === 'pending_review'
+    );
 
   const filteredListRows = useMemo(
     () => filterProductionListRows(requests, searchQuery, filters, getListRowDisplayStatusLabel),
@@ -246,66 +254,14 @@ function ProductionRequestListPageContent() {
       return `"${str}"`;
     };
 
-      const headers = [
-      '번호',
-      '요청자',
-      '요청일',
-      '제품명',
-      '제품코드',
-      '생산목적',
-      '고객사명',
-      '수주수량',
-      '요청수량',
-      '완료요청일',
-      '비고',
-      '생산계획수량',
-      '완료예정일',
-      '1차 완료일 (수량)',
-      '2차 완료일 (수량)',
-      '3차 완료일 (수량)',
-      '생산완료일 (수량)',
-      '상태',
-    ];
+      const headers = PRODUCTION_REQUEST_CSV_HEADERS;
 
     // 엑셀은 최근 등록이 위쪽에 오도록 역순 출력, 번호는 목록과 동일(최신=가장 큰 번호)
     const exportRows = [...filteredListRows].reverse();
     const rows = exportRows.map((listRow, idx) => {
-      const request = listRow.request;
       const rowNumber = exportRows.length - idx;
-      const productionReasonLabel = formatProductionReasonLabel(listRow.productionReason);
       const statusLabel = getListRowDisplayStatusLabel(listRow);
-
-      const requestedDateStr = listRow.requestedCompletionDate
-        ? formatDateShort(listRow.requestedCompletionDate)
-        : '';
-      const plannedDateStr = listRow.plannedCompletionDate
-        ? formatDateShort(listRow.plannedCompletionDate)
-        : '';
-      const actualDateStr = formatProductionCompletionRoundDisplay(listRow.actualCompletion);
-      const actualDateStrForCsv = actualDateStr === '-' ? '' : actualDateStr;
-      const requestDateStr = request.requestDate ? formatDateShort(request.requestDate) : '';
-
-      const cols = [
-        rowNumber,
-        request.userName || '',
-        requestDateStr,
-        listRow.productName,
-        listRow.productCode,
-        productionReasonLabel,
-        listRow.customerName || '',
-        listRow.orderQuantity ?? '',
-        listRow.requestQuantity ?? '',
-        requestedDateStr,
-        listRow.remark || '',
-        listRow.plannedQuantity ?? '',
-        plannedDateStr,
-        formatProductionCompletionRoundDisplay(listRow.completionRounds[0] ?? {}),
-        formatProductionCompletionRoundDisplay(listRow.completionRounds[1] ?? {}),
-        formatProductionCompletionRoundDisplay(listRow.completionRounds[2] ?? {}),
-        actualDateStrForCsv,
-        statusLabel,
-      ];
-
+      const cols = buildProductionRequestListRowCsvValues(listRow, rowNumber, statusLabel);
       return cols.map(escapeCSV).join(',');
     });
 
@@ -412,6 +368,7 @@ function ProductionRequestListPageContent() {
                   const reversedIdx = displayedListRows.length - 1 - idx;
                   const absoluteIndex = (currentPage - 1) * itemsPerPageValue + reversedIdx;
                   const rowNumber = absoluteIndex + 1;
+                  const showEdit = canUserEditListRow(listRow);
                   return (
                     <ProductionRequestStatusSection
                       key={listRow.rowKey}
@@ -423,6 +380,17 @@ function ProductionRequestListPageContent() {
                         >
                           {getListRowDisplayStatusLabel(listRow)}
                         </span>
+                      }
+                      actions={
+                        showEdit ? (
+                          <Link
+                            href={`/production/request?id=${listRow.request.id}&productIndex=${listRow.productIndex}`}
+                            prefetch
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium whitespace-nowrap"
+                          >
+                            수정
+                          </Link>
+                        ) : undefined
                       }
                       onOpenMemo={() =>
                         setSelectedMemo({

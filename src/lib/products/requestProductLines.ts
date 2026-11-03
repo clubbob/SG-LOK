@@ -7,6 +7,7 @@ import {
   ProductionSalesRegion,
 } from '@/types';
 import { firestoreDateToDate } from '@/lib/production/productionRequestDisplay';
+import { normalizeCustomerNameInput } from '@/lib/utils';
 
 export const PRODUCTION_PRODUCT_GROUP_OPTIONS: ProductionProductGroup[] = [
   'Lok Fitting',
@@ -16,6 +17,13 @@ export const PRODUCTION_PRODUCT_GROUP_OPTIONS: ProductionProductGroup[] = [
   'UHP Valve',
   'Others',
 ];
+
+/** UI 표시용 — 저장 값은 그대로, 화면만 대문자 */
+export function formatProductionProductGroupLabel(group: string): string {
+  return group.trim().toUpperCase();
+}
+
+export { normalizeCustomerNameInput } from '@/lib/utils';
 
 export type RequestProductLine = {
   productionReason: string;
@@ -269,7 +277,7 @@ export function buildCertificateProductsFromLines(products: RequestProductLine[]
       productData.salesRegion = product.salesRegion;
     }
     if (product.productionReason === 'order' && product.customerName?.trim()) {
-      productData.customerName = product.customerName.trim();
+      productData.customerName = normalizeCustomerNameInput(product.customerName.trim());
     }
     productsData.push(productData);
   }

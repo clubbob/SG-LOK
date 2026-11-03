@@ -118,7 +118,6 @@ export function ProductionRequestSearchPanel({
             <option value="pending_review">승인 대기중</option>
             <option value="in_progress">진행중</option>
             <option value="completed">생산 완료</option>
-            <option value="cancelled">취소</option>
           </FilterSelect>
 
           <div className="flex flex-col justify-end">

@@ -15,6 +15,8 @@ import {
   createEmptyRequestProductLine,
   PRODUCT_CODE_NO_SPACE_MESSAGE,
   PRODUCTION_PRODUCT_GROUP_OPTIONS,
+  formatProductionProductGroupLabel,
+  normalizeCustomerNameInput,
   productCodeHasWhitespace,
 } from '@/lib/products/requestProductLines';
 
@@ -135,6 +137,11 @@ export function RequestProductLinesSection({
       newProducts[index] = {
         ...newProducts[index],
         remark: value.split('\n').slice(0, 2).join('\n'),
+      };
+    } else if (field === 'customerName') {
+      newProducts[index] = {
+        ...newProducts[index],
+        customerName: normalizeCustomerNameInput(value),
       };
     } else {
       newProducts[index] = { ...newProducts[index], [field]: value };
@@ -431,7 +438,7 @@ export function RequestProductLinesSection({
                     <option value="">선택</option>
                     {PRODUCTION_PRODUCT_GROUP_OPTIONS.map((group) => (
                       <option key={group} value={group}>
-                        {group}
+                        {formatProductionProductGroupLabel(group)}
                       </option>
                     ))}
                   </select>

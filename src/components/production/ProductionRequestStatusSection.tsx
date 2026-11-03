@@ -62,13 +62,20 @@ export function ProductionRequestStatusSection({
 
   return (
     <article className="rounded-lg border border-slate-400 bg-white overflow-hidden">
-      <header className="flex items-center justify-between gap-3 px-3 py-2 bg-slate-50 border-b border-slate-300">
+      <header className="flex items-center justify-between gap-3 px-3 py-2 bg-gradient-to-r from-slate-50 to-gray-50 border-b border-slate-300">
         <div className="flex items-center gap-2 min-w-0">
           <span className="inline-flex items-center justify-center min-w-[1.75rem] h-7 px-1.5 rounded-md bg-slate-700 text-white text-xs font-semibold">
             {rowNumber}
           </span>
-          <span className="text-sm font-semibold text-gray-900 truncate">{listRow.productName}</span>
-          <span className="text-xs text-gray-500 truncate hidden sm:inline">{listRow.productCode}</span>
+          <span className="text-sm font-semibold text-gray-900 truncate min-w-0">{listRow.productName}</span>
+          {listRow.productCode && listRow.productCode !== '-' ? (
+            <span
+              className="inline-flex shrink-0 items-center max-w-[9rem] sm:max-w-[12rem] rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-sm font-semibold font-mono text-indigo-800 truncate"
+              title={listRow.productCode}
+            >
+              {listRow.productCode}
+            </span>
+          ) : null}
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {statusBadge}
@@ -77,7 +84,7 @@ export function ProductionRequestStatusSection({
       </header>
 
       <div
-        className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-x-3 gap-y-2 px-3 py-2.5 bg-sky-50/70 border-b border-slate-300"
+        className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-x-3 gap-y-2 px-3 py-2.5 bg-white border-b border-slate-300"
         aria-label="생산요청 등록"
       >
         {buildProductionRequestRegistrationFields(listRow, { includeRequestMeta: true }).map((field) => {
@@ -124,7 +131,7 @@ export function ProductionRequestStatusSection({
       </div>
 
       <div
-        className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-x-3 gap-y-2 px-3 py-2.5 bg-slate-100/90"
+        className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-x-3 gap-y-2 px-3 py-2.5 bg-emerald-50/90 border-t border-emerald-100/80"
         aria-label="생산 처리"
       >
         <Field

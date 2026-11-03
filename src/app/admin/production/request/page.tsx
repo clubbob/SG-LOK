@@ -23,6 +23,7 @@ import {
   postAdminNotification,
 } from '@/lib/adminNotifications';
 import { RequestProductLinesSection } from '@/components/products/RequestProductLinesSection';
+import { isDateInputAfterToday, todayLocalDateInputMax } from '@/lib/dateInput';
 import {
   buildCertificateProductsFromLines,
   createEmptyRequestProductLine,
@@ -259,6 +260,7 @@ function AdminProductionRequestContent() {
     currentStatus === 'in_progress' ||
     currentStatus === 'completed';
   const showAdminPostReviewFields = isEditMode && isPostReviewStatus;
+  const completionDateMax = todayLocalDateInputMax();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -301,6 +303,20 @@ function AdminProductionRequestContent() {
         if (isNaN(plannedQtyNum) || plannedQtyNum <= 0) {
           errors.plannedQuantity = '생산계획수량은 1 이상의 숫자여야 합니다.';
         }
+      }
+
+      for (let n = 1; n <= PRODUCTION_COMPLETION_ROUND_COUNT; n++) {
+        const dateName = `completionRound${n}Date` as keyof typeof formData;
+        const dateVal = String(formData[dateName] ?? '').trim();
+        if (dateVal && isDateInputAfterToday(dateVal)) {
+          errors[dateName] = '오늘 이후 날짜는 선택할 수 없습니다.';
+        }
+      }
+      if (
+        formData.actualCompletionDate.trim() &&
+        isDateInputAfterToday(formData.actualCompletionDate)
+      ) {
+        errors.actualCompletionDate = '오늘 이후 날짜는 선택할 수 없습니다.';
       }
     }
 
@@ -616,7 +632,9 @@ function AdminProductionRequestContent() {
                         name={dateName}
                         label="완료일"
                         value={formData[dateName as keyof typeof formData] as string}
+                        max={completionDateMax}
                         onChange={handleChange}
+                        error={fieldErrors[dateName]}
                       />
                       <Input
                         id={qtyName}
@@ -642,6 +660,8 @@ function AdminProductionRequestContent() {
                     name="actualCompletionDate"
                     label="완료일"
                     value={formData.actualCompletionDate}
+                    max={completionDateMax}
+                    error={fieldErrors.actualCompletionDate}
                     onChange={(e) => {
                       const value = e.target.value;
                       setFormData((prev) => ({

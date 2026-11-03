@@ -21,3 +21,25 @@ export function mergeDatePickerOpenHandlers(
     tryOpenDatePicker(el);
   }
 }
+
+/** `<input type="date">` 값 — 로컬 날짜 기준 YYYY-MM-DD */
+export function toLocalDateInputValue(date: Date = new Date()): string {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/** 완료일 등 — 오늘 이후 선택 불가용 max */
+export function todayLocalDateInputMax(): string {
+  return toLocalDateInputValue(new Date());
+}
+
+/** YYYY-MM-DD 문자열이 오늘(로컬)보다 이후인지 */
+export function isDateInputAfterToday(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return trimmed > todayLocalDateInputMax();
+}

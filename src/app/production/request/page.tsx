@@ -1,11 +1,22 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Header, Footer } from '@/components/layout';
 import { useAuth } from '@/hooks/useAuth';
 import { Button, FormPageAlert } from '@/components/ui';
-import { collection, addDoc, Timestamp, getDocs, query, where, limit } from 'firebase/firestore';
+import {
+  collection,
+  addDoc,
+  Timestamp,
+  getDocs,
+  query,
+  where,
+  limit,
+  doc,
+  getDoc,
+  updateDoc,
+} from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { sanitizeForFirestore } from '@/lib/firestoreSanitize';
 import {
@@ -14,8 +25,13 @@ import {
 } from '@/lib/adminNotifications';
 import { RequestProductLinesSection } from '@/components/products/RequestProductLinesSection';
 import {
+  isProductionRequestContentEditable,
+  normalizeProductionRequestStatus,
+} from '@/lib/production/productionRequestDisplay';
+import {
   buildCertificateProductsFromLines,
   createEmptyRequestProductLine,
+  linesFromFirestoreProducts,
   summarizeOrderQuantityFromOrderLines,
   summarizeProductionLegacyFromProducts,
   summarizeProductionRequestRootFromProducts,
@@ -25,11 +41,44 @@ import {
   type RequestProductLine,
 } from '@/lib/products/requestProductLines';
 
+function ProductionRequestPageFrame({
+  children,
+  showLoading = false,
+}: {
+  children?: React.ReactNode;
+  showLoading?: boolean;
+}) {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1 bg-gray-50">
+        {showLoading ? (
+          <div className="flex min-h-[50vh] items-center justify-center px-4">
+            <div className="text-center" aria-live="polite" aria-busy="true">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto" />
+              <p className="mt-3 text-sm text-gray-600">불러오는 중...</p>
+            </div>
+          </div>
+        ) : (
+          children
+        )}
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
 function ProductionRequestContent() {
   const { isAuthenticated, userProfile, loading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestId = searchParams.get('id');
+  const productIndexParam = searchParams.get('productIndex');
+  const isEditRoute = Boolean(requestId);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editProductIndex, setEditProductIndex] = useState<number | null>(null);
+  const allProductLinesRef = useRef<RequestProductLine[] | null>(null);
+  const [loadingRequest, setLoadingRequest] = useState(isEditRoute);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -58,12 +107,85 @@ function ProductionRequestContent() {
     }
   }, [loading, isAuthenticated, router]);
 
-  // 사용자는 기존 요청 수정 불가 (조회·뱃지만 현황에서 확인)
   useEffect(() => {
-    if (requestId) {
-      router.replace('/production/list');
+    if (!requestId) {
+      setLoadingRequest(false);
+      return;
     }
-  }, [requestId, router]);
+    if (!isAuthenticated || !userProfile) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadRequestData = async () => {
+      setLoadingRequest(true);
+      try {
+        const requestDoc = await getDoc(doc(db, 'productionRequests', requestId));
+        if (!requestDoc.exists()) {
+          if (!cancelled) {
+            setError('생산요청을 찾을 수 없습니다.');
+            router.replace('/production/list');
+          }
+          return;
+        }
+
+        const data = requestDoc.data();
+        if (data.userId !== userProfile.id) {
+          if (!cancelled) {
+            setError('본인이 요청한 생산요청만 수정할 수 있습니다.');
+            router.replace('/production/list');
+          }
+          return;
+        }
+
+        const docStatus = normalizeProductionRequestStatus(data.status);
+        const rawProducts = Array.isArray(data.products) ? data.products : [];
+        const allLines = linesFromFirestoreProducts(data);
+        allProductLinesRef.current = allLines;
+        const parsedIndex =
+          productIndexParam != null && productIndexParam !== ''
+            ? Number.parseInt(productIndexParam, 10)
+            : NaN;
+        const singleLineIndex =
+          !Number.isNaN(parsedIndex) && parsedIndex >= 0 && parsedIndex < allLines.length
+            ? parsedIndex
+            : null;
+
+        const lineIdx = singleLineIndex ?? 0;
+        const lineDoc = rawProducts[lineIdx] as { lineStatus?: string } | undefined;
+        const lineStatus = normalizeProductionRequestStatus(lineDoc?.lineStatus ?? docStatus);
+        const editableStatus = singleLineIndex != null ? lineStatus : docStatus;
+        if (!isProductionRequestContentEditable(editableStatus)) {
+          if (!cancelled) {
+            setError('승인 대기 중인 요청만 수정할 수 있습니다.');
+            router.replace('/production/list');
+          }
+          return;
+        }
+
+        if (cancelled) return;
+        setIsEditMode(true);
+        setEditProductIndex(singleLineIndex);
+        setProducts(singleLineIndex != null ? [allLines[singleLineIndex]] : allLines);
+      } catch (err) {
+        console.error('생산요청 로드 오류:', err);
+        if (!cancelled) {
+          setError('생산요청을 불러오는데 실패했습니다.');
+          router.replace('/production/list');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingRequest(false);
+        }
+      }
+    };
+
+    void loadRequestData();
+    return () => {
+      cancelled = true;
+    };
+  }, [requestId, productIndexParam, isAuthenticated, userProfile, router]);
 
   useEffect(() => {
     const loadSuggestions = async () => {
@@ -87,8 +209,8 @@ function ProductionRequestContent() {
           }
         });
         setCustomerNameSuggestions(Array.from(customerNames).sort());
-      } catch (error) {
-        console.error('고객사명 목록 로드 오류:', error);
+      } catch (err) {
+        console.error('고객사명 목록 로드 오류:', err);
       }
     };
 
@@ -97,18 +219,19 @@ function ProductionRequestContent() {
     }
   }, [isAuthenticated, userProfile?.id]);
 
-  if (loading || requestId) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">로딩 중...</p>
-        </div>
-      </div>
-    );
+  const authPending = loading || (isAuthenticated && !userProfile);
+  const editDataPending = isEditRoute && !isEditMode;
+  const showPageLoading = authPending || loadingRequest || editDataPending;
+
+  if (!loading && !isAuthenticated) {
+    return null;
   }
 
-  if (!isAuthenticated || !userProfile) {
+  if (showPageLoading) {
+    return <ProductionRequestPageFrame showLoading />;
+  }
+
+  if (!userProfile) {
     return null;
   }
 
@@ -121,7 +244,7 @@ function ProductionRequestContent() {
         requireProductGroup: true,
         requireProductionContext: true,
         requireRequestedCompletionDate: true,
-        allowPastRequestedCompletionDate: false,
+        allowPastRequestedCompletionDate: isEditMode,
       })
     );
 
@@ -141,7 +264,15 @@ function ProductionRequestContent() {
     }
 
     try {
-      const productsData = buildCertificateProductsFromLines(products);
+      const linesForSave =
+        editProductIndex != null && allProductLinesRef.current
+          ? (() => {
+              const merged = [...allProductLinesRef.current];
+              merged[editProductIndex] = products[0];
+              return merged;
+            })()
+          : products;
+      const productsData = buildCertificateProductsFromLines(linesForSave);
       if (productsData.length === 0) {
         setError('제품 정보를 입력해주세요.');
         setSubmitting(false);
@@ -153,6 +284,38 @@ function ProductionRequestContent() {
       const totalOrderQuantity = summarizeOrderQuantityFromOrderLines(productsData);
       const rootRequestedCompletionDate = summarizeRequestedCompletionDateFromProducts(productsData);
       const { productionReason, salesRegion, customerName: rootCustomerName } = rootMeta;
+
+      if (isEditMode && requestId) {
+        const productionRequestData: Record<string, unknown> = {
+          products: productsData,
+          productName: legacy.productName,
+          productCode: legacy.productCode,
+          quantity: legacy.quantity,
+          orderQuantity: hasOrderLine ? totalOrderQuantity : null,
+          ...(rootRequestedCompletionDate
+            ? { requestedCompletionDate: Timestamp.fromDate(rootRequestedCompletionDate) }
+            : {}),
+          productionReason,
+          salesRegion,
+          updatedAt: Timestamp.now(),
+        };
+
+        if (rootCustomerName) {
+          productionRequestData.customerName = rootCustomerName;
+        }
+        productionRequestData.memo = summarizeMemoFromProducts(productsData) || null;
+
+        await updateDoc(
+          doc(db, 'productionRequests', requestId),
+          sanitizeForFirestore(productionRequestData)
+        );
+        setSuccess('생산요청이 수정되었습니다.');
+
+        setTimeout(() => {
+          router.push('/production/list');
+        }, 1500);
+        return;
+      }
 
       const productionRequestData: Record<string, unknown> = {
         userId: userProfile.id,
@@ -199,23 +362,29 @@ function ProductionRequestContent() {
       setTimeout(() => {
         router.push('/production/list');
       }, 1500);
-    } catch (error) {
-      console.error('생산요청 등록 오류:', error);
-      const firebaseError = error as { code?: string; message?: string };
-      setError(`생산요청 등록에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+    } catch (err) {
+      console.error('생산요청 저장 오류:', err);
+      const firebaseError = err as { code?: string; message?: string };
+      setError(`저장에 실패했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      <main className="flex-1 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <ProductionRequestPageFrame>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">생산요청 등록</h1>
-            <p className="text-gray-600">신규 생산요청을 등록합니다. 등록 후 진행 상태는 현황에서 확인할 수 있습니다.</p>
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+              {isEditMode ? '생산요청 수정' : '생산요청 등록'}
+            </h1>
+            <p className="text-gray-600">
+              {isEditMode
+                ? editProductIndex != null
+                  ? `선택한 제품(제품 ${editProductIndex + 1})의 요청 내용을 수정합니다. (승인 대기 중만 가능)`
+                  : '요청 내용을 수정합니다. (승인 대기 중만 가능)'
+                : '신규 생산요청을 등록합니다. 등록 후 진행 상태는 현황에서 확인할 수 있습니다.'}
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-6 space-y-6">
@@ -229,9 +398,12 @@ function ProductionRequestContent() {
               showProductionContext
               customerNameSuggestions={customerNameSuggestions}
               showRequestedCompletionDate
-              requestedCompletionDateMin={new Date().toISOString().split('T')[0]}
+              requestedCompletionDateMin={
+                isEditMode ? undefined : new Date().toISOString().split('T')[0]
+              }
               disabled={submitting}
-              allowMultipleProducts
+              allowMultipleProducts={editProductIndex == null}
+              productLineDisplayStart={editProductIndex != null ? editProductIndex + 1 : 1}
             />
 
             <div className="flex justify-end gap-3 pt-4">
@@ -244,30 +416,19 @@ function ProductionRequestContent() {
                 취소
               </Button>
               <Button type="submit" variant="primary" loading={submitting} disabled={submitting}>
-                등록
+                {isEditMode ? '수정 저장' : '등록'}
               </Button>
             </div>
           </form>
         </div>
-        <FormPageAlert success={success} error={error} />
-      </main>
-      <Footer />
-    </div>
+      <FormPageAlert success={success} error={error} />
+    </ProductionRequestPageFrame>
   );
 }
 
 export default function ProductionRequestPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">로딩 중...</p>
-          </div>
-        </div>
-      }
-    >
+    <Suspense fallback={<ProductionRequestPageFrame showLoading />}>
       <ProductionRequestContent />
     </Suspense>
   );

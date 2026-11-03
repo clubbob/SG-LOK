@@ -6,6 +6,11 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** 고객사명 등: 영문 소문자 입력 시 대문자로 (한글·숫자·기호는 유지) */
+export function normalizeCustomerNameInput(value: string): string {
+  return value.replace(/[a-z]/g, (ch) => ch.toUpperCase());
+}
+
 // 날짜 포맷팅 유틸리티
 export function formatDate(date: Date | string): string {
   const d = new Date(date);

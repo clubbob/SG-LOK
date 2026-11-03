@@ -61,7 +61,7 @@ export interface InquiryAttachment {
 // 생산요청 관련 타입
 export type ProductionRequestStatus = 'pending_review' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
 export type ProductionReason = 'order' | 'inventory'; // 주문 / 재고
-export type ProductionSalesRegion = 'domestic' | 'overseas'; // 국내 / 해외
+export type ProductionSalesRegion = 'domestic' | 'overseas'; // 지역: 국내 / 해외
 
 export type ProductionProductGroup =
   | 'Lok Fitting'
@@ -88,7 +88,7 @@ export interface ProductionRequest {
   requestDate: Date; // 생산요청일
   requestedCompletionDate: Date; // 완료요청일
   productionReason: ProductionReason; // 생산이유
-  salesRegion?: ProductionSalesRegion; // 국내 / 해외
+  salesRegion?: ProductionSalesRegion; // 지역 (국내/해외)
   customerName?: string; // 고객사명 (생산이유가 주문인 경우)
   
   // 상태 및 관리
@@ -212,7 +212,7 @@ export interface CertificateProduct {
   orderQuantity?: number;       // 생산요청: 수주수량 (제품별)
   productGroup?: ProductionProductGroup; // 생산요청: 제품군
   productionReason?: ProductionReason; // 생산요청: 제품별 생산목적
-  salesRegion?: ProductionSalesRegion; // 생산요청: 제품별 국내/해외
+  salesRegion?: ProductionSalesRegion; // 생산요청: 제품별 지역
   customerName?: string; // 생산요청: 제품별 고객사명
   requestedCompletionDate?: Date; // 생산요청: 제품별 완료요청일
   lineStatus?: ProductionRequestStatus; // 생산요청: 제품별 승인·진행 상태 (다중 제품)

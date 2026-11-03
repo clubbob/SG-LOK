@@ -238,6 +238,22 @@ function resolvePublicHomeUrl(): string {
   return '/';
 }
 
+function toAbsolutePublicHomeUrl(url: string): string {
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  if (typeof window === 'undefined') {
+    return url;
+  }
+  return new URL(url.startsWith('/') ? url : `/${url}`, window.location.origin).href;
+}
+
+function openPublicHomeInNewTab(): void {
+  if (typeof window === 'undefined') return;
+  const url = toAbsolutePublicHomeUrl(resolvePublicHomeUrl());
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 export default function AdminLayout({
   children,
 }: {
@@ -252,11 +268,6 @@ export default function AdminLayout({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [loginNotifications, setLoginNotifications] = useState<AdminNotification[]>([]);
   const [showLoginNotifModal, setShowLoginNotifModal] = useState(false);
-  const [publicHomeUrl, setPublicHomeUrl] = useState('/');
-
-  useEffect(() => {
-    setPublicHomeUrl(resolvePublicHomeUrl());
-  }, []);
 
   useEffect(() => {
     setOpenMenuId(null);
@@ -504,7 +515,10 @@ export default function AdminLayout({
                 if (item.subItems?.length) {
                   const open = openMenuId === item.id;
                   return (
-                    <div key={item.id} className="relative overflow-visible">
+                    <div
+                      key={item.id}
+                      className={`relative overflow-visible ${open ? 'z-[100]' : ''}`}
+                    >
                       <button
                         type="button"
                         onClick={() => setOpenMenuId(open ? null : item.id)}
@@ -523,13 +537,17 @@ export default function AdminLayout({
                       {open && (
                         <>
                           <div
-                            className="absolute left-0 top-full mt-1 w-52 rounded-lg bg-white shadow-lg border border-gray-200 z-[70]"
-                          >
+                            className="fixed inset-0 z-[90]"
+                            aria-hidden
+                            onClick={() => setOpenMenuId(null)}
+                          />
+                          <div className="absolute left-0 top-full z-[100] mt-1 w-52 rounded-lg bg-white shadow-lg border border-gray-200">
                             <div className="py-2">
                               {item.subItems.map((subItem) => (
                                 <Link
                                   key={subItem.id}
                                   href={subItem.path}
+                                  onClick={() => setOpenMenuId(null)}
                                   className={`block px-4 py-2 text-sm hover:bg-gray-50 hover:text-blue-600 hover:font-semibold ${
                                     isSubItemActive(subItem, item, pathname)
                                       ? 'text-blue-600 font-semibold'
@@ -541,11 +559,6 @@ export default function AdminLayout({
                               ))}
                             </div>
                           </div>
-                          <div
-                            className="fixed inset-0 z-[60]"
-                            aria-hidden
-                            onClick={() => setOpenMenuId(null)}
-                          />
                         </>
                       )}
                     </div>
@@ -577,14 +590,13 @@ export default function AdminLayout({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
-              <a
-                href={publicHomeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={openPublicHomeInNewTab}
                 className="hidden sm:inline-flex items-center rounded-md border border-white/50 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/20"
               >
                 홈페이지
-              </a>
+              </button>
               <button
                 type="button"
                 onClick={handleLogout}
@@ -636,14 +648,13 @@ export default function AdminLayout({
               );
             })}
             <div className="px-4 py-3 flex gap-2">
-              <a
-                href={publicHomeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={openPublicHomeInNewTab}
                 className="rounded-md border border-white/50 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white"
               >
                 홈페이지
-              </a>
+              </button>
               <button
                 type="button"
                 onClick={handleLogout}

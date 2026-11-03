@@ -15,7 +15,7 @@ function Stop-ListenersOnPort([int]$port) {
   }
 }
 
-foreach ($port in 3000..3005) {
+foreach ($port in 3000..3015) {
   Stop-ListenersOnPort $port
 }
 
@@ -29,7 +29,7 @@ Get-CimInstance Win32_Process -Filter "Name='node.exe'" | ForEach-Object {
 
 Start-Sleep -Seconds 2
 
-foreach ($port in 3000..3005) {
+foreach ($port in 3000..3015) {
   Stop-ListenersOnPort $port
 }
 

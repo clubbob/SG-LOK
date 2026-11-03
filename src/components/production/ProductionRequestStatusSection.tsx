@@ -25,6 +25,13 @@ function truncateRemarkPreview(remark?: string, maxChars = 12): string {
   return `${text.slice(0, maxChars)}...`;
 }
 
+const registrationFieldCellClass =
+  'rounded-md border border-slate-200 bg-slate-50/90 px-2 py-1.5 -mx-0.5 sm:mx-0';
+const planFieldCellClass =
+  'rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 -mx-0.5 sm:mx-0';
+const completionFieldCellClass =
+  'rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 -mx-0.5 sm:mx-0';
+
 function Field({
   label,
   children,
@@ -90,7 +97,7 @@ export function ProductionRequestStatusSection({
         {buildProductionRequestRegistrationFields(listRow, { includeRequestMeta: true }).map((field) => {
           if (field.label === '제품명') {
             return (
-              <Field key={field.label} label={field.label}>
+              <Field key={field.label} className={registrationFieldCellClass} label={field.label}>
                 {listRow.productName}
                 {request.itemName && listRow.productIndex === 0 && (
                   <span className="block text-xs text-gray-500 font-normal">({request.itemName})</span>
@@ -100,7 +107,7 @@ export function ProductionRequestStatusSection({
           }
           if (field.label === '비고') {
             return (
-              <Field key={field.label} label={field.label}>
+              <Field key={field.label} className={registrationFieldCellClass} label={field.label}>
                 {listRow.remark?.trim() ? (
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="min-w-0 truncate" title={listRow.remark.trim()}>
@@ -123,7 +130,7 @@ export function ProductionRequestStatusSection({
           const displayValue =
             field.value !== '' ? field.value : <span className="text-gray-400">-</span>;
           return (
-            <Field key={field.label} label={field.label}>
+            <Field key={field.label} className={registrationFieldCellClass} label={field.label}>
               {displayValue}
             </Field>
           );
@@ -131,10 +138,11 @@ export function ProductionRequestStatusSection({
       </div>
 
       <div
-        className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-x-3 gap-y-2 px-3 py-2.5 bg-emerald-50/90 border-t border-emerald-100/80"
+        className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-x-3 gap-y-2 px-3 py-2.5 bg-white border-t border-slate-300"
         aria-label="생산 처리"
       >
         <Field
+          className={planFieldCellClass}
           label="생산계획수량"
           valueClassName={
             listRow.plannedQuantity != null &&
@@ -151,6 +159,7 @@ export function ProductionRequestStatusSection({
           )}
         </Field>
         <Field
+          className={planFieldCellClass}
           label="완료예정일"
           valueClassName={
             isDateAfter(listRow.plannedCompletionDate, lineRequestedDate) ? 'text-red-500' : ''
@@ -165,12 +174,17 @@ export function ProductionRequestStatusSection({
         {listRow.completionRounds.map((round, index) => {
           const display = formatProductionCompletionRoundDisplay(round);
           return (
-            <Field key={`completion-round-${index + 1}`} label={`${index + 1}차 완료일 (수량)`}>
+            <Field
+              key={`completion-round-${index + 1}`}
+              className={completionFieldCellClass}
+              label={`${index + 1}차 완료일 (수량)`}
+            >
               {display === '-' ? <span className="text-gray-400">-</span> : display}
             </Field>
           );
         })}
         <Field
+          className={completionFieldCellClass}
           label="생산완료일 (수량)"
           valueClassName={
             isDateAfter(listRow.actualCompletion.date, listRow.plannedCompletionDate)

@@ -41,7 +41,7 @@ export type RequestProductLine = {
 
 export type ValidateRequestProductLinesOptions = {
   requireProductGroup?: boolean;
-  /** 생산요청: 제품별 생산목적·국내/해외·(주문 시) 고객사명·수주수량 */
+  /** 생산요청: 제품별 생산목적·지역·(주문 시) 고객사명·수주수량 */
   requireProductionContext?: boolean;
   requireOrderQuantity?: boolean;
   requireRequestedCompletionDate?: boolean;
@@ -189,7 +189,7 @@ export function validateRequestProductLines(
         hasError = true;
       }
       if (!product.salesRegion) {
-        errors[`salesRegion-${index}`] = '국내/해외를 선택해주세요.';
+        errors[`salesRegion-${index}`] = '지역을 선택해주세요.';
         hasError = true;
       }
       if (product.productionReason === 'order' && !product.customerName?.trim()) {

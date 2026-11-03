@@ -61,7 +61,7 @@ type RequestProductLinesSectionProps = {
   disabled?: boolean;
   /** 생산요청: 제품명 앞 제품군 선택 */
   showProductGroup?: boolean;
-  /** 생산요청: 제품별 생산목적·국내/해외·고객사명 */
+  /** 생산요청: 제품별 생산목적·지역·고객사명 */
   showProductionContext?: boolean;
   /** 생산요청: 고객사명 자동완성 목록 */
   customerNameSuggestions?: string[];
@@ -345,7 +345,7 @@ export function RequestProductLinesSection({
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">국내/해외 *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">지역 *</label>
                   <select
                     value={product.salesRegion}
                     onChange={(e) => handleProductChange(index, 'salesRegion', e.target.value)}

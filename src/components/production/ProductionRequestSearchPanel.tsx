@@ -96,7 +96,7 @@ export function ProductionRequestSearchPanel({
           </FilterSelect>
 
           <FilterSelect
-            label="판매지역"
+            label="지역"
             value={filters.salesRegion}
             onChange={(value) =>
               onFiltersChange({

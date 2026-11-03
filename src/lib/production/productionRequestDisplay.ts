@@ -253,6 +253,40 @@ function lineProductGroup(product: CertificateProduct | undefined): string {
   return raw ? raw.toUpperCase() : '';
 }
 
+/** 목록·PDF 등 — 제품군 표시(대문자) */
+export function getProductionRequestLineProductGroup(listRow: ProductionRequestListRow): string {
+  const product = listRow.request.products?.[listRow.productIndex];
+  const group = lineProductGroup(product);
+  return group || '미지정';
+}
+
+/** PDF: 승인 후 생산 진행 중(생산완료·취소 제외) */
+export function isProductionRequestLineInProgressForPdf(listRow: ProductionRequestListRow): boolean {
+  return listRow.lineStatus === 'confirmed' || listRow.lineStatus === 'in_progress';
+}
+
+export function prepareProductionRequestProgressPdfRows(
+  listRows: ProductionRequestListRow[]
+): ProductionRequestListRow[] {
+  const requestTime = (row: ProductionRequestListRow) =>
+    row.request.requestDate?.getTime?.() ?? 0;
+
+  return listRows.filter(isProductionRequestLineInProgressForPdf).sort((a, b) => {
+    const groupCmp = getProductionRequestLineProductGroup(a).localeCompare(
+      getProductionRequestLineProductGroup(b),
+      'ko'
+    );
+    if (groupCmp !== 0) return groupCmp;
+    const dateCmp = requestTime(a) - requestTime(b);
+    if (dateCmp !== 0) return dateCmp;
+    const createdCmp =
+      (a.request.createdAt?.getTime?.() ?? 0) - (b.request.createdAt?.getTime?.() ?? 0);
+    if (createdCmp !== 0) return createdCmp;
+    if (a.request.id !== b.request.id) return a.request.id.localeCompare(b.request.id);
+    return a.productIndex - b.productIndex;
+  });
+}
+
 /** 승인·상세 등에서 등록 폼과 같은 라벨·순서로 표시 */
 export function buildProductionRequestRegistrationFields(
   listRow: ProductionRequestListRow,
@@ -280,7 +314,7 @@ export function buildProductionRequestRegistrationFields(
     value: formatProductionReasonLabel(listRow.productionReason),
   });
   fields.push({
-    label: '국내/해외',
+    label: '지역',
     value: formatProductionSalesRegionLabel(listRow.salesRegion),
   });
   fields.push({
@@ -324,7 +358,7 @@ export const PRODUCTION_REQUEST_CSV_HEADERS: string[] = [
   '요청자',
   '요청일',
   '생산목적',
-  '국내/해외',
+  '지역',
   '고객사명',
   '제품군',
   '제품명',

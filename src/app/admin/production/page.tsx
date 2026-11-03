@@ -10,11 +10,13 @@ import {
   buildProductionRequestLineApprovalPatch,
   buildProductionRequestRegistrationFields,
   expandProductionRequestsToListRows,
+  prepareProductionRequestProgressPdfRows,
   PRODUCTION_REQUEST_CSV_HEADERS,
   buildProductionRequestListRowCsvValues,
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
 import { sanitizeForFirestore } from '@/lib/firestoreSanitize';
+import { downloadProductionRequestListPdf } from '@/lib/production/productionRequestListPdf';
 import { removeProductionRequestProductLine } from '@/lib/production/removeProductionRequestProductLine';
 import {
   ADMIN_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER,
@@ -96,6 +98,7 @@ export default function AdminProductionPage() {
   });
   const [approving, setApproving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
   const skipUrlStatusSyncRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<ProductionRequestPanelFilters>(() => ({
@@ -132,6 +135,12 @@ export default function AdminProductionPage() {
     () =>
       filterProductionListRows(requests, searchQuery, filters, getListRowDisplayStatusLabel),
     [requests, searchQuery, filters]
+  );
+
+  const allListRows = useMemo(() => expandProductionRequestsToListRows(requests), [requests]);
+  const progressPdfRows = useMemo(
+    () => prepareProductionRequestProgressPdfRows(allListRows),
+    [allListRows]
   );
 
   const applyProductionRequestsSnapshot = useCallback(
@@ -416,6 +425,21 @@ export default function AdminProductionPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportToPdf = async () => {
+    if (progressPdfRows.length === 0) return;
+    setGeneratingPdf(true);
+    setError('');
+    try {
+      await downloadProductionRequestListPdf(allListRows, getListRowDisplayStatusLabel);
+    } catch (err) {
+      console.error('생산요청 PDF 생성 오류:', err);
+      const message = err instanceof Error ? err.message : '알 수 없는 오류';
+      setError(`PDF 파일 생성에 실패했습니다: ${message}`);
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   const handleDeleteLine = async (listRow: ProductionRequestListRow) => {
     const request = listRow.request;
     const multiProduct = (request.products?.length ?? 0) > 1;
@@ -476,8 +500,25 @@ export default function AdminProductionPage() {
             variant="outline"
             size="sm"
             className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap"
+            onClick={() => void handleExportToPdf()}
+            disabled={refreshing || loadingRequests || generatingPdf || progressPdfRows.length === 0}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+              />
+            </svg>
+            {generatingPdf ? 'PDF 생성 중…' : 'PDF 파일 생성'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap"
             onClick={handleExportToExcel}
-            disabled={refreshing || loadingRequests || filteredListRows.length === 0}
+            disabled={refreshing || loadingRequests || generatingPdf || filteredListRows.length === 0}
           >
             <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16v4H4m4 4h8m-8 4h5m-1 4l-3-3h6l-3 3z" />

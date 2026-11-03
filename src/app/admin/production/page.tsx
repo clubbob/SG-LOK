@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { collection, query, getDocs, Timestamp, onSnapshot, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, getDocs, getDocsFromServer, Timestamp, onSnapshot, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { CertificateProduct, ProductionRequest, ProductionRequestStatus, ProductionSalesRegion } from '@/types';
 import {
@@ -95,12 +95,20 @@ export default function AdminProductionPage() {
     plannedCompletionDate: '',
   });
   const [approving, setApproving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const skipUrlStatusSyncRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<ProductionRequestPanelFilters>(() => ({
     ...EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
     status: normalizeProductionRequestPanelStatusFilter(searchParams.get('status')),
   }));
   useEffect(() => {
+    if (skipUrlStatusSyncRef.current) {
+      if (!searchParams.get('status')) {
+        skipUrlStatusSyncRef.current = false;
+      }
+      return;
+    }
     const statusFromUrl = normalizeProductionRequestPanelStatusFilter(searchParams.get('status'));
     setFilters((prev) => (prev.status === statusFromUrl ? prev : { ...prev, status: statusFromUrl }));
   }, [searchParams]);
@@ -126,6 +134,77 @@ export default function AdminProductionPage() {
     [requests, searchQuery, filters]
   );
 
+  const applyProductionRequestsSnapshot = useCallback(
+    (querySnapshot: { forEach: (fn: (doc: { id: string; data: () => Record<string, unknown> }) => void) => void }) => {
+      const requestsData: ProductionRequest[] = [];
+
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const rawOrderQty = data.orderQuantity ?? data.orderqty ?? data.order_qty;
+        const parsedOrderQty =
+          typeof rawOrderQty === 'number'
+            ? rawOrderQty
+            : rawOrderQty
+              ? Number(rawOrderQty)
+              : undefined;
+
+        const currentStatus = (data.status as ProductionRequestStatus) || 'pending_review';
+
+        requestsData.push({
+          id: docSnap.id,
+          userId: (data.userId as string) ?? '',
+          userName: (data.userName as string) ?? '',
+          userEmail: (data.userEmail as string) ?? '',
+          userCompany: data.userCompany as string | undefined,
+          productName: (data.productName as string) ?? '',
+          productCode: (data.productCode as string) || '',
+          quantity: (data.quantity as number) ?? 0,
+          orderQuantity: parsedOrderQty,
+          plannedQuantity: data.plannedQuantity as number | undefined,
+          requestDate:
+            (data.requestDate as { toDate?: () => Date } | undefined)?.toDate?.() || new Date(),
+          requestedCompletionDate:
+            (data.requestedCompletionDate as { toDate?: () => Date } | undefined)?.toDate?.() ||
+            new Date(),
+          productionReason: data.productionReason as ProductionRequest['productionReason'],
+          salesRegion:
+            data.salesRegion === 'overseas' || data.salesRegion === 'domestic'
+              ? (data.salesRegion as ProductionSalesRegion)
+              : undefined,
+          products: Array.isArray(data.products)
+            ? (data.products as CertificateProduct[])
+            : undefined,
+          customerName: data.customerName as string | undefined,
+          status: currentStatus,
+          itemCode: data.itemCode as string | undefined,
+          itemName: data.itemName as string | undefined,
+          plannedStartDate: (data.plannedStartDate as { toDate?: () => Date } | undefined)?.toDate?.(),
+          plannedCompletionDate: (
+            data.plannedCompletionDate as { toDate?: () => Date } | undefined
+          )?.toDate?.(),
+          actualStartDate: (data.actualStartDate as { toDate?: () => Date } | undefined)?.toDate?.(),
+          actualCompletionDate: (
+            data.actualCompletionDate as { toDate?: () => Date } | undefined
+          )?.toDate?.(),
+          actualCompletionQuantity: data.actualCompletionQuantity as number | undefined,
+          priority: data.priority as ProductionRequest['priority'],
+          memo: (data.memo as string) || '',
+          adminMemo: (data.adminMemo as string) || '',
+          createdAt: (data.createdAt as { toDate?: () => Date } | undefined)?.toDate?.() || new Date(),
+          updatedAt: (data.updatedAt as { toDate?: () => Date } | undefined)?.toDate?.() || new Date(),
+          createdBy: (data.createdBy as string) ?? '',
+          updatedBy: data.updatedBy as string | undefined,
+          history: data.history as ProductionRequest['history'],
+        });
+      });
+
+      requestsData.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      setRequests(requestsData);
+      setLoadingRequests(false);
+    },
+    []
+  );
+
   useEffect(() => {
     // 관리자 세션 확인
     if (!checkAdminAuth()) {
@@ -133,81 +212,16 @@ export default function AdminProductionPage() {
       return;
     }
 
-    // 실시간 생산요청 목록 구독
+    setLoadingRequests(true);
+    setError('');
+
     const requestsRef = collection(db, 'productionRequests');
     const q = query(requestsRef, orderBy('createdAt', 'desc'));
     
     const unsubscribeSnapshot = onSnapshot(
       q,
-      async (querySnapshot) => {
-        const requestsData: ProductionRequest[] = [];
-        const updatePromises: Promise<void>[] = [];
-        
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          const rawOrderQty = data.orderQuantity ?? data.orderqty ?? data.order_qty;
-          const parsedOrderQty =
-            typeof rawOrderQty === 'number'
-              ? rawOrderQty
-              : rawOrderQty
-              ? Number(rawOrderQty)
-              : undefined;
-          
-          const currentStatus = data.status || 'pending_review';
-          
-          requestsData.push({
-            id: doc.id,
-            userId: data.userId,
-            userName: data.userName,
-            userEmail: data.userEmail,
-            userCompany: data.userCompany,
-            productName: data.productName,
-            productCode: data.productCode || '',
-            quantity: data.quantity,
-            orderQuantity: parsedOrderQty,
-            plannedQuantity: data.plannedQuantity,
-            requestDate: data.requestDate?.toDate() || new Date(),
-            requestedCompletionDate: data.requestedCompletionDate?.toDate() || new Date(),
-            productionReason: data.productionReason,
-            salesRegion:
-              data.salesRegion === 'overseas' || data.salesRegion === 'domestic'
-                ? (data.salesRegion as ProductionSalesRegion)
-                : undefined,
-            products: Array.isArray(data.products)
-              ? (data.products as CertificateProduct[])
-              : undefined,
-            customerName: data.customerName,
-            status: currentStatus,
-            itemCode: data.itemCode,
-            itemName: data.itemName,
-            plannedStartDate: data.plannedStartDate?.toDate(),
-            plannedCompletionDate: data.plannedCompletionDate?.toDate(),
-            actualStartDate: data.actualStartDate?.toDate(),
-            actualCompletionDate: data.actualCompletionDate?.toDate(),
-            actualCompletionQuantity: data.actualCompletionQuantity,
-          priority: data.priority,
-          memo: data.memo || '',
-          adminMemo: data.adminMemo || '',
-          createdAt: data.createdAt?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || new Date(),
-            createdBy: data.createdBy,
-            updatedBy: data.updatedBy,
-            history: data.history,
-          });
-        });
-        
-        // 상태 업데이트 실행 (비동기, 에러가 발생해도 계속 진행)
-        if (updatePromises.length > 0) {
-          Promise.all(updatePromises).catch((error) => {
-            console.error('일부 생산요청 상태 업데이트 실패:', error);
-          });
-        }
-        
-        // 클라이언트 사이드 정렬 (오래된 순으로 정렬)
-        requestsData.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-        
-        setRequests(requestsData);
-        setLoadingRequests(false);
+      (querySnapshot) => {
+        applyProductionRequestsSnapshot(querySnapshot);
       },
       (error) => {
         console.error('생산요청 목록 로드 오류:', error);
@@ -218,7 +232,29 @@ export default function AdminProductionPage() {
     );
 
     return () => unsubscribeSnapshot();
-  }, [router]);
+  }, [router, applyProductionRequestsSnapshot]);
+
+  const handleRefresh = async () => {
+    if (!checkAdminAuth()) return;
+    setRefreshing(true);
+    setError('');
+    skipUrlStatusSyncRef.current = true;
+    setSearchQuery('');
+    setFilters({ ...EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS });
+    setCurrentPage(1);
+    router.replace('/admin/production', { scroll: false });
+    try {
+      const q = query(collection(db, 'productionRequests'), orderBy('createdAt', 'desc'));
+      const snapshot = await getDocsFromServer(q);
+      applyProductionRequestsSnapshot(snapshot);
+    } catch (err) {
+      console.error('생산요청 새로고침 오류:', err);
+      const firebaseError = err as { code?: string; message?: string };
+      setError(`목록을 새로고침하지 못했습니다: ${firebaseError.message || '알 수 없는 오류'}`);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   // 검색·필터 변경 시 페이지
   useEffect(() => {
@@ -402,7 +438,7 @@ export default function AdminProductionPage() {
     }
   };
 
-  if (loadingRequests) {
+  if (loadingRequests && requests.length === 0) {
     return (
       <div className="p-4 sm:p-8">
         <div className="flex items-center justify-center h-64">
@@ -414,13 +450,6 @@ export default function AdminProductionPage() {
       </div>
     );
   }
-
-  const handleRefresh = () => {
-    setLoadingRequests(true);
-    setError('');
-    // 페이지 새로고침
-    window.location.reload();
-  };
 
   return (
     <div className="p-4 sm:p-8">
@@ -434,10 +463,11 @@ export default function AdminProductionPage() {
             variant="outline"
             size="sm"
             className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap"
-            onClick={handleRefresh}
-            disabled={loadingRequests}
+            onClick={() => void handleRefresh()}
+            disabled={refreshing || (loadingRequests && requests.length === 0)}
           >
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg
+              className={`w-4 h-4 shrink-0 ${refreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
             새로고침
@@ -447,7 +477,7 @@ export default function AdminProductionPage() {
             size="sm"
             className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap"
             onClick={handleExportToExcel}
-            disabled={loadingRequests || filteredListRows.length === 0}
+            disabled={refreshing || loadingRequests || filteredListRows.length === 0}
           >
             <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16v4H4m4 4h8m-8 4h5m-1 4l-3-3h6l-3 3z" />
@@ -482,6 +512,11 @@ export default function AdminProductionPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
           <h3 className="text-sm font-normal text-gray-500 mb-2">등록된 생산요청이 없습니다</h3>
+        </div>
+      ) : filteredListRows.length === 0 ? (
+        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+          <h3 className="text-sm font-normal text-gray-500 mb-2">선택한 조건에 맞는 생산요청이 없습니다</h3>
+          <p className="text-xs text-gray-400">조건 초기화 후 다시 확인하거나 새로고침해 보세요.</p>
         </div>
       ) : (
         <>

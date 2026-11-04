@@ -171,7 +171,7 @@ function equalizeSingleColumnGroup(
   indices.forEach((i) => {
     next[i] = unified;
   });
-  let remainder = Math.round((totalBefore - unified * indices.length) * 100) / 100;
+  const remainder = Math.round((totalBefore - unified * indices.length) * 100) / 100;
   if (Math.abs(remainder) > 0.001) {
     const last = indices[indices.length - 1];
     next[last] = Math.round((next[last] + remainder) * 100) / 100;

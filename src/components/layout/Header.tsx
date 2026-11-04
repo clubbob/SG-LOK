@@ -37,24 +37,20 @@ export default function Header() {
     setIsUserMenuOpen(false);
   }, [pathname]);
 
-  const [adminEntryHref, setAdminEntryHref] = useState('/admin/login');
-  useEffect(() => {
+  const readAdminEntryHref = (): string => {
+    if (typeof window === 'undefined') return '/admin/login';
     try {
       const raw = localStorage.getItem('admin_session');
-      if (!raw?.trim()) {
-        setAdminEntryHref('/admin/login');
-        return;
-      }
+      if (!raw?.trim()) return '/admin/login';
       const session = JSON.parse(raw) as { authenticated?: boolean; expiresAt?: number };
       if (session.authenticated === true && Date.now() < (session.expiresAt ?? 0)) {
-        setAdminEntryHref('/admin/dashboard');
-      } else {
-        setAdminEntryHref('/admin/login');
+        return '/admin/dashboard';
       }
+      return '/admin/login';
     } catch {
-      setAdminEntryHref('/admin/login');
+      return '/admin/login';
     }
-  }, [pathname, isAuthenticated]);
+  };
 
   useLayoutEffect(() => {
     if (!pathname) return;
@@ -128,7 +124,8 @@ export default function Header() {
 
   const goToAdminEntry = () => {
     closeAllHeaderMenus();
-    router.push(adminEntryHref);
+    setIsMobileMenuOpen(false);
+    router.push(readAdminEntryHref());
   };
 
   return (
@@ -573,7 +570,11 @@ export default function Header() {
             {!loading && isAuthenticated && canShowAdminEntry && !isAuthPage && (
               <button
                 type="button"
-                onClick={goToAdminEntry}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goToAdminEntry();
+                }}
                 className="relative z-[120] hidden sm:inline-flex items-center rounded-md border border-white/50 bg-white/10 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/20"
               >
                 관리자

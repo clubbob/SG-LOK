@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { collection, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where } from 'firebase/firestore';
@@ -268,6 +268,27 @@ export default function AdminLayout({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [loginNotifications, setLoginNotifications] = useState<AdminNotification[]>([]);
   const [showLoginNotifModal, setShowLoginNotifModal] = useState(false);
+  const openMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const navigateAdminSubMenu = useCallback(
+    (path: string) => {
+      setOpenMenuId(null);
+      setMobileNavOpen(false);
+      router.push(path);
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (openMenuRef.current?.contains(target)) return;
+      setOpenMenuId(null);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [openMenuId]);
 
   useEffect(() => {
     setOpenMenuId(null);
@@ -375,11 +396,6 @@ export default function AdminLayout({
 
     return () => unsubscribe();
   }, [isAdminAuthenticated]);
-
-  useEffect(() => {
-    setMobileNavOpen(false);
-    setOpenMenuId(null);
-  }, [pathname]);
 
   useEffect(() => {
     if (!isAdminAuthenticated || isLoginPage || loading) return;
@@ -517,6 +533,7 @@ export default function AdminLayout({
                   return (
                     <div
                       key={item.id}
+                      ref={open ? openMenuRef : undefined}
                       className={`relative overflow-visible ${open ? 'z-[100]' : ''}`}
                     >
                       <button
@@ -535,31 +552,24 @@ export default function AdminLayout({
                         </svg>
                       </button>
                       {open && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-[90]"
-                            aria-hidden
-                            onClick={() => setOpenMenuId(null)}
-                          />
-                          <div className="absolute left-0 top-full z-[100] mt-1 w-52 rounded-lg bg-white shadow-lg border border-gray-200">
-                            <div className="py-2">
-                              {item.subItems.map((subItem) => (
-                                <Link
-                                  key={subItem.id}
-                                  href={subItem.path}
-                                  onClick={() => setOpenMenuId(null)}
-                                  className={`block px-4 py-2 text-sm hover:bg-gray-50 hover:text-blue-600 hover:font-semibold ${
-                                    isSubItemActive(subItem, item, pathname)
-                                      ? 'text-blue-600 font-semibold'
-                                      : 'text-gray-800'
-                                  }`}
-                                >
-                                  {subItem.label}
-                                </Link>
-                              ))}
-                            </div>
+                        <div className="absolute left-0 top-full z-[100] mt-1 w-52 rounded-lg bg-white shadow-lg border border-gray-200">
+                          <div className="py-2">
+                            {item.subItems.map((subItem) => (
+                              <button
+                                key={subItem.id}
+                                type="button"
+                                onClick={() => navigateAdminSubMenu(subItem.path)}
+                                className={`block w-full text-left px-4 py-2 text-sm hover:bg-gray-50 hover:text-blue-600 hover:font-semibold ${
+                                  isSubItemActive(subItem, item, pathname)
+                                    ? 'text-blue-600 font-semibold'
+                                    : 'text-gray-800'
+                                }`}
+                              >
+                                {subItem.label}
+                              </button>
+                            ))}
                           </div>
-                        </>
+                        </div>
                       )}
                     </div>
                   );
@@ -620,17 +630,18 @@ export default function AdminLayout({
                         {item.label}
                       </p>
                       {item.subItems.map((subItem) => (
-                        <Link
+                        <button
                           key={subItem.id}
-                          href={subItem.path}
-                          className={`block px-4 py-2 text-sm ${
+                          type="button"
+                          onClick={() => navigateAdminSubMenu(subItem.path)}
+                          className={`block w-full text-left px-4 py-2 text-sm ${
                             isSubItemActive(subItem, item, pathname)
                               ? 'bg-blue-700 text-white font-semibold'
                               : 'text-white hover:bg-blue-600'
                           }`}
                         >
                           {subItem.label}
-                        </Link>
+                        </button>
                       ))}
                     </>
                   ) : (

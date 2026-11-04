@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { collection, query, getDocs, getDocsFromServer, Timestamp, onSnapshot, orderBy, doc, deleteDoc, updateDoc } from 'firebase/firestore';
@@ -81,6 +81,25 @@ const getListRowDisplayStatusColor = (listRow: ProductionRequestListRow): string
   STATUS_COLORS[listRow.lineStatus];
 
 export default function AdminProductionPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-4 sm:p-8">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-gray-600">로딩 중...</p>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <AdminProductionPageContent />
+    </Suspense>
+  );
+}
+
+function AdminProductionPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [requests, setRequests] = useState<ProductionRequest[]>([]);
@@ -91,6 +110,7 @@ export default function AdminProductionPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingRowKey, setDeletingRowKey] = useState<string | null>(null);
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
+  const [selectedProductionIssue, setSelectedProductionIssue] = useState<string | null>(null);
   const [approvingListRow, setApprovingListRow] = useState<ProductionRequestListRow | null>(null);
   const [approvalForm, setApprovalForm] = useState({
     plannedQuantity: '',
@@ -199,6 +219,7 @@ export default function AdminProductionPage() {
           priority: data.priority as ProductionRequest['priority'],
           memo: (data.memo as string) || '',
           adminMemo: (data.adminMemo as string) || '',
+          productionIssue: (data.productionIssue as string) || undefined,
           createdAt: (data.createdAt as { toDate?: () => Date } | undefined)?.toDate?.() || new Date(),
           updatedAt: (data.updatedAt as { toDate?: () => Date } | undefined)?.toDate?.() || new Date(),
           createdBy: (data.createdBy as string) ?? '',
@@ -615,6 +636,9 @@ export default function AdminProductionPage() {
                       memo: listRow.remark || request.memo || '',
                     })
                   }
+                  onOpenProductionIssue={() =>
+                    setSelectedProductionIssue(listRow.productionIssue?.trim() || '')
+                  }
                 />
               );
             })}
@@ -807,6 +831,45 @@ export default function AdminProductionPage() {
                 loading={approving}
               >
                 저장
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedProductionIssue != null && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30"
+          onClick={() => setSelectedProductionIssue(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h3 className="text-lg font-semibold text-gray-900">생산 이슈</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedProductionIssue(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 py-4 overflow-y-auto flex-1">
+              {selectedProductionIssue ? (
+                <div className="text-sm text-gray-900 whitespace-pre-wrap bg-amber-50/80 border border-amber-100 p-3 rounded-md">
+                  {selectedProductionIssue}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 italic">등록된 생산 이슈가 없습니다.</p>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end sticky bottom-0 bg-white">
+              <Button variant="primary" onClick={() => setSelectedProductionIssue(null)}>
+                닫기
               </Button>
             </div>
           </div>

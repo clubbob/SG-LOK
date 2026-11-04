@@ -4,7 +4,10 @@ import React from 'react';
 import type { ProductionRequestPanelFilters } from '@/lib/production/productionRequestSearch';
 
 const selectClass =
-  'w-full appearance-none rounded-lg border border-slate-300 bg-white px-3 py-2.5 pr-9 text-sm text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
+  'h-10 w-full min-w-0 appearance-none rounded-lg border border-slate-300 bg-white pl-2.5 pr-8 text-sm text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
+
+const searchInputClass =
+  'h-10 w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
 
 function FilterSelect({
   label,
@@ -18,14 +21,14 @@ function FilterSelect({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block min-w-0">
-      <span className="mb-1.5 block text-xs font-semibold text-gray-800">{label}</span>
-      <div className="relative">
+    <label className="flex w-full min-w-0 items-center gap-2">
+      <span className="shrink-0 text-xs font-semibold text-gray-800 whitespace-nowrap">{label}</span>
+      <div className="relative min-w-0 flex-1">
         <select value={value} onChange={(e) => onChange(e.target.value)} className={selectClass}>
           {children}
         </select>
         <svg
-          className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+          className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -66,21 +69,25 @@ export function ProductionRequestSearchPanel({
     });
   };
 
+  const cellClass = 'min-w-0 flex-1 basis-0';
+
   return (
     <section
-      className="mb-6 rounded-xl border border-slate-300 bg-white p-4 sm:p-5 shadow-sm"
+      className="mb-6 rounded-xl border border-slate-300 bg-white p-3 sm:p-4 shadow-sm"
       aria-label="생산요청 검색"
     >
-      <input
-        type="search"
-        value={searchQuery}
-        onChange={(e) => onSearchQueryChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-      />
+      <div className="flex flex-nowrap items-center gap-4 sm:gap-5 lg:gap-6 overflow-x-auto pb-0.5">
+        <div className={`${cellClass} min-w-[8.5rem]`}>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => onSearchQueryChange(e.target.value)}
+            placeholder={placeholder}
+            className={searchInputClass}
+          />
+        </div>
 
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/90 p-3 sm:p-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={`${cellClass} min-w-[9.5rem]`}>
           <FilterSelect
             label="생산목적"
             value={filters.productionReason}
@@ -94,7 +101,9 @@ export function ProductionRequestSearchPanel({
             <option value="order">주문</option>
             <option value="inventory">재고</option>
           </FilterSelect>
+        </div>
 
+        <div className={`${cellClass} min-w-[8.5rem]`}>
           <FilterSelect
             label="지역"
             value={filters.salesRegion}
@@ -108,7 +117,9 @@ export function ProductionRequestSearchPanel({
             <option value="domestic">국내</option>
             <option value="overseas">해외</option>
           </FilterSelect>
+        </div>
 
+        <div className={`${cellClass} min-w-[10.5rem]`}>
           <FilterSelect
             label="진행 상태"
             value={filters.status}
@@ -119,17 +130,17 @@ export function ProductionRequestSearchPanel({
             <option value="in_progress">진행중</option>
             <option value="completed">생산 완료</option>
           </FilterSelect>
+        </div>
 
-          <div className="flex flex-col justify-end">
-            <button
-              type="button"
-              onClick={resetAll}
-              disabled={!hasActiveFilters}
-              className="h-[42px] w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              조건 초기화
-            </button>
-          </div>
+        <div className={`${cellClass} min-w-[6.5rem] shrink-0`}>
+          <button
+            type="button"
+            onClick={resetAll}
+            disabled={!hasActiveFilters}
+            className="h-10 w-full rounded-lg border border-slate-300 bg-white px-2 sm:px-3 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 whitespace-nowrap"
+          >
+            조건 초기화
+          </button>
         </div>
       </div>
     </section>

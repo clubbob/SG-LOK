@@ -27,10 +27,14 @@ function truncateRemarkPreview(remark?: string, maxChars = 12): string {
 
 const registrationFieldCellClass =
   'rounded-md border border-slate-200 bg-slate-50/90 px-2 py-1.5 -mx-0.5 sm:mx-0';
-const planFieldCellClass =
-  'rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5 -mx-0.5 sm:mx-0';
-const completionFieldCellClass =
-  'rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5 -mx-0.5 sm:mx-0';
+
+/** 생산 처리 한 줄 */
+const planFieldCellClassRow =
+  'rounded-md border border-sky-200 bg-sky-50 px-2 py-1.5';
+const completionFieldCellClassRow =
+  'rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1.5';
+const productionIssueFieldCellClassRow =
+  'rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5';
 
 function Field({
   label,
@@ -57,15 +61,18 @@ export function ProductionRequestStatusSection({
   statusBadge,
   actions,
   onOpenMemo,
+  onOpenProductionIssue,
 }: {
   listRow: ProductionRequestListRow;
   rowNumber: number;
   statusBadge: React.ReactNode;
   actions?: React.ReactNode;
   onOpenMemo: () => void;
+  onOpenProductionIssue?: () => void;
 }) {
   const request = listRow.request;
   const lineRequestedDate = listRow.requestedCompletionDate ?? request.requestedCompletionDate;
+  const productionIssueText = listRow.productionIssue?.trim() ?? '';
 
   return (
     <article className="rounded-lg border border-slate-400 bg-white overflow-hidden">
@@ -138,11 +145,11 @@ export function ProductionRequestStatusSection({
       </div>
 
       <div
-        className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-x-3 gap-y-2 px-3 py-2.5 bg-white border-t border-slate-300"
+        className="flex flex-nowrap items-stretch gap-3 overflow-x-auto px-3 py-2.5 bg-white border-t border-slate-300"
         aria-label="생산 처리"
       >
         <Field
-          className={planFieldCellClass}
+          className={`${planFieldCellClassRow} min-w-[6.75rem] flex-1 basis-0`}
           label="생산계획수량"
           valueClassName={
             listRow.plannedQuantity != null &&
@@ -159,7 +166,7 @@ export function ProductionRequestStatusSection({
           )}
         </Field>
         <Field
-          className={planFieldCellClass}
+          className={`${planFieldCellClassRow} min-w-[6.75rem] flex-1 basis-0`}
           label="완료예정일"
           valueClassName={
             isDateAfter(listRow.plannedCompletionDate, lineRequestedDate) ? 'text-red-500' : ''
@@ -176,7 +183,7 @@ export function ProductionRequestStatusSection({
           return (
             <Field
               key={`completion-round-${index + 1}`}
-              className={completionFieldCellClass}
+              className={`${completionFieldCellClassRow} min-w-[6.75rem] flex-1 basis-0`}
               label={`${index + 1}차 완료일 (수량)`}
             >
               {display === '-' ? <span className="text-gray-400">-</span> : display}
@@ -184,7 +191,16 @@ export function ProductionRequestStatusSection({
           );
         })}
         <Field
-          className={completionFieldCellClass}
+          className={`${completionFieldCellClassRow} min-w-[6.75rem] flex-1 basis-0`}
+          label="UHP 세정/EP (수량)"
+        >
+          {(() => {
+            const display = formatProductionCompletionRoundDisplay(listRow.cleaningEpCompletion);
+            return display === '-' ? <span className="text-gray-400">-</span> : display;
+          })()}
+        </Field>
+        <Field
+          className={`${completionFieldCellClassRow} min-w-[6.75rem] flex-1 basis-0`}
           label="생산완료일 (수량)"
           valueClassName={
             isDateAfter(listRow.actualCompletion.date, listRow.plannedCompletionDate)
@@ -196,6 +212,26 @@ export function ProductionRequestStatusSection({
             const display = formatProductionCompletionRoundDisplay(listRow.actualCompletion);
             return display === '-' ? <span className="text-gray-400">-</span> : display;
           })()}
+        </Field>
+        <Field className={`${productionIssueFieldCellClassRow} min-w-[6.75rem] flex-1 basis-0`} label="생산 이슈">
+          {productionIssueText ? (
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="min-w-0 truncate" title={productionIssueText}>
+                {truncateRemarkPreview(productionIssueText)}
+              </span>
+              {onOpenProductionIssue ? (
+                <button
+                  type="button"
+                  onClick={onOpenProductionIssue}
+                  className="shrink-0 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  보기
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
         </Field>
       </div>
     </article>

@@ -34,6 +34,10 @@ export type ProductionRequestListRow = {
   completionRounds: ProductionCompletionRound[];
   actualCompletion: ProductionCompletionRound;
   remark?: string;
+  /** UHP 세정/EP 완료 (제품 줄별) */
+  cleaningEpCompletion: ProductionCompletionRound;
+  /** 관리자 입력 생산 이슈 (제품 줄별) */
+  productionIssue?: string;
 };
 
 export type ProductionCompletionRound = {
@@ -89,6 +93,105 @@ export function lineCompletionRound(
   }
 
   return {};
+}
+
+export function lineCleaningEpCompletion(
+  product: CertificateProduct | undefined,
+  request: ProductionRequest,
+  multiProduct: boolean
+): ProductionCompletionRound {
+  const fromProductDate = firestoreDateToDate(product?.cleaningEpCompletionDate);
+  const fromProductQty = product?.cleaningEpCompletionQuantity;
+  const productQty =
+    typeof fromProductQty === 'number' && !Number.isNaN(fromProductQty) ? fromProductQty : null;
+
+  if (fromProductDate != null || productQty != null) {
+    return { date: fromProductDate, quantity: productQty };
+  }
+
+  if (!multiProduct) {
+    return {
+      date: firestoreDateToDate(request.cleaningEpCompletionDate),
+      quantity:
+        typeof request.cleaningEpCompletionQuantity === 'number' &&
+        !Number.isNaN(request.cleaningEpCompletionQuantity)
+          ? request.cleaningEpCompletionQuantity
+          : null,
+    };
+  }
+
+  return {};
+}
+
+export type CleaningEpFormFields = {
+  cleaningEpCompletionDate: string;
+  cleaningEpCompletionQuantity: string;
+};
+
+export const EMPTY_CLEANING_EP_FORM: CleaningEpFormFields = {
+  cleaningEpCompletionDate: '',
+  cleaningEpCompletionQuantity: '',
+};
+
+export function cleaningEpFormFromLine(
+  product: CertificateProduct | undefined,
+  request: ProductionRequest,
+  multiProduct: boolean
+): CleaningEpFormFields {
+  const round = lineCleaningEpCompletion(product, request, multiProduct);
+  return {
+    cleaningEpCompletionDate: round.date ? firestoreValueToDateInputString(round.date) : '',
+    cleaningEpCompletionQuantity:
+      round.quantity != null && !Number.isNaN(round.quantity) ? String(round.quantity) : '',
+  };
+}
+
+export function applyCleaningEpFormToProduct(
+  product: CertificateProduct,
+  form: CleaningEpFormFields
+): CertificateProduct {
+  const next: CertificateProduct = { ...product };
+  const dateStr = form.cleaningEpCompletionDate.trim();
+  const qtyStr = form.cleaningEpCompletionQuantity.trim();
+
+  if (dateStr) {
+    const d = new Date(dateStr);
+    if (!Number.isNaN(d.getTime())) {
+      next.cleaningEpCompletionDate = d;
+    } else {
+      delete next.cleaningEpCompletionDate;
+    }
+  } else {
+    delete next.cleaningEpCompletionDate;
+  }
+
+  if (qtyStr) {
+    const q = parseInt(qtyStr, 10);
+    if (!Number.isNaN(q) && q >= 0) {
+      next.cleaningEpCompletionQuantity = q;
+    } else {
+      delete next.cleaningEpCompletionQuantity;
+    }
+  } else {
+    delete next.cleaningEpCompletionQuantity;
+  }
+
+  return next;
+}
+
+export function cleaningEpRootPatchFromProduct(
+  product: CertificateProduct
+): Record<string, Timestamp | number | null> {
+  const d =
+    product.cleaningEpCompletionDate instanceof Date
+      ? product.cleaningEpCompletionDate
+      : firestoreDateToDate(product.cleaningEpCompletionDate);
+  const qty = product.cleaningEpCompletionQuantity;
+  return {
+    cleaningEpCompletionDate: d && !Number.isNaN(d.getTime()) ? Timestamp.fromDate(d) : null,
+    cleaningEpCompletionQuantity:
+      typeof qty === 'number' && !Number.isNaN(qty) ? qty : null,
+  };
 }
 
 export function formatProductionCompletionRoundDisplay(round: ProductionCompletionRound): string {
@@ -372,7 +475,9 @@ export const PRODUCTION_REQUEST_CSV_HEADERS: string[] = [
   '1차 완료일 (수량)',
   '2차 완료일 (수량)',
   '3차 완료일 (수량)',
+  'UHP 세정/EP (수량)',
   '생산완료일 (수량)',
+  '생산 이슈',
   '상태',
 ];
 
@@ -415,7 +520,9 @@ export function buildProductionRequestListRowCsvValues(
     completionRoundDisplayForCsv(listRow.completionRounds[0] ?? {}),
     completionRoundDisplayForCsv(listRow.completionRounds[1] ?? {}),
     completionRoundDisplayForCsv(listRow.completionRounds[2] ?? {}),
+    completionRoundDisplayForCsv(listRow.cleaningEpCompletion),
     completionRoundDisplayForCsv(listRow.actualCompletion),
+    listRow.productionIssue?.trim() || '',
     statusLabel,
   ];
 }
@@ -456,8 +563,15 @@ export function mergeProductionProductsPreservingLineMeta(
     if (old.completionRound2Quantity != null) merged.completionRound2Quantity = old.completionRound2Quantity;
     if (old.completionRound3Date != null) merged.completionRound3Date = old.completionRound3Date;
     if (old.completionRound3Quantity != null) merged.completionRound3Quantity = old.completionRound3Quantity;
+    if (old.cleaningEpCompletionDate != null) merged.cleaningEpCompletionDate = old.cleaningEpCompletionDate;
+    if (old.cleaningEpCompletionQuantity != null) {
+      merged.cleaningEpCompletionQuantity = old.cleaningEpCompletionQuantity;
+    }
     if (old.actualCompletionDate != null) merged.actualCompletionDate = old.actualCompletionDate;
     if (old.actualCompletionQuantity != null) merged.actualCompletionQuantity = old.actualCompletionQuantity;
+    if (old.productionIssue != null && old.productionIssue !== '') {
+      merged.productionIssue = old.productionIssue;
+    }
     return merged;
   });
 }
@@ -630,6 +744,20 @@ function linePlannedCompletionDate(
   return undefined;
 }
 
+function lineProductionIssue(
+  product: CertificateProduct | undefined,
+  request: ProductionRequest,
+  multiProduct: boolean
+): string | undefined {
+  const fromProduct = product?.productionIssue?.trim();
+  if (fromProduct) return fromProduct;
+  if (!multiProduct) {
+    const fromRequest = request.productionIssue?.trim();
+    if (fromRequest) return fromRequest;
+  }
+  return undefined;
+}
+
 /** 관리자 승인: 선택한 목록 줄(제품)만 반영 */
 export function buildProductionRequestLineApprovalPatch(
   listRow: ProductionRequestListRow,
@@ -718,7 +846,9 @@ export function expandProductionRequestsToListRows(
             lineCompletionRound(product, request, multiProduct, i)
           ),
           actualCompletion: lineActualCompletion(product, productIndex, request, multiProduct),
+          cleaningEpCompletion: lineCleaningEpCompletion(product, request, multiProduct),
           remark: product.remark?.trim() || (productIndex === 0 ? request.memo : undefined),
+          productionIssue: lineProductionIssue(product, request, multiProduct),
         });
       });
     } else {
@@ -742,7 +872,9 @@ export function expandProductionRequestsToListRows(
           lineCompletionRound(undefined, request, false, i)
         ),
         actualCompletion: lineActualCompletion(undefined, 0, request, false),
+        cleaningEpCompletion: lineCleaningEpCompletion(undefined, request, false),
         remark: request.memo,
+        productionIssue: lineProductionIssue(undefined, request, false),
       });
     }
   }
@@ -825,6 +957,7 @@ export function productionRequestForListStatsFromFirestore(
     status: data.status || 'pending_review',
     plannedCompletionDate: data.plannedCompletionDate?.toDate?.(),
     memo: data.memo || '',
+    productionIssue: typeof data.productionIssue === 'string' ? data.productionIssue : undefined,
     createdAt: data.createdAt?.toDate?.() ?? new Date(),
     updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
     createdBy: data.createdBy ?? data.userId ?? '',

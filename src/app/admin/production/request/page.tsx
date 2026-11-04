@@ -7,9 +7,13 @@ import { collection, addDoc, Timestamp, getDocs, query, limit, doc, getDoc, upda
 import { db } from '@/lib/firebase';
 import { sanitizeForFirestore } from '@/lib/firestoreSanitize';
 import {
+  applyCleaningEpFormToProduct,
   applyCompletionRoundFormToProduct,
+  cleaningEpFormFromLine,
+  cleaningEpRootPatchFromProduct,
   completionRoundFormFromLine,
   completionRoundRootPatchFromProduct,
+  EMPTY_CLEANING_EP_FORM,
   deriveProductionRequestStatusFromProducts,
   EMPTY_COMPLETION_ROUND_FORM,
   firestoreValueToDateInputString,
@@ -44,7 +48,9 @@ const INITIAL_FORM_DATA = {
   plannedCompletionDate: '',
   actualCompletionDate: '',
   actualCompletionQuantity: '',
+  productionIssue: '',
   ...EMPTY_COMPLETION_ROUND_FORM,
+  ...EMPTY_CLEANING_EP_FORM,
 };
 
 // 관리자 인증 확인 함수
@@ -166,6 +172,8 @@ function AdminProductionRequestContent() {
             completionRound2Quantity: data.completionRound2Quantity,
             completionRound3Date: data.completionRound3Date?.toDate?.(),
             completionRound3Quantity: data.completionRound3Quantity,
+            cleaningEpCompletionDate: data.cleaningEpCompletionDate?.toDate?.(),
+            cleaningEpCompletionQuantity: data.cleaningEpCompletionQuantity,
             createdAt: data.createdAt?.toDate?.() ?? new Date(),
             updatedAt: data.updatedAt?.toDate?.() ?? new Date(),
             createdBy: data.createdBy ?? '',
@@ -191,6 +199,10 @@ function AdminProductionRequestContent() {
                   ? String(data.actualCompletionQuantity)
                   : '',
             ...completionRoundFormFromLine(lineDoc, requestForLine, multiProduct),
+            ...cleaningEpFormFromLine(lineDoc, requestForLine, multiProduct),
+            productionIssue:
+              (typeof lineDoc?.productionIssue === 'string' ? lineDoc.productionIssue : '') ||
+              (!multiProduct && typeof data.productionIssue === 'string' ? data.productionIssue : ''),
           });
         } else {
           setError('생산요청을 찾을 수 없습니다.');
@@ -313,6 +325,12 @@ function AdminProductionRequestContent() {
         }
       }
       if (
+        formData.cleaningEpCompletionDate.trim() &&
+        isDateInputAfterToday(formData.cleaningEpCompletionDate)
+      ) {
+        errors.cleaningEpCompletionDate = '오늘 이후 날짜는 선택할 수 없습니다.';
+      }
+      if (
         formData.actualCompletionDate.trim() &&
         isDateInputAfterToday(formData.actualCompletionDate)
       ) {
@@ -380,6 +398,7 @@ function AdminProductionRequestContent() {
           const targetIndex = editProductIndex ?? 0;
           const actualDateStr = formData.actualCompletionDate.trim();
           const actualQtyStr = formData.actualCompletionQuantity.trim();
+          const productionIssueText = formData.productionIssue.trim();
           finalProducts = finalProducts.map((p, i) => {
             if (i !== targetIndex) return p;
             let updated: CertificateProduct = {
@@ -390,8 +409,10 @@ function AdminProductionRequestContent() {
               ...(plannedDate && !Number.isNaN(plannedDate.getTime())
                 ? { plannedCompletionDate: plannedDate }
                 : {}),
+              productionIssue: (productionIssueText || null) as unknown as string | undefined,
             };
             updated = applyCompletionRoundFormToProduct(updated, formData);
+            updated = applyCleaningEpFormToProduct(updated, formData);
             if (actualDateStr) {
               const d = new Date(actualDateStr);
               if (!Number.isNaN(d.getTime())) {
@@ -441,6 +462,8 @@ function AdminProductionRequestContent() {
             );
           }
           Object.assign(productionRequestData, completionRoundRootPatchFromProduct(only));
+          Object.assign(productionRequestData, cleaningEpRootPatchFromProduct(only));
+          productionRequestData.productionIssue = only.productionIssue?.trim() || null;
         }
 
         productionRequestData.status = deriveProductionRequestStatusFromProducts(finalProducts);
@@ -619,13 +642,16 @@ function AdminProductionRequestContent() {
           {showAdminPostReviewFields && (
             <div className="space-y-4 border-t border-gray-200 pt-6">
               <h3 className="text-sm font-semibold text-gray-900">차수별 부분 완료</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+              <div className="flex flex-nowrap items-stretch gap-3 overflow-x-auto">
                 {Array.from({ length: PRODUCTION_COMPLETION_ROUND_COUNT }, (_, i) => {
                   const n = i + 1;
                   const dateName = `completionRound${n}Date`;
                   const qtyName = `completionRound${n}Quantity`;
                   return (
-                    <div key={n} className="space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50/80">
+                    <div
+                      key={n}
+                      className="min-w-[11rem] flex-1 basis-0 space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50/80"
+                    >
                       <p className="text-sm font-medium text-gray-800">{n}차 완료일 (수량)</p>
                       <DateInput
                         id={dateName}
@@ -653,7 +679,33 @@ function AdminProductionRequestContent() {
                     </div>
                   );
                 })}
-                <div className="space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50/80">
+                <div className="min-w-[11rem] flex-1 basis-0 space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50/80">
+                  <p className="text-sm font-medium text-gray-800">UHP 세정/EP (수량)</p>
+                  <DateInput
+                    id="cleaningEpCompletionDate"
+                    name="cleaningEpCompletionDate"
+                    label="완료일"
+                    value={formData.cleaningEpCompletionDate}
+                    max={completionDateMax}
+                    onChange={handleChange}
+                    error={fieldErrors.cleaningEpCompletionDate}
+                  />
+                  <Input
+                    id="cleaningEpCompletionQuantity"
+                    name="cleaningEpCompletionQuantity"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    label="수량"
+                    value={formData.cleaningEpCompletionQuantity}
+                    onChange={(e) => {
+                      const digitsOnly = e.target.value.replace(/[^\d]/g, '');
+                      setFormData((prev) => ({ ...prev, cleaningEpCompletionQuantity: digitsOnly }));
+                    }}
+                    placeholder="수량"
+                  />
+                </div>
+                <div className="min-w-[11rem] flex-1 basis-0 space-y-3 rounded-lg border border-gray-200 p-4 bg-gray-50/80">
                   <p className="text-sm font-medium text-gray-800">생산완료일 (수량)</p>
                   <DateInput
                     id="actualCompletionDate"
@@ -686,6 +738,27 @@ function AdminProductionRequestContent() {
                     placeholder="수량"
                   />
                 </div>
+              </div>
+            </div>
+          )}
+
+          {showAdminPostReviewFields && (
+            <div className="space-y-3 border-t border-gray-200 pt-6">
+              <h3 className="text-sm font-semibold text-gray-900">생산 이슈</h3>
+              <div className="rounded-lg border border-gray-200 p-4 bg-gray-50/80">
+                <label htmlFor="productionIssue" className="block text-sm font-medium text-gray-700 mb-2">
+                  생산 이슈
+                </label>
+                <textarea
+                  id="productionIssue"
+                  name="productionIssue"
+                  rows={4}
+                  value={formData.productionIssue}
+                  onChange={handleChange}
+                  disabled={submitting}
+                  placeholder="생산 진행 중 이슈·특이사항을 입력하세요"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+                />
               </div>
             </div>
           )}

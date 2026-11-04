@@ -13,7 +13,7 @@ const CONTENT_WIDTH_MM = LANDSCAPE_PAGE_WIDTH_MM - PAGE_MARGIN_X * 2;
 
 /** CSV 열 인덱스별 PDF 열 너비(mm) — PDF에서 제외하는 열은 사용하지 않음 */
 const PDF_COL_WIDTHS_BY_CSV_INDEX = [
-  5, 10, 12, 10, 10, 13, 14, 16, 12, 10, 12, 12, 14, 12, 12, 14, 14, 14, 14, 10,
+  6, 10, 12, 10, 10, 16, 14, 16, 17, 12, 12, 12, 14, 12, 12, 15, 15, 15, 15, 12, 14, 10,
 ] as const;
 
 /** PDF 테이블에서 제외 (엑셀·화면은 그대로) */
@@ -21,32 +21,58 @@ const PDF_EXCLUDED_CSV_COLUMN_LABELS = new Set([
   '지역',
   '제품군',
   '제품명',
-  '완료요청일',
   '비고',
   '생산완료일 (수량)',
+  '생산 이슈',
   '상태',
 ]);
 
-/** PDF 표 오른쪽 — 1·2·3차 완료(첨부) 열만 별도 배경 */
+/** PDF — 수주·요청·계획 열 (동일 너비) */
+const PDF_QUANTITY_PLAN_COLUMN_LABELS = new Set([
+  '수주수량',
+  '생산요청수량',
+  '완료요청일',
+  '생산계획수량',
+  '완료예정일',
+]);
+
+/** PDF 표 오른쪽 — 1·2·3차 · UHP 세정/EP (동일 민트 배경) */
 const PDF_ATTACH_SECTION_COLUMN_LABELS = new Set([
   '1차 완료일 (수량)',
   '2차 완료일 (수량)',
   '3차 완료일 (수량)',
+  'UHP 세정/EP (수량)',
 ]);
 
-const PDF_TABLE_HEADER_BG_MAIN = '#e2e8f0';
+function pdfEqualWidthGroupLabels(): Set<string> {
+  return new Set([...PDF_QUANTITY_PLAN_COLUMN_LABELS, ...PDF_ATTACH_SECTION_COLUMN_LABELS]);
+}
+
+const PDF_TABLE_HEADER_BG_MAIN = '#cbd5e1';
 const PDF_TABLE_DATA_BG_MAIN = '#ffffff';
 
-/** 생산계획수량 · 완료예정일 (동일 배경) */
-const PDF_TABLE_HEADER_BG_PLAN = '#dbeafe';
-const PDF_TABLE_DATA_BG_PLAN = '#eff6ff';
+/** 생산계획수량 · 완료예정일 — 헤더만 연한 파랑 (본문 흰색) */
+const PDF_TABLE_HEADER_BG_PLAN = '#bfdbfe';
+const PDF_TABLE_DATA_BG_PLAN = '#ffffff';
 
-/** 1·2·3차 완료(첨부) 열 */
-const PDF_TABLE_HEADER_BG_ATTACH = '#d1fae5';
-const PDF_TABLE_DATA_BG_ATTACH = '#ecfdf5';
+/** 1·2·3차 · UHP — 헤더만 연한 민트 (본문 흰색) */
+const PDF_TABLE_HEADER_BG_ATTACH = '#bbf7d0';
+const PDF_TABLE_DATA_BG_ATTACH = '#ffffff';
 
-/** PDF 헤더 — 필요 시 짧은 표기 (미설정 시 CSV 라벨 그대로) */
-const PDF_HEADER_DISPLAY_LABELS: Record<string, string> = {};
+/** 제품군 구분줄 — 표 헤더보다 연하게 + 좌측 띠 (인쇄 부담 적음) */
+const PDF_GROUP_HEADER_BG = '#e2e8f0';
+const PDF_GROUP_HEADER_ACCENT_MM = 1.2;
+const PDF_GROUP_HEADER_ACCENT = '#475569';
+const PDF_GROUP_HEADER_TEXT = '#111827';
+const PDF_GROUP_HEADER_BORDER = '#64748b';
+
+/** PDF 헤더 — 짧은 표기(한 줄·균형), 데이터·엑셀 라벨은 CSV 그대로 */
+const PDF_HEADER_DISPLAY_LABELS: Record<string, string> = {
+  '1차 완료일 (수량)': '1차 완료 (수량)',
+  '2차 완료일 (수량)': '2차 완료 (수량)',
+  '3차 완료일 (수량)': '3차 완료 (수량)',
+  'UHP 세정/EP (수량)': 'UHP 세정/EP (수량)',
+};
 
 function pdfTableCellBackground(columnLabel: string | undefined, header: boolean): string {
   if (columnLabel == null) {
@@ -61,22 +87,44 @@ function pdfTableCellBackground(columnLabel: string | undefined, header: boolean
   return header ? PDF_TABLE_HEADER_BG_MAIN : PDF_TABLE_DATA_BG_MAIN;
 }
 
-/** 가독성을 위해 넓게 배분할 열 */
+/** 열 너비 배분 가중치 — 완료 열은 과도하게 넓히지 않음 */
 const PDF_COLUMN_WIDTH_WEIGHT: Record<string, number> = {
-  번호: 0.65,
-  고객사명: 1.15,
-  제품코드: 1.25,
-  요청자: 0.9,
-  생산목적: 1.05,
-  생산요청수량: 1.05,
-  생산계획수량: 1.05,
+  번호: 0.7,
+  고객사명: 1.1,
+  제품코드: 1.22,
+  요청자: 0.95,
+  요청일: 1,
+  생산목적: 1,
+  수주수량: 1,
+  생산요청수량: 1,
+  완료요청일: 1,
+  생산계획수량: 1,
+  완료예정일: 1,
+  '1차 완료일 (수량)': 1,
+  '2차 완료일 (수량)': 1,
+  '3차 완료일 (수량)': 1,
+  'UHP 세정/EP (수량)': 1,
 };
 
+const PDF_ATTACH_EQUAL_MIN_WIDTH_MM = 16;
+const PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM = 12;
+
 const PDF_MIN_COLUMN_WIDTH_MM: Record<string, number> = {
-  /** 헤더 「번호」가 한 줄에 들어가도록 */
   번호: 8,
-  /** 헤더 「요청자」 한 줄 */
   요청자: 9,
+  요청일: 10,
+  생산목적: 10,
+  고객사명: 15,
+  제품코드: 15,
+  수주수량: PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM,
+  생산요청수량: PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM,
+  완료요청일: PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM,
+  생산계획수량: PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM,
+  완료예정일: PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM,
+  '1차 완료일 (수량)': PDF_ATTACH_EQUAL_MIN_WIDTH_MM,
+  '2차 완료일 (수량)': PDF_ATTACH_EQUAL_MIN_WIDTH_MM,
+  '3차 완료일 (수량)': PDF_ATTACH_EQUAL_MIN_WIDTH_MM,
+  'UHP 세정/EP (수량)': PDF_ATTACH_EQUAL_MIN_WIDTH_MM,
 };
 
 function scaleWidthsToTarget(baseWidths: number[], csvLabels: string[], targetTotalMm: number): number[] {
@@ -87,7 +135,66 @@ function scaleWidthsToTarget(baseWidths: number[], csvLabels: string[], targetTo
   const sum = weighted.reduce((a, b) => a + b, 0);
   if (sum <= 0) return baseWidths;
   const scaled = weighted.map((w) => (w / sum) * targetTotalMm);
-  return enforceMinColumnWidths(scaled, csvLabels, targetTotalMm);
+  return equalizePdfColumnWidthGroups(
+    enforceMinColumnWidths(scaled, csvLabels, targetTotalMm),
+    csvLabels,
+    targetTotalMm
+  );
+}
+
+/** 그룹별 열 너비 통일 — 그룹 합계 유지, 각 칸 동일 mm */
+function equalizePdfColumnWidthGroups(
+  widths: number[],
+  labels: string[],
+  targetTotalMm: number
+): number[] {
+  let next = widths;
+  next = equalizeSingleColumnGroup(next, PDF_QUANTITY_PLAN_COLUMN_LABELS, labels);
+  next = equalizeSingleColumnGroup(next, PDF_ATTACH_SECTION_COLUMN_LABELS, labels);
+  return fixPdfTableWidthDrift(next, labels, targetTotalMm);
+}
+
+function equalizeSingleColumnGroup(
+  widths: number[],
+  groupLabels: Set<string>,
+  labels: string[]
+): number[] {
+  const indices = labels
+    .map((label, i) => (groupLabels.has(label) ? i : -1))
+    .filter((i) => i >= 0);
+  if (indices.length <= 1) return widths;
+
+  const next = widths.map((w) => w);
+  const totalBefore = indices.reduce((sum, i) => sum + next[i], 0);
+  let unified = totalBefore / indices.length;
+  unified = Math.floor(unified * 100) / 100;
+  indices.forEach((i) => {
+    next[i] = unified;
+  });
+  let remainder = Math.round((totalBefore - unified * indices.length) * 100) / 100;
+  if (Math.abs(remainder) > 0.001) {
+    const last = indices[indices.length - 1];
+    next[last] = Math.round((next[last] + remainder) * 100) / 100;
+  }
+  return next;
+}
+
+function fixPdfTableWidthDrift(
+  widths: number[],
+  labels: string[],
+  targetTotalMm: number
+): number[] {
+  const locked = pdfEqualWidthGroupLabels();
+  const next = widths.map((w) => Math.floor(w * 100) / 100);
+  let drift = Math.round((targetTotalMm - next.reduce((a, b) => a + b, 0)) * 100) / 100;
+  if (Math.abs(drift) <= 0.001) return next;
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (locked.has(labels[i] ?? '')) continue;
+    next[i] = Math.round((next[i] + drift) * 100) / 100;
+    drift = Math.round((targetTotalMm - next.reduce((a, b) => a + b, 0)) * 100) / 100;
+    if (Math.abs(drift) <= 0.001) break;
+  }
+  return next;
 }
 
 function enforceMinColumnWidths(
@@ -285,8 +392,10 @@ function tableRowToImage(
 
   ctx.font = `${weight} ${fontSizePx}px "Noto Sans KR", "Malgun Gothic", "맑은 고딕", sans-serif`;
   ctx.fillStyle = '#111827';
-  ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+
+  const rowHeightPx = rowHeightMm * MM_TO_PX;
 
   xPx = 0;
   cells.forEach((_cell, i) => {
@@ -294,11 +403,10 @@ function tableRowToImage(
     const colPx = colMm * MM_TO_PX;
     const lines = cellLines[i] ?? [''];
     const blockHeight = lines.length * lineHeightPx;
-    let yPx = (rowHeightMm * MM_TO_PX - blockHeight) / 2;
-    if (yPx < cellPadPx) yPx = cellPadPx;
-    lines.forEach((line) => {
-      ctx.fillText(line, xPx + cellPadPx, yPx);
-      yPx += lineHeightPx;
+    const firstLineCenterY = (rowHeightPx - blockHeight) / 2 + lineHeightPx / 2;
+    lines.forEach((line, lineIndex) => {
+      const y = firstLineCenterY + lineIndex * lineHeightPx;
+      ctx.fillText(line, xPx + cellPadPx, y);
     });
     xPx += colPx;
     ctx.beginPath();
@@ -379,12 +487,20 @@ function groupHeaderToImage(
   if (!ctx) throw new Error('Canvas를 사용할 수 없습니다.');
 
   ctx.scale(scale, scale);
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(0, 0, widthMm * MM_TO_PX, heightMm * MM_TO_PX);
+  const wPx = widthMm * MM_TO_PX;
+  const hPx = heightMm * MM_TO_PX;
+  const accentPx = PDF_GROUP_HEADER_ACCENT_MM * MM_TO_PX;
+  ctx.fillStyle = PDF_GROUP_HEADER_ACCENT;
+  ctx.fillRect(0, 0, accentPx, hPx);
+  ctx.fillStyle = PDF_GROUP_HEADER_BG;
+  ctx.fillRect(accentPx, 0, wPx - accentPx, hPx);
+  ctx.strokeStyle = PDF_GROUP_HEADER_BORDER;
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(0.25, 0.25, wPx - 0.5, hPx - 0.5);
   ctx.font = `600 ${7.5 * 1.333}px "Noto Sans KR", "Malgun Gothic", sans-serif`;
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = PDF_GROUP_HEADER_TEXT;
   ctx.textBaseline = 'middle';
-  ctx.fillText(`${groupLabel}  (${count}건)`, 4, (heightMm * MM_TO_PX) / 2);
+  ctx.fillText(`${groupLabel}  (${count}건)`, accentPx + 3, hPx / 2);
 
   return { dataUrl: canvas.toDataURL('image/png'), widthMm, heightMm };
 }
@@ -461,9 +577,9 @@ export async function downloadProductionRequestListPdf(
   const drawTableHeader = () => {
     const headerImg = tableRowToImage(pdfHeaders, pdfColWidthsMm, {
       header: true,
-      fontSizePt: 6.5,
-      minRowHeightMm: 8,
-      maxLinesPerCell: 2,
+      fontSizePt: 6.25,
+      minRowHeightMm: 7.5,
+      maxLinesPerCell: 1,
       columnLabels: pdfColumnLabels,
     });
     ensureSpace(headerImg.heightMm);

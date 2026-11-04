@@ -1,3 +1,5 @@
+import { SHOW_DEALER_MENU } from '@/lib/featureFlags';
+
 export const MENU_ACCESS_KEYS = [
   'dashboard',
   'production',
@@ -11,6 +13,12 @@ export const MENU_ACCESS_KEYS = [
 ] as const;
 
 export type MenuAccessKey = (typeof MENU_ACCESS_KEYS)[number];
+
+/** 회원 메뉴 권한 UI·기본값에 쓰는 키 목록 */
+export function getMenuAccessKeysForUi(): MenuAccessKey[] {
+  if (SHOW_DEALER_MENU) return [...MENU_ACCESS_KEYS];
+  return MENU_ACCESS_KEYS.filter((key) => key !== 'dealer');
+}
 
 export const MENU_ACCESS_LABELS: Record<MenuAccessKey, string> = {
   dashboard: '대시보드',
@@ -52,7 +60,8 @@ export function normalizeAllowedMenus(value: unknown): MenuAccessKey[] {
 
 export function getAllowedMenusOrDefault(value: unknown): MenuAccessKey[] {
   const normalized = normalizeAllowedMenus(value);
-  return normalized.length > 0 ? normalized : [...MENU_ACCESS_KEYS];
+  const base = normalized.length > 0 ? normalized : [...MENU_ACCESS_KEYS];
+  return SHOW_DEALER_MENU ? base : base.filter((key) => key !== 'dealer');
 }
 
 export function resolveMenuKeyByPath(pathname: string): MenuAccessKey | null {

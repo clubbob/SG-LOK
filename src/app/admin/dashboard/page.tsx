@@ -9,6 +9,7 @@ import {
   productionRequestForListStatsFromFirestore,
   summarizeProductionRequestStats,
 } from '@/lib/production/productionRequestDisplay';
+import { SHOW_DEALER_MENU } from '@/lib/featureFlags';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -322,33 +323,34 @@ export default function AdminPage() {
     );
 
     // 대리점관리 통계 구독
-    const dealerRef = collection(db, 'dealer_customers');
-    const unsubscribeDealerCustomers = onSnapshot(
-      dealerRef,
-      (snapshot) => {
-        let onboardingCount = 0;
-        let sellingCount = 0;
-        let pausedCount = 0;
+    const unsubscribeDealerCustomers = SHOW_DEALER_MENU
+      ? onSnapshot(
+          collection(db, 'dealer_customers'),
+          (snapshot) => {
+            let onboardingCount = 0;
+            let sellingCount = 0;
+            let pausedCount = 0;
 
-        snapshot.forEach((d) => {
-          const data = d.data() as { status?: unknown };
-          const status = String(data.status ?? '');
-          if (status === '업체등록중') onboardingCount += 1;
-          else if (status === '판매중') sellingCount += 1;
-          else if (status === '거래중단중') pausedCount += 1;
-        });
+            snapshot.forEach((d) => {
+              const data = d.data() as { status?: unknown };
+              const status = String(data.status ?? '');
+              if (status === '업체등록중') onboardingCount += 1;
+              else if (status === '판매중') sellingCount += 1;
+              else if (status === '거래중단중') pausedCount += 1;
+            });
 
-        setDealerStats({
-          total: snapshot.size,
-          onboarding: onboardingCount,
-          selling: sellingCount,
-          paused: pausedCount,
-        });
-      },
-      (error) => {
-        console.error('대리점관리 통계 조회 오류:', error);
-      }
-    );
+            setDealerStats({
+              total: snapshot.size,
+              onboarding: onboardingCount,
+              selling: sellingCount,
+              paused: pausedCount,
+            });
+          },
+          (error) => {
+            console.error('대리점관리 통계 조회 오류:', error);
+          }
+        )
+      : () => {};
 
     return () => {
       unsubscribeUsers();
@@ -716,6 +718,7 @@ export default function AdminPage() {
         </div>
 
         {/* 대리점관리 섹션 */}
+        {SHOW_DEALER_MENU && (
         <div className="mb-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <h2 className="text-base font-semibold text-gray-900 mb-3">대리점관리</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -784,6 +787,7 @@ export default function AdminPage() {
             </Link>
           </div>
         </div>
+        )}
 
         {/* 대체품코드 섹션 */}
         <div className="mb-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4">

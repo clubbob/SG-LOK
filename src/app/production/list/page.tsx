@@ -371,7 +371,7 @@ function ProductionRequestListPageContent() {
             <div className="min-w-0">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900">생산요청 현황</h1>
               <p className="text-gray-600 mt-2 text-sm sm:text-base">
-                전체 생산요청 현황을 확인할 수 있습니다 (조회 전용)
+                전체 생산요청 현황을 확인할 수 있습니다.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto sm:flex-shrink-0">

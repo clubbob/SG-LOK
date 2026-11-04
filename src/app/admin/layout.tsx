@@ -12,6 +12,7 @@ import {
 } from '@/lib/adminNotifications';
 import { Button } from '@/components/ui';
 import { readResponseJsonSafe } from '@/lib/utils';
+import { SHOW_DEALER_MENU } from '@/lib/featureFlags';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -508,6 +509,7 @@ export default function AdminLayout({
     'inquiries',
     'users',
   ]
+    .filter((id) => SHOW_DEALER_MENU || id !== 'dealer-customers')
     .map((id) => adminMenuItems.find((item) => item.id === id))
     .filter((item): item is MenuItem => Boolean(item));
 

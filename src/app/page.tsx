@@ -122,26 +122,26 @@ export default function Home() {
                 <h3 className="text-xl font-semibold text-gray-900">생산관리</h3>
               </div>
               <p className="text-gray-600 mb-4">
-                생산 요청부터 일정 관리, 진행 상황 추적까지 모든 생산 프로세스를 한눈에 관리할 수 있습니다.
+                생산요청 등록, 승인·진행, 현황·엑셀 공유까지 한 흐름으로 관리합니다.
               </p>
               <ul className="text-sm text-gray-500 space-y-2">
                 <li className="flex items-center">
                   <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  생산 요청 및 승인 관리
+                  생산요청 등록·승인 상태 확인
                 </li>
                 <li className="flex items-center">
                   <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  생산요청 현황·엑셀 다운로드
+                  차수별·UHP·생산 이슈 현황
                 </li>
                 <li className="flex items-center">
                   <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  실시간 진행 상황 추적
+                  현황 목록·엑셀(CSV) 다운로드
                 </li>
               </ul>
             </div>
@@ -192,61 +192,26 @@ export default function Home() {
                 <h3 className="text-xl font-semibold text-gray-900">재고관리</h3>
               </div>
               <p className="text-gray-600 mb-4">
-                품목별 재고 현황을 확인하고 생산 계획 기반으로 재고를 효율적으로 관리할 수 있습니다.
+                UHP 재고·ERP 현황·바코드 스캔으로 재고와 생산계획 잔량을 확인합니다.
               </p>
               <ul className="text-sm text-gray-500 space-y-2">
                 <li className="flex items-center">
                   <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  품목 재고 보유/미보유 관리
+                  UHP 재고현황·생산계획 잔량
                 </li>
                 <li className="flex items-center">
                   <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  생산계획 연동 재고 파악
+                  ERP 재고 현황 조회
                 </li>
                 <li className="flex items-center">
                   <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  제품 이미지와 함께 조회
-                </li>
-              </ul>
-            </div>
-
-            {/* 대리점관리 */}
-            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
-              <div className="flex items-center mb-4">
-                <div className="bg-teal-100 rounded-lg p-3 mr-4">
-                  <svg className="w-8 h-8 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M5 7v11a1 1 0 001 1h12a1 1 0 001-1V7M9 11h6M9 15h6" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-gray-900">대리점관리</h3>
-              </div>
-              <p className="text-gray-600 mb-4">
-                대리점 담당고객 정보를 조회하고 현황을 빠르게 확인할 수 있습니다.
-              </p>
-              <ul className="text-sm text-gray-500 space-y-2">
-                <li className="flex items-center">
-                  <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  대리점별 담당고객 목록 조회
-                </li>
-                <li className="flex items-center">
-                  <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  등록일·현황변경일·담당자 확인
-                </li>
-                <li className="flex items-center">
-                  <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                  </svg>
-                  검색 및 엑셀 다운로드 지원
+                  바코드·QR 스캔
                 </li>
               </ul>
             </div>
@@ -262,26 +227,84 @@ export default function Home() {
                 <h3 className="text-xl font-semibold text-gray-900">대체품코드</h3>
               </div>
               <p className="text-gray-600 mb-4">
-                Swagelok과 S-LOK 코드를 검색하고 대체 코드를 빠르게 조회 및 등록할 수 있습니다.
+                Swagelok 계열 코드로 등록된 대체품을 검색하고 목록에서 확인합니다.
               </p>
               <ul className="text-sm text-gray-500 space-y-2">
                 <li className="flex items-center">
                   <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  Swagelok 코드 기반 대체 조회
+                  코드 검색·대체품 매핑 조회
                 </li>
                 <li className="flex items-center">
                   <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  코드 매핑 등록/수정/삭제
+                  대체품 코드 목록·엑셀
                 </li>
                 <li className="flex items-center">
                   <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
-                  코드 목록 검색 및 엑셀 다운로드
+                  카탈로그·참고 자료 연동
+                </li>
+              </ul>
+            </div>
+
+            {/* 공지사항 */}
+            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+              <div className="flex items-center mb-4">
+                <div className="bg-amber-100 rounded-lg p-3 mr-4">
+                  <svg className="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900">공지사항</h3>
+              </div>
+              <p className="text-gray-600 mb-4">
+                회사 공지와 업무 안내를 확인합니다.
+              </p>
+              <ul className="text-sm text-gray-500 space-y-2">
+                <li className="flex items-center">
+                  <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  최신 공지 목록
+                </li>
+                <li className="flex items-center">
+                  <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  상세 내용 확인
+                </li>
+              </ul>
+            </div>
+
+            {/* 문의하기 */}
+            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+              <div className="flex items-center mb-4">
+                <div className="bg-rose-100 rounded-lg p-3 mr-4">
+                  <svg className="w-8 h-8 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900">문의하기</h3>
+              </div>
+              <p className="text-gray-600 mb-4">
+                업무 문의를 등록하고 답변 상태를 확인합니다.
+              </p>
+              <ul className="text-sm text-gray-500 space-y-2">
+                <li className="flex items-center">
+                  <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  문의 등록·내 문의 목록
+                </li>
+                <li className="flex items-center">
+                  <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  답변·처리 상태 확인
                 </li>
               </ul>
             </div>

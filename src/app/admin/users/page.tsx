@@ -7,7 +7,7 @@ import { auth, db } from '@/lib/firebase';
 import { User } from '@/types';
 import { formatDateTime24, readResponseJsonSafe } from '@/lib/utils';
 import { Button } from '@/components/ui';
-import { MENU_ACCESS_KEYS, MENU_ACCESS_LABELS, type MenuAccessKey, normalizeAllowedMenus } from '@/lib/auth/menuAccess';
+import { MENU_ACCESS_LABELS, type MenuAccessKey, normalizeAllowedMenus, getMenuAccessKeysForUi } from '@/lib/auth/menuAccess';
 import { isBootstrapAdminEmail } from '@/lib/auth/adminBootstrap';
 
 const ADMIN_SESSION_KEY = 'admin_session';
@@ -44,7 +44,7 @@ export default function AdminUsersPage() {
   const [displayedUsers, setDisplayedUsers] = useState<User[]>([]);
   const [itemsPerPage] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
-  const [menuDraft, setMenuDraft] = useState<MenuAccessKey[]>([...MENU_ACCESS_KEYS]);
+  const [menuDraft, setMenuDraft] = useState<MenuAccessKey[]>(getMenuAccessKeysForUi());
   const [isSavingMenu, setIsSavingMenu] = useState(false);
   const [isIssuingTempPassword, setIsIssuingTempPassword] = useState(false);
 
@@ -159,7 +159,9 @@ export default function AdminUsersPage() {
   const handleUserClick = (user: User) => {
     setSelectedUser(user);
     const parsed = normalizeAllowedMenus(user.allowedMenus);
-    setMenuDraft(parsed.length > 0 ? parsed : [...MENU_ACCESS_KEYS]);
+    const defaults = getMenuAccessKeysForUi();
+    const parsedFiltered = parsed.filter((k) => defaults.includes(k));
+    setMenuDraft(parsedFiltered.length > 0 ? parsedFiltered : defaults);
     setError('');
     setSuccessMessage('');
   };
@@ -597,7 +599,7 @@ export default function AdminUsersPage() {
                         </p>
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {MENU_ACCESS_KEYS.map((key) => {
+                        {getMenuAccessKeysForUi().map((key) => {
                           const checked = menuDraft.includes(key);
                           return (
                             <label

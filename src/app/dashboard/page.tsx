@@ -13,6 +13,7 @@ import {
   productionRequestForListStatsFromFirestore,
   summarizeProductionRequestStats,
 } from '@/lib/production/productionRequestDisplay';
+import { SHOW_DEALER_MENU } from '@/lib/featureFlags';
 
 function isPermissionDeniedError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
@@ -284,6 +285,7 @@ export default function DashboardPage() {
       }
 
       // 대리점관리 통계 (권한이 없으면 0으로 안전 처리)
+      if (SHOW_DEALER_MENU) {
       try {
         const dealerSnapshot = await getDocs(collection(db, 'dealer_customers'));
         let onboardingCount = 0;
@@ -314,6 +316,7 @@ export default function DashboardPage() {
           selling: 0,
           paused: 0,
         });
+      }
       }
     } catch (error) {
       console.error('대시보드 데이터 로드 오류:', error);
@@ -680,6 +683,7 @@ export default function DashboardPage() {
           </div>
 
           {/* 대리점관리 바로가기 */}
+          {SHOW_DEALER_MENU && (
           <div className="mb-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <h2 className="text-base font-semibold text-gray-900 mb-3">대리점관리</h2>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
@@ -748,6 +752,7 @@ export default function DashboardPage() {
               </Link>
             </div>
           </div>
+          )}
 
           {/* 대체품코드 바로가기 */}
           <div className="mb-4 bg-white rounded-lg shadow-sm border border-gray-200 p-4">

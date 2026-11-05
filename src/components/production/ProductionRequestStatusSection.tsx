@@ -40,10 +40,15 @@ const REGISTRATION_FIELDS_OMIT_IN_LIST = new Set(['제품군', '제품명', '제
 
 const registrationValueTruncateLabels = new Set(['고객사명', '비고']);
 
-/** 카드 상·우·하 외곽 및 타이틀 구분선 — 좌측 accent 제외 통일 */
+/** 카드 상·우·하 외곽 및 타이틀 구분선 — 좌측 accent 제외 */
 const cardOutlineEdgeClass = 'border-slate-400';
+const cardOutlineFrameClass = 'border-2';
 
 const tableCellBase = `border ${cardOutlineEdgeClass} align-top`;
+
+/** 표 바깥쪽과 래퍼 외곽선이 겹치지 않도록 */
+const tablePerimeterClass =
+  '[&_tr:last-child_td]:border-b-0 [&_tr:last-child_th]:border-b-0 [&_td:last-child]:border-r-0 [&_th:last-child]:border-r-0';
 
 const registrationThClass = `${tableCellBase} bg-slate-100 px-2 py-1.5 text-xs font-semibold text-gray-700`;
 const registrationTdClass = `${tableCellBase} bg-white px-2 py-1.5 text-sm text-gray-900`;
@@ -141,9 +146,11 @@ export function ProductionRequestStatusSection({
 
   return (
     <article
-      className={`rounded-lg border-t border-r border-b bg-white overflow-hidden ${cardOutlineEdgeClass} ${groupTheme.articleBorderClass}`}
+      className={`rounded-lg overflow-hidden bg-white ${cardOutlineFrameClass} ${cardOutlineEdgeClass} ${groupTheme.cardLeftBorderClass}`}
     >
-      <table className="w-full table-fixed border-collapse text-left">
+      <table
+        className={`w-full table-fixed border-collapse text-left ${tablePerimeterClass}`}
+      >
         {TABLE_COLGROUP}
         <caption className="sr-only">
           생산요청 {rowNumber}번 {listRow.productName}

@@ -115,6 +115,7 @@ function AdminProductionPageContent() {
   const [approvalForm, setApprovalForm] = useState({
     plannedQuantity: '',
     plannedCompletionDate: '',
+    machineNo: '',
   });
   const [approving, setApproving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -190,6 +191,7 @@ function AdminProductionPageContent() {
           quantity: (data.quantity as number) ?? 0,
           orderQuantity: parsedOrderQty,
           plannedQuantity: data.plannedQuantity as number | undefined,
+          machineNo: typeof data.machineNo === 'string' ? data.machineNo : undefined,
           requestDate:
             (data.requestDate as { toDate?: () => Date } | undefined)?.toDate?.() || new Date(),
           requestedCompletionDate:
@@ -334,6 +336,7 @@ function AdminProductionPageContent() {
   const emptyApprovalForm = {
     plannedQuantity: '',
     plannedCompletionDate: '',
+    machineNo: '',
   };
 
   const toDateInputValue = (date: Date | undefined): string => {
@@ -354,6 +357,7 @@ function AdminProductionPageContent() {
     setApprovalForm({
       plannedQuantity: listRow.plannedQuantity?.toString() || '',
       plannedCompletionDate: toDateInputValue(listRow.plannedCompletionDate),
+      machineNo: listRow.machineNo ?? '',
     });
   };
 
@@ -389,6 +393,7 @@ function AdminProductionPageContent() {
       const updateData = buildProductionRequestLineApprovalPatch(approvingListRow, {
         plannedQuantity: plannedQuantityNum,
         plannedCompletionDate: new Date(approvalForm.plannedCompletionDate),
+        machineNo: approvalForm.machineNo,
       });
 
       await updateDoc(
@@ -764,47 +769,74 @@ function AdminProductionPageContent() {
                   fields={buildProductionRequestRegistrationFields(approvingListRow)}
                 />
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">승인 입력</p>
-                <div onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-                  <label htmlFor="plannedQuantity" className="block text-sm font-medium text-gray-700 mb-2">
-                    생산계획수량 *
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    id="plannedQuantity"
-                    value={approvalForm.plannedQuantity}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      const digitsOnly = e.target.value.replace(/[^\d]/g, '');
-                      setApprovalForm({ ...approvalForm, plannedQuantity: digitsOnly });
-                      if (error) setError('');
-                    }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                    placeholder="생산계획수량 입력"
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                    disabled={approving}
-                    pattern="[0-9]*"
-                    autoComplete="off"
-                    required
-                  />
-                </div>
-                <div onClick={(e) => e.stopPropagation()}>
-                  <DateInput
-                    id="plannedCompletionDate"
-                    label="완료예정일 *"
-                    value={approvalForm.plannedCompletionDate}
-                    min={todayDateInputMin}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      setApprovalForm({ ...approvalForm, plannedCompletionDate: e.target.value });
-                      if (error) setError('');
-                    }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => e.stopPropagation()}
-                    disabled={approving}
-                    required
-                  />
+                <div
+                  className="grid grid-cols-1 sm:grid-cols-3 gap-4"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <div>
+                    <label htmlFor="plannedQuantity" className="block text-sm font-medium text-gray-700 mb-2">
+                      생산계획수량 *
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      id="plannedQuantity"
+                      value={approvalForm.plannedQuantity}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        const digitsOnly = e.target.value.replace(/[^\d]/g, '');
+                        setApprovalForm({ ...approvalForm, plannedQuantity: digitsOnly });
+                        if (error) setError('');
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder="생산계획수량 입력"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                      disabled={approving}
+                      pattern="[0-9]*"
+                      autoComplete="off"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <DateInput
+                      id="plannedCompletionDate"
+                      label="완료예정일 *"
+                      value={approvalForm.plannedCompletionDate}
+                      min={todayDateInputMin}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        setApprovalForm({ ...approvalForm, plannedCompletionDate: e.target.value });
+                        if (error) setError('');
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      disabled={approving}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="machineNo" className="block text-sm font-medium text-gray-700 mb-2">
+                      기계 No.
+                    </label>
+                    <input
+                      type="text"
+                      id="machineNo"
+                      value={approvalForm.machineNo}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        setApprovalForm({ ...approvalForm, machineNo: e.target.value });
+                        if (error) setError('');
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder="선택 입력"
+                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                      disabled={approving}
+                      autoComplete="off"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

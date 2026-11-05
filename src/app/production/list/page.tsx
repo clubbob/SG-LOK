@@ -151,6 +151,7 @@ function ProductionRequestListPageContent() {
           )?.toDate?.(),
           actualCompletionQuantity: data.actualCompletionQuantity as number | undefined,
           plannedQuantity: data.plannedQuantity as number | undefined,
+          machineNo: typeof data.machineNo === 'string' ? data.machineNo : undefined,
           priority: data.priority as ProductionRequest['priority'],
           memo: (data.memo as string) || '',
           adminMemo: (data.adminMemo as string) || '',

@@ -94,6 +94,7 @@ function buildListRowSearchableText(
     request.userCompany,
     listRow.productName,
     listRow.productCode,
+    listRow.machineNo,
     listRow.remark,
     getLineStatusLabel(listRow),
     listRow.lineStatus,

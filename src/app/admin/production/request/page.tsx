@@ -46,6 +46,7 @@ const ADMIN_SESSION_KEY = 'admin_session';
 const INITIAL_FORM_DATA = {
   plannedQuantity: '',
   plannedCompletionDate: '',
+  machineNo: '',
   actualCompletionDate: '',
   actualCompletionQuantity: '',
   productionIssue: '',
@@ -189,6 +190,9 @@ function AdminProductionRequestContent() {
             plannedCompletionDate: firestoreValueToDateInputString(
               lineDoc?.plannedCompletionDate ?? (!multiProduct ? data.plannedCompletionDate : undefined)
             ),
+            machineNo:
+              (typeof lineDoc?.machineNo === 'string' ? lineDoc.machineNo : '') ||
+              (!multiProduct && typeof data.machineNo === 'string' ? data.machineNo : ''),
             actualCompletionDate: firestoreValueToDateInputString(
               lineDoc?.actualCompletionDate ?? (!multiProduct ? data.actualCompletionDate : undefined)
             ),
@@ -399,6 +403,7 @@ function AdminProductionRequestContent() {
           const actualDateStr = formData.actualCompletionDate.trim();
           const actualQtyStr = formData.actualCompletionQuantity.trim();
           const productionIssueText = formData.productionIssue.trim();
+          const machineNoTrimmed = formData.machineNo.trim();
           finalProducts = finalProducts.map((p, i) => {
             if (i !== targetIndex) return p;
             let updated: CertificateProduct = {
@@ -409,6 +414,7 @@ function AdminProductionRequestContent() {
               ...(plannedDate && !Number.isNaN(plannedDate.getTime())
                 ? { plannedCompletionDate: plannedDate }
                 : {}),
+              ...(machineNoTrimmed ? { machineNo: machineNoTrimmed } : { machineNo: '' }),
               productionIssue: (productionIssueText || null) as unknown as string | undefined,
             };
             updated = applyCompletionRoundFormToProduct(updated, formData);
@@ -461,6 +467,7 @@ function AdminProductionRequestContent() {
                 : new Date(only.plannedCompletionDate)
             );
           }
+          productionRequestData.machineNo = only.machineNo?.trim() || null;
           Object.assign(productionRequestData, completionRoundRootPatchFromProduct(only));
           Object.assign(productionRequestData, cleaningEpRootPatchFromProduct(only));
           productionRequestData.productionIssue = only.productionIssue?.trim() || null;
@@ -600,7 +607,7 @@ function AdminProductionRequestContent() {
           />
 
           {showAdminPostReviewFields && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               <div>
                 <Input
                   id="plannedQuantity"
@@ -635,6 +642,19 @@ function AdminProductionRequestContent() {
                 {formData.actualCompletionDate && (
                   <p className="mt-1 text-xs text-gray-500">생산완료일 (수량)이 등록되어 있어 완료예정일을 변경할 수 없습니다.</p>
                 )}
+              </div>
+
+              <div>
+                <Input
+                  id="machineNo"
+                  name="machineNo"
+                  type="text"
+                  label="기계 No."
+                  value={formData.machineNo}
+                  onChange={handleChange}
+                  placeholder="선택 입력"
+                  disabled={submitting}
+                />
               </div>
           </div>
           )}

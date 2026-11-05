@@ -85,6 +85,8 @@ export interface ProductionRequest {
   quantity: number; // 수량 (다중 제품 시 합계)
   orderQuantity?: number; // 수주수량 (생산목적이 주문인 경우)
   plannedQuantity?: number; // 승인 시 계획수량
+  /** 승인 시 기계 No. (선택) */
+  machineNo?: string;
   requestDate: Date; // 생산요청일
   requestedCompletionDate: Date; // 완료요청일
   productionReason: ProductionReason; // 생산이유
@@ -221,6 +223,8 @@ export interface CertificateProduct {
   lineStatus?: ProductionRequestStatus; // 생산요청: 제품별 승인·진행 상태 (다중 제품)
   plannedQuantity?: number; // 생산요청: 제품별 계획수량 (승인 시)
   plannedCompletionDate?: Date; // 생산요청: 제품별 완료예정일 (승인 시)
+  /** 생산요청: 승인 시 기계 No. (선택) */
+  machineNo?: string;
   /** 생산요청: 차수별 부분 완료 (날짜·수량) */
   completionRound1Date?: Date;
   completionRound1Quantity?: number;

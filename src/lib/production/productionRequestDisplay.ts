@@ -30,6 +30,8 @@ export type ProductionRequestListRow = {
   lineStatus: ProductionRequestStatus;
   plannedQuantity: number | null;
   plannedCompletionDate?: Date;
+  /** 승인 시 입력 (선택) */
+  machineNo?: string;
   /** 1~3차 부분 완료 (날짜·수량) */
   completionRounds: ProductionCompletionRound[];
   actualCompletion: ProductionCompletionRound;
@@ -472,6 +474,7 @@ export const PRODUCTION_REQUEST_CSV_HEADERS: string[] = [
   '비고',
   '생산계획수량',
   '완료예정일',
+  '기계 No.',
   '1차 완료일 (수량)',
   '2차 완료일 (수량)',
   '3차 완료일 (수량)',
@@ -517,6 +520,7 @@ export function buildProductionRequestListRowCsvValues(
     listRow.remark?.trim() || '',
     listRow.plannedQuantity ?? '',
     plannedDateStr,
+    listRow.machineNo?.trim() || '',
     completionRoundDisplayForCsv(listRow.completionRounds[0] ?? {}),
     completionRoundDisplayForCsv(listRow.completionRounds[1] ?? {}),
     completionRoundDisplayForCsv(listRow.completionRounds[2] ?? {}),
@@ -556,6 +560,7 @@ export function mergeProductionProductsPreservingLineMeta(
       lineStatus: old.lineStatus ?? row.lineStatus,
       plannedQuantity: old.plannedQuantity ?? row.plannedQuantity,
       plannedCompletionDate: old.plannedCompletionDate ?? row.plannedCompletionDate,
+      machineNo: old.machineNo ?? row.machineNo,
     };
     if (old.completionRound1Date != null) merged.completionRound1Date = old.completionRound1Date;
     if (old.completionRound1Quantity != null) merged.completionRound1Quantity = old.completionRound1Quantity;
@@ -744,6 +749,20 @@ function linePlannedCompletionDate(
   return undefined;
 }
 
+function lineMachineNo(
+  product: CertificateProduct | undefined,
+  request: ProductionRequest,
+  multiProduct: boolean
+): string | undefined {
+  const fromProduct = product?.machineNo?.trim();
+  if (fromProduct) return fromProduct;
+  if (!multiProduct) {
+    const fromRequest = request.machineNo?.trim();
+    if (fromRequest) return fromRequest;
+  }
+  return undefined;
+}
+
 function lineProductionIssue(
   product: CertificateProduct | undefined,
   request: ProductionRequest,
@@ -764,12 +783,15 @@ export function buildProductionRequestLineApprovalPatch(
   approval: {
     plannedQuantity: number;
     plannedCompletionDate: Date;
+    machineNo?: string | null;
     adminMemo?: string | null;
   }
 ): Record<string, unknown> {
   const request = listRow.request;
   const productIndex = listRow.productIndex;
   const products = request.products;
+  const machineNoTrimmed = approval.machineNo?.trim() ?? '';
+  const machineNoValue = machineNoTrimmed.length > 0 ? machineNoTrimmed : undefined;
 
   const base: Record<string, unknown> = {
     updatedAt: Timestamp.now(),
@@ -785,6 +807,7 @@ export function buildProductionRequestLineApprovalPatch(
       status: 'confirmed',
       plannedQuantity: approval.plannedQuantity,
       plannedCompletionDate: Timestamp.fromDate(approval.plannedCompletionDate),
+      ...(machineNoValue ? { machineNo: machineNoValue } : { machineNo: null }),
     };
   }
 
@@ -795,6 +818,7 @@ export function buildProductionRequestLineApprovalPatch(
       lineStatus: 'confirmed' as ProductionRequestStatus,
       plannedQuantity: approval.plannedQuantity,
       plannedCompletionDate: approval.plannedCompletionDate,
+      ...(machineNoValue ? { machineNo: machineNoValue } : { machineNo: '' }),
     };
   });
 
@@ -811,6 +835,7 @@ export function buildProductionRequestLineApprovalPatch(
   if (products.length === 1) {
     patch.plannedQuantity = approval.plannedQuantity;
     patch.plannedCompletionDate = Timestamp.fromDate(approval.plannedCompletionDate);
+    patch.machineNo = machineNoValue ?? null;
   }
 
   return patch;
@@ -842,6 +867,7 @@ export function expandProductionRequestsToListRows(
           lineStatus: resolveProductionLineStatus(product, productIndex, request, multiProduct),
           plannedQuantity: linePlannedQuantity(product, request, multiProduct),
           plannedCompletionDate: linePlannedCompletionDate(product, request, multiProduct),
+          machineNo: lineMachineNo(product, request, multiProduct),
           completionRounds: Array.from({ length: PRODUCTION_COMPLETION_ROUND_COUNT }, (_, i) =>
             lineCompletionRound(product, request, multiProduct, i)
           ),
@@ -868,6 +894,7 @@ export function expandProductionRequestsToListRows(
         lineStatus: resolveProductionLineStatus(undefined, 0, request, false),
         plannedQuantity: request.plannedQuantity ?? null,
         plannedCompletionDate: request.plannedCompletionDate,
+        machineNo: lineMachineNo(undefined, request, false),
         completionRounds: Array.from({ length: PRODUCTION_COMPLETION_ROUND_COUNT }, (_, i) =>
           lineCompletionRound(undefined, request, false, i)
         ),

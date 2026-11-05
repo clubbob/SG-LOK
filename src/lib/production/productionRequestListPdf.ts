@@ -13,7 +13,7 @@ const CONTENT_WIDTH_MM = LANDSCAPE_PAGE_WIDTH_MM - PAGE_MARGIN_X * 2;
 
 /** CSV 열 인덱스별 PDF 열 너비(mm) — PDF에서 제외하는 열은 사용하지 않음 */
 const PDF_COL_WIDTHS_BY_CSV_INDEX = [
-  6, 10, 12, 10, 10, 16, 14, 16, 17, 12, 12, 12, 14, 12, 12, 15, 15, 15, 15, 12, 14, 10,
+  6, 10, 12, 10, 10, 16, 14, 16, 17, 12, 12, 12, 14, 12, 12, 10, 15, 15, 15, 15, 12, 14, 10,
 ] as const;
 
 /** PDF 테이블에서 제외 (엑셀·화면은 그대로) */
@@ -27,7 +27,7 @@ const PDF_EXCLUDED_CSV_COLUMN_LABELS = new Set([
   '상태',
 ]);
 
-/** PDF — 수주·요청·계획 열 (동일 너비) */
+/** PDF — 수주·요청·계획 열 (헤더 배경만 동일 그룹, 너비는 개별 최소값) */
 const PDF_QUANTITY_PLAN_COLUMN_LABELS = new Set([
   '수주수량',
   '생산요청수량',
@@ -45,7 +45,7 @@ const PDF_ATTACH_SECTION_COLUMN_LABELS = new Set([
 ]);
 
 function pdfEqualWidthGroupLabels(): Set<string> {
-  return new Set([...PDF_QUANTITY_PLAN_COLUMN_LABELS, ...PDF_ATTACH_SECTION_COLUMN_LABELS]);
+  return new Set([...PDF_ATTACH_SECTION_COLUMN_LABELS]);
 }
 
 const PDF_TABLE_HEADER_BG_MAIN = '#cbd5e1';
@@ -63,15 +63,24 @@ const PDF_TABLE_DATA_BG_ATTACH = '#ffffff';
 const PDF_GROUP_HEADER_BG = '#e2e8f0';
 const PDF_GROUP_HEADER_ACCENT_MM = 1.2;
 const PDF_GROUP_HEADER_ACCENT = '#475569';
-const PDF_GROUP_HEADER_TEXT = '#111827';
 const PDF_GROUP_HEADER_BORDER = '#64748b';
 
-/** PDF 헤더 — 짧은 표기(한 줄·균형), 데이터·엑셀 라벨은 CSV 그대로 */
+/** 표·제목 텍스트 — 인쇄·화면에서 흐리지 않도록 진한 색·굵기 */
+const PDF_TABLE_TEXT = '#000000';
+const PDF_META_TEXT = '#374151';
+
+/** PDF 헤더 — 한 줄 표기용 짧은 라벨 (데이터·엑셀은 CSV 그대로) */
 const PDF_HEADER_DISPLAY_LABELS: Record<string, string> = {
-  '1차 완료일 (수량)': '1차 완료 (수량)',
-  '2차 완료일 (수량)': '2차 완료 (수량)',
-  '3차 완료일 (수량)': '3차 완료 (수량)',
-  'UHP 세정/EP (수량)': 'UHP 세정/EP (수량)',
+  수주수량: '수주수량',
+  생산요청수량: '요청수량',
+  완료요청일: '완료요청',
+  생산계획수량: '계획수량',
+  완료예정일: '완료예정',
+  '기계 No.': '기계No',
+  '1차 완료일 (수량)': '1차 완료',
+  '2차 완료일 (수량)': '2차 완료',
+  '3차 완료일 (수량)': '3차 완료',
+  'UHP 세정/EP (수량)': 'UHP 세정/EP',
 };
 
 function pdfTableCellBackground(columnLabel: string | undefined, header: boolean): string {
@@ -81,7 +90,7 @@ function pdfTableCellBackground(columnLabel: string | undefined, header: boolean
   if (PDF_ATTACH_SECTION_COLUMN_LABELS.has(columnLabel)) {
     return header ? PDF_TABLE_HEADER_BG_ATTACH : PDF_TABLE_DATA_BG_ATTACH;
   }
-  if (columnLabel === '생산계획수량' || columnLabel === '완료예정일') {
+  if (columnLabel === '생산계획수량' || columnLabel === '완료예정일' || columnLabel === '기계 No.') {
     return header ? PDF_TABLE_HEADER_BG_PLAN : PDF_TABLE_DATA_BG_PLAN;
   }
   return header ? PDF_TABLE_HEADER_BG_MAIN : PDF_TABLE_DATA_BG_MAIN;
@@ -100,31 +109,32 @@ const PDF_COLUMN_WIDTH_WEIGHT: Record<string, number> = {
   완료요청일: 1,
   생산계획수량: 1,
   완료예정일: 1,
+  '기계 No.': 0.85,
   '1차 완료일 (수량)': 1,
   '2차 완료일 (수량)': 1,
   '3차 완료일 (수량)': 1,
   'UHP 세정/EP (수량)': 1,
 };
 
-const PDF_ATTACH_EQUAL_MIN_WIDTH_MM = 16;
-const PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM = 12;
+const PDF_ATTACH_EQUAL_MIN_WIDTH_MM = 22;
 
 const PDF_MIN_COLUMN_WIDTH_MM: Record<string, number> = {
   번호: 8,
   요청자: 9,
   요청일: 10,
   생산목적: 10,
-  고객사명: 15,
-  제품코드: 15,
-  수주수량: PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM,
-  생산요청수량: PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM,
-  완료요청일: PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM,
-  생산계획수량: PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM,
-  완료예정일: PDF_QUANTITY_PLAN_EQUAL_MIN_WIDTH_MM,
+  고객사명: 14,
+  제품코드: 14,
+  수주수량: 11,
+  생산요청수량: 13,
+  완료요청일: 11,
+  생산계획수량: 13,
+  완료예정일: 11,
+  '기계 No.': 11,
   '1차 완료일 (수량)': PDF_ATTACH_EQUAL_MIN_WIDTH_MM,
   '2차 완료일 (수량)': PDF_ATTACH_EQUAL_MIN_WIDTH_MM,
   '3차 완료일 (수량)': PDF_ATTACH_EQUAL_MIN_WIDTH_MM,
-  'UHP 세정/EP (수량)': PDF_ATTACH_EQUAL_MIN_WIDTH_MM,
+  'UHP 세정/EP (수량)': 22,
 };
 
 function scaleWidthsToTarget(baseWidths: number[], csvLabels: string[], targetTotalMm: number): number[] {
@@ -149,7 +159,6 @@ function equalizePdfColumnWidthGroups(
   targetTotalMm: number
 ): number[] {
   let next = widths;
-  next = equalizeSingleColumnGroup(next, PDF_QUANTITY_PLAN_COLUMN_LABELS, labels);
   next = equalizeSingleColumnGroup(next, PDF_ATTACH_SECTION_COLUMN_LABELS, labels);
   return fixPdfTableWidthDrift(next, labels, targetTotalMm);
 }
@@ -345,15 +354,15 @@ function tableRowToImage(
   const minRowHeightMm = options.minRowHeightMm ?? 6.5;
   const maxLinesPerCell = options.maxLinesPerCell ?? (header ? 2 : 3);
   const fontSizePx = fontSizePt * 1.333;
-  const lineHeightPx = fontSizePx * 1.25;
-  const cellPadPx = 3;
-  const scale = 2;
+  const lineHeightPx = fontSizePx * 1.28;
+  const cellPadPx = 4;
+  const scale = 3;
   const totalWidthMm = colWidthsMm.reduce((a, b) => a + b, 0);
 
   const measureCanvas = document.createElement('canvas');
   const measureCtx = measureCanvas.getContext('2d');
   if (!measureCtx) throw new Error('Canvas를 사용할 수 없습니다.');
-  const weight = header ? '600' : '400';
+  const weight = header ? '700' : '600';
   measureCtx.font = `${weight} ${fontSizePx}px "Noto Sans KR", "Malgun Gothic", "맑은 고딕", sans-serif`;
 
   const cellLines = cells.map((cell, i) => {
@@ -376,8 +385,8 @@ function tableRowToImage(
   if (!ctx) throw new Error('Canvas를 사용할 수 없습니다.');
 
   ctx.scale(scale, scale);
-  ctx.strokeStyle = '#94a3b8';
-  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = '#64748b';
+  ctx.lineWidth = 0.6;
 
   let xPx = 0;
   cells.forEach((_cell, i) => {
@@ -391,7 +400,7 @@ function tableRowToImage(
   ctx.strokeRect(0, 0, totalWidthMm * MM_TO_PX, rowHeightMm * MM_TO_PX);
 
   ctx.font = `${weight} ${fontSizePx}px "Noto Sans KR", "Malgun Gothic", "맑은 고딕", sans-serif`;
-  ctx.fillStyle = '#111827';
+  ctx.fillStyle = PDF_TABLE_TEXT;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
 
@@ -427,7 +436,7 @@ function pdfReportTitleRowToImage(
   metaRight: string,
   widthMm: number
 ): { dataUrl: string; widthMm: number; heightMm: number } {
-  const scale = 2;
+  const scale = 3;
   const paddingMm = 2;
   const rowHeightMm = 6.5;
   const heightMm = paddingMm * 2 + rowHeightMm;
@@ -449,16 +458,16 @@ function pdfReportTitleRowToImage(
   const gapPx = 8;
 
   const titleFontPx = 14 * 1.333;
-  ctx.font = `600 ${titleFontPx}px "Noto Sans KR", "Malgun Gothic", sans-serif`;
-  ctx.fillStyle = '#111827';
+  ctx.font = `700 ${titleFontPx}px "Noto Sans KR", "Malgun Gothic", sans-serif`;
+  ctx.fillStyle = PDF_TABLE_TEXT;
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   ctx.fillText(title, 0, centerYPx);
   const titleWidthPx = ctx.measureText(title).width;
 
   const metaFontPx = 9 * 1.333;
-  ctx.font = `400 ${metaFontPx}px "Noto Sans KR", "Malgun Gothic", sans-serif`;
-  ctx.fillStyle = '#4b5563';
+  ctx.font = `600 ${metaFontPx}px "Noto Sans KR", "Malgun Gothic", sans-serif`;
+  ctx.fillStyle = PDF_META_TEXT;
   ctx.textAlign = 'right';
   let metaText = metaRight;
   const maxMetaWidthPx = Math.max(40, contentWidthPx - titleWidthPx - gapPx);
@@ -475,7 +484,7 @@ function groupHeaderToImage(
   count: number,
   widthMm: number
 ): { dataUrl: string; widthMm: number; heightMm: number } {
-  const scale = 2;
+  const scale = 3;
   const heightMm = 6.5;
   const widthPx = widthMm * MM_TO_PX * scale;
   const heightPx = heightMm * MM_TO_PX * scale;
@@ -497,8 +506,8 @@ function groupHeaderToImage(
   ctx.strokeStyle = PDF_GROUP_HEADER_BORDER;
   ctx.lineWidth = 0.5;
   ctx.strokeRect(0.25, 0.25, wPx - 0.5, hPx - 0.5);
-  ctx.font = `600 ${7.5 * 1.333}px "Noto Sans KR", "Malgun Gothic", sans-serif`;
-  ctx.fillStyle = PDF_GROUP_HEADER_TEXT;
+  ctx.font = `700 ${8 * 1.333}px "Noto Sans KR", "Malgun Gothic", sans-serif`;
+  ctx.fillStyle = PDF_TABLE_TEXT;
   ctx.textBaseline = 'middle';
   ctx.fillText(`${groupLabel}  (${count}건)`, accentPx + 3, hPx / 2);
 
@@ -577,7 +586,7 @@ export async function downloadProductionRequestListPdf(
   const drawTableHeader = () => {
     const headerImg = tableRowToImage(pdfHeaders, pdfColWidthsMm, {
       header: true,
-      fontSizePt: 6.25,
+      fontSizePt: 6.75,
       minRowHeightMm: 7.5,
       maxLinesPerCell: 1,
       columnLabels: pdfColumnLabels,
@@ -605,8 +614,8 @@ export async function downloadProductionRequestListPdf(
       const cells = csvRowToPdfCells(fullRow);
       const rowImg = tableRowToImage(cells, pdfColWidthsMm, {
         header: false,
-        fontSizePt: 6,
-        minRowHeightMm: 7,
+        fontSizePt: 6.75,
+        minRowHeightMm: 7.5,
         maxLinesPerCell: 3,
         columnLabels: pdfColumnLabels,
       });

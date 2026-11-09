@@ -269,7 +269,7 @@ export default function AdminLayout({
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [loginNotifications, setLoginNotifications] = useState<AdminNotification[]>([]);
   const [showLoginNotifModal, setShowLoginNotifModal] = useState(false);
-  const openMenuRef = useRef<HTMLDivElement | null>(null);
+  const adminHeaderRef = useRef<HTMLElement | null>(null);
 
   const navigateAdminSubMenu = useCallback(
     (path: string) => {
@@ -284,11 +284,11 @@ export default function AdminLayout({
     if (!openMenuId) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (openMenuRef.current?.contains(target)) return;
+      if (adminHeaderRef.current?.contains(target)) return;
       setOpenMenuId(null);
     };
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [openMenuId]);
 
   useEffect(() => {
@@ -524,7 +524,10 @@ export default function AdminLayout({
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
-      <header className="sticky top-0 z-50 overflow-visible bg-blue-500 shadow-lg">
+      <header
+        ref={adminHeaderRef}
+        className="sticky top-0 z-50 overflow-visible bg-blue-500 shadow-lg"
+      >
         <div className="w-full max-w-[1600px] mx-auto overflow-visible px-1 sm:px-2 lg:px-3">
           <div className="flex justify-between items-center h-14 sm:h-16 min-w-0 gap-3 overflow-visible">
             <Link href="/admin/dashboard" className="hover:opacity-80 transition-opacity shrink-0">
@@ -539,7 +542,6 @@ export default function AdminLayout({
                   return (
                     <div
                       key={item.id}
-                      ref={open ? openMenuRef : undefined}
                       className={`relative overflow-visible ${open ? 'z-[100]' : ''}`}
                     >
                       <button

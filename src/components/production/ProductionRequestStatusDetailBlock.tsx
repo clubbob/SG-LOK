@@ -141,6 +141,30 @@ export function ProductionRequestStatusDetailBlock({
               ? 'truncate whitespace-nowrap'
               : '';
 
+            if (field.label === '도면') {
+              return (
+                <TableValueCell
+                  key={`reg-v-${field.label}`}
+                  className={listRegistrationTdClass}
+                  align="left"
+                >
+                  {field.href && field.value !== '-' ? (
+                    <a
+                      href={field.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 text-sm font-medium truncate block max-w-full"
+                      title={field.value}
+                    >
+                      {field.value}
+                    </a>
+                  ) : (
+                    <span className="text-gray-400">-</span>
+                  )}
+                </TableValueCell>
+              );
+            }
+
             if (field.label === '비고') {
               return (
                 <TableValueCell

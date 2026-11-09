@@ -15,7 +15,7 @@ export const LIST_SUMMARY_COLGROUP = (
   <colgroup>
     <col style={{ width: '3.5%' }} />
     <col style={{ width: '7%' }} />
-    <col style={{ width: '13%' }} />
+    <col style={{ width: '10%' }} />
     <col style={{ width: '13%' }} />
     <col style={{ width: '7%' }} />
     <col style={{ width: '8%' }} />
@@ -23,7 +23,7 @@ export const LIST_SUMMARY_COLGROUP = (
     <col style={{ width: '11%' }} />
     <col style={{ width: '6%' }} />
     <col style={{ width: '7%' }} />
-    <col style={{ width: '8.5%' }} />
+    <col style={{ width: '11.5%' }} />
   </colgroup>
 );
 
@@ -33,7 +33,7 @@ export const listSummaryTdClass =
   'border border-slate-400 px-2 py-2 text-sm text-gray-900 align-middle text-center';
 
 export const listSummaryActionsThClass = `${listSummaryThClass} px-1.5`;
-export const listSummaryActionsTdClass = `${listSummaryTdClass} px-1.5 whitespace-nowrap w-[1%]`;
+export const listSummaryActionsTdClass = `${listSummaryTdClass} px-1.5 whitespace-nowrap`;
 
 export const LIST_DETAIL_INNER_COLUMN_COUNT = 9;
 

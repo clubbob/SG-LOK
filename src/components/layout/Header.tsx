@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
@@ -25,6 +25,27 @@ export default function Header() {
   const [isInventoryMenuOpen, setIsInventoryMenuOpen] = useState(false);
   const [isSubstituteMenuOpen, setIsSubstituteMenuOpen] = useState(false);
   const [blockedAlertPath, setBlockedAlertPath] = useState('');
+  const desktopNavRef = useRef<HTMLElement | null>(null);
+  const userMenuAreaRef = useRef<HTMLDivElement | null>(null);
+
+  const anyDesktopDropdownOpen =
+    isProdMenuOpen || isCertMenuOpen || isInventoryMenuOpen || isSubstituteMenuOpen || isUserMenuOpen;
+
+  useEffect(() => {
+    if (!anyDesktopDropdownOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (desktopNavRef.current?.contains(target)) return;
+      if (userMenuAreaRef.current?.contains(target)) return;
+      setIsProdMenuOpen(false);
+      setIsCertMenuOpen(false);
+      setIsInventoryMenuOpen(false);
+      setIsSubstituteMenuOpen(false);
+      setIsUserMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [anyDesktopDropdownOpen]);
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -142,7 +163,14 @@ export default function Header() {
 
           {/* 데스크톱 네비게이션 */}
           {!isAuthPage && (
-            <nav className="hidden md:flex items-center gap-2 lg:gap-3 min-w-0">
+            <nav
+              ref={desktopNavRef}
+              className={`hidden md:flex items-center gap-2 lg:gap-3 min-w-0 ${
+                isProdMenuOpen || isCertMenuOpen || isInventoryMenuOpen || isSubstituteMenuOpen
+                  ? 'relative z-[100]'
+                  : ''
+              }`}
+            >
               <Link
                 href="/dashboard"
                 className={`px-4 py-2.5 rounded-md text-base font-semibold transition-colors shadow-sm whitespace-nowrap ${
@@ -179,12 +207,6 @@ export default function Header() {
                   </svg>
                 </button>
                 {isProdMenuOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-[90]"
-                      aria-hidden
-                      onClick={() => setIsProdMenuOpen(false)}
-                    />
                     <div className="absolute left-0 top-full z-[100] mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200">
                       <div className="py-2">
                         <Link
@@ -210,7 +232,6 @@ export default function Header() {
                         </Link>
                       </div>
                     </div>
-                  </>
                 )}
               </div>
 
@@ -240,12 +261,6 @@ export default function Header() {
                   </svg>
                 </button>
                 {isCertMenuOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-[90]"
-                      aria-hidden
-                      onClick={() => setIsCertMenuOpen(false)}
-                    />
                     <div className="absolute left-0 top-full z-[100] mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200">
                       <div className="py-2">
                         <Link
@@ -271,7 +286,6 @@ export default function Header() {
                         </Link>
                       </div>
                     </div>
-                  </>
                 )}
               </div>
 
@@ -301,12 +315,6 @@ export default function Header() {
                   </svg>
                 </button>
                 {isInventoryMenuOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-[90]"
-                      aria-hidden
-                      onClick={() => setIsInventoryMenuOpen(false)}
-                    />
                     <div className="absolute left-0 top-full z-[100] mt-1 w-48 rounded-lg bg-white shadow-lg border border-gray-200">
                       <div className="py-2">
                         <Link
@@ -339,7 +347,6 @@ export default function Header() {
                         </Link>
                       </div>
                     </div>
-                  </>
                 )}
               </div>
 
@@ -369,12 +376,6 @@ export default function Header() {
                   </svg>
                 </button>
                 {isSubstituteMenuOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-[90]"
-                      aria-hidden
-                      onClick={() => setIsSubstituteMenuOpen(false)}
-                    />
                     <div className="absolute left-0 top-full z-[100] mt-1 w-52 rounded-lg bg-white shadow-lg border border-gray-200">
                       <div className="py-2">
                         <Link
@@ -400,7 +401,6 @@ export default function Header() {
                         </Link>
                       </div>
                     </div>
-                  </>
                 )}
               </div>
 
@@ -423,7 +423,7 @@ export default function Header() {
               // 로딩 중일 때는 아무것도 표시하지 않음 (깜빡임 방지)
               <div className="w-8 h-8"></div>
             ) : isAuthenticated ? (
-              <div className={`relative ${isUserMenuOpen ? 'z-[100]' : ''}`}>
+              <div ref={userMenuAreaRef} className={`relative ${isUserMenuOpen ? 'z-[100]' : ''}`}>
                 {/* 사용자 메뉴 버튼 */}
                 <button
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
@@ -447,12 +447,6 @@ export default function Header() {
 
                 {/* 사용자 드롭다운 메뉴 */}
                 {isUserMenuOpen && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-[90]"
-                      aria-hidden
-                      onClick={() => setIsUserMenuOpen(false)}
-                    />
                     <div className="absolute right-0 top-full z-[100] mt-2 w-[min(16rem,calc(100vw-1.5rem))] sm:w-64 bg-white rounded-lg shadow-lg border border-gray-200">
                       <div className="p-4 border-b border-gray-200">
                         <div className="flex items-center justify-between">
@@ -493,7 +487,6 @@ export default function Header() {
                         </button>
                       </div>
                     </div>
-                  </>
                 )}
               </div>
             ) : (

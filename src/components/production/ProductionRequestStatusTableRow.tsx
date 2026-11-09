@@ -51,7 +51,7 @@ export function ProductionRequestStatusTableRow({
           {rowNumber}
         </td>
         {cell(request.requestDate ? formatDateShort(request.requestDate) : '-')}
-        {cell(isOrder ? listRow.customerName?.trim() || '-' : '-', 'max-w-[8rem]')}
+        {cell(isOrder ? listRow.customerName?.trim() || '-' : '-', 'max-w-[6.5rem] truncate')}
         {cell(productCodeDisplay, 'max-w-[9rem] font-medium')}
         {cell(
           listRow.requestQuantity != null ? listRow.requestQuantity.toLocaleString('ko-KR') : '-'
@@ -77,7 +77,7 @@ export function ProductionRequestStatusTableRow({
           <div className="flex justify-center items-center">{statusBadge}</div>
         </td>
         <td className={listSummaryActionsTdClass}>
-          <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-0.5">{actions}</div>
+          <div className="flex flex-nowrap items-center justify-center gap-x-1">{actions}</div>
         </td>
       </tr>
       {detailOpen ? (

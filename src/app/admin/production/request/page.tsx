@@ -40,6 +40,10 @@ import {
   validateRequestProductLines,
   type RequestProductLine,
 } from '@/lib/products/requestProductLines';
+import {
+  enrichProductsWithDrawingAttachments,
+  productionLinesHaveDrawingWork,
+} from '@/lib/production/productionDrawingAttachment';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -492,6 +496,20 @@ function AdminProductionRequestContent() {
           productionRequestData.actualCompletionDate = null;
           productionRequestData.actualCompletionQuantity = null;
         }
+        if (productionLinesHaveDrawingWork(linesForSave)) {
+          try {
+            finalProducts = await enrichProductsWithDrawingAttachments(linesForSave, finalProducts, {
+              requestId,
+              uploadedBy: 'admin',
+            });
+          } catch (uploadErr) {
+            console.error('도면 업로드 오류:', uploadErr);
+            const msg = uploadErr instanceof Error ? uploadErr.message : '알 수 없는 오류';
+            setError(`도면 저장에 실패했습니다: ${msg}`);
+            setSubmitting(false);
+            return;
+          }
+        }
         productionRequestData.products = finalProducts;
 
         await updateDoc(
@@ -540,6 +558,32 @@ function AdminProductionRequestContent() {
           collection(db, 'productionRequests'),
           sanitizeForFirestore(productionRequestData)
         );
+
+        if (productionLinesHaveDrawingWork(linesForSave)) {
+          try {
+            const withDrawings = await enrichProductsWithDrawingAttachments(
+              linesForSave,
+              productsData,
+              { requestId: createdRef.id, uploadedBy: 'admin' }
+            );
+            await updateDoc(
+              doc(db, 'productionRequests', createdRef.id),
+              sanitizeForFirestore({
+                products: withDrawings,
+                updatedAt: Timestamp.now(),
+              })
+            );
+          } catch (uploadErr) {
+            console.error('도면 업로드 오류:', uploadErr);
+            const msg = uploadErr instanceof Error ? uploadErr.message : '알 수 없는 오류';
+            setError(
+              `요청은 등록되었으나 도면 저장에 실패했습니다. 현황에서 수정하여 다시 첨부해 주세요: ${msg}`
+            );
+            setSubmitting(false);
+            return;
+          }
+        }
+
         await postAdminNotification(
           buildProductionRequestNotification({
             userName: '관리자',
@@ -604,6 +648,7 @@ function AdminProductionRequestContent() {
             disabled={submitting}
             allowMultipleProducts={editProductIndex == null}
             productLineDisplayStart={editProductIndex != null ? editProductIndex + 1 : 1}
+            showDrawingAttachment
           />
 
           {showAdminPostReviewFields && (

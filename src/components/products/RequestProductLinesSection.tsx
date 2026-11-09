@@ -19,6 +19,11 @@ import {
   normalizeCustomerNameInput,
   productCodeHasWhitespace,
 } from '@/lib/products/requestProductLines';
+import {
+  formatProductionDrawingFileSize,
+  PRODUCTION_DRAWING_ACCEPT,
+  PRODUCTION_DRAWING_MAX_BYTES,
+} from '@/lib/production/productionDrawingAttachment';
 
 const productLineSelectClass =
   'flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50';
@@ -73,6 +78,8 @@ type RequestProductLinesSectionProps = {
   allowMultipleProducts?: boolean;
   /** 카드에 표시할 제품 번호 시작값 (목록에서 2번째 줄 수정 시 2) */
   productLineDisplayStart?: number;
+  /** 생산요청: 제품별 도면 첨부 */
+  showDrawingAttachment?: boolean;
 };
 
 export function RequestProductLinesSection({
@@ -89,6 +96,7 @@ export function RequestProductLinesSection({
   requestedCompletionDateMin,
   allowMultipleProducts = true,
   productLineDisplayStart = 1,
+  showDrawingAttachment = false,
 }: RequestProductLinesSectionProps) {
   const [activeCustomerSuggestionIndex, setActiveCustomerSuggestionIndex] = useState<number | null>(
     null
@@ -188,6 +196,57 @@ export function RequestProductLinesSection({
     if (!confirm(`"${productName}" 제품을 삭제하시겠습니까?`)) return;
     const newProducts = products.filter((_, i) => i !== index);
     onProductsChange(newProducts.length > 0 ? newProducts : [createEmptyRequestProductLine()]);
+  };
+
+  const handleDrawingFileChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > PRODUCTION_DRAWING_MAX_BYTES) {
+      onSetFieldError(
+        `drawing-${index}`,
+        `파일 크기는 ${formatProductionDrawingFileSize(PRODUCTION_DRAWING_MAX_BYTES)} 이하여야 합니다.`
+      );
+      return;
+    }
+    onClearFieldError(`drawing-${index}`);
+    const newProducts = [...products];
+    newProducts[index] = {
+      ...newProducts[index],
+      pendingDrawingFile: file,
+      removeDrawing: false,
+    };
+    onProductsChange(newProducts);
+  };
+
+  const handleClearPendingDrawing = (index: number) => {
+    const newProducts = [...products];
+    newProducts[index] = {
+      ...newProducts[index],
+      pendingDrawingFile: null,
+    };
+    onProductsChange(newProducts);
+    onClearFieldError(`drawing-${index}`);
+  };
+
+  const handleRemoveExistingDrawing = (index: number) => {
+    const newProducts = [...products];
+    newProducts[index] = {
+      ...newProducts[index],
+      removeDrawing: true,
+      pendingDrawingFile: null,
+    };
+    onProductsChange(newProducts);
+    onClearFieldError(`drawing-${index}`);
+  };
+
+  const handleUndoRemoveDrawing = (index: number) => {
+    const newProducts = [...products];
+    newProducts[index] = {
+      ...newProducts[index],
+      removeDrawing: false,
+    };
+    onProductsChange(newProducts);
   };
 
   const handleProductNameBlur = async (index: number) => {
@@ -579,6 +638,88 @@ export function RequestProductLinesSection({
                 className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 resize-none disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-gray-50"
               />
             </div>
+
+            {showDrawingAttachment && (
+              <div className="border-t border-gray-100 pt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">도면 첨부 (선택)</label>
+                <p className="text-xs text-gray-500 mb-2">
+                  PDF·이미지·CAD 등, 제품당 1개 · 최대{' '}
+                  {formatProductionDrawingFileSize(PRODUCTION_DRAWING_MAX_BYTES)}
+                </p>
+
+                {product.existingDrawing && !product.removeDrawing && !product.pendingDrawingFile && (
+                  <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                    <a
+                      href={product.existingDrawing.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-blue-600 hover:underline truncate max-w-full"
+                    >
+                      {product.existingDrawing.name}
+                    </a>
+                    <span className="text-gray-500 text-xs">
+                      ({formatProductionDrawingFileSize(product.existingDrawing.size)})
+                    </span>
+                    {!disabled && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveExistingDrawing(index)}
+                        className="text-xs text-red-600 hover:underline"
+                      >
+                        제거
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {product.removeDrawing && product.existingDrawing && (
+                  <p className="mb-2 text-xs text-amber-700">
+                    저장 시 기존 도면이 삭제됩니다.{' '}
+                    {!disabled && (
+                      <button
+                        type="button"
+                        onClick={() => handleUndoRemoveDrawing(index)}
+                        className="text-blue-600 hover:underline"
+                      >
+                        취소
+                      </button>
+                    )}
+                  </p>
+                )}
+
+                {product.pendingDrawingFile && (
+                  <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm">
+                    <span className="font-medium text-gray-900 truncate max-w-full">
+                      {product.pendingDrawingFile.name}
+                    </span>
+                    <span className="text-gray-600 text-xs">
+                      ({formatProductionDrawingFileSize(product.pendingDrawingFile.size)})
+                    </span>
+                    {!disabled && (
+                      <button
+                        type="button"
+                        onClick={() => handleClearPendingDrawing(index)}
+                        className="text-xs text-red-600 hover:underline"
+                      >
+                        선택 취소
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {!disabled && (
+                  <input
+                    type="file"
+                    accept={PRODUCTION_DRAWING_ACCEPT}
+                    onChange={(e) => handleDrawingFileChange(index, e)}
+                    className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                )}
+                {fieldErrors[`drawing-${index}`] && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors[`drawing-${index}`]}</p>
+                )}
+              </div>
+            )}
           </div>
         ))}
 

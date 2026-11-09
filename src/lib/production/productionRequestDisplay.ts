@@ -13,6 +13,8 @@ export type ProductionRequestRegistrationField = {
   label: string;
   value: string;
   multiline?: boolean;
+  /** 도면 등 다운로드 링크 */
+  href?: string;
 };
 
 export type ProductionRequestListRow = {
@@ -496,6 +498,12 @@ export function buildProductionRequestRegistrationFields(
     label: '비고',
     value: remark || '-',
     multiline: remark.includes('\n'),
+  });
+  const drawing = product?.drawingAttachment;
+  fields.push({
+    label: '도면',
+    value: drawing?.name?.trim() || '-',
+    href: drawing?.url,
   });
 
   return fields;

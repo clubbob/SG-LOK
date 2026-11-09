@@ -245,6 +245,8 @@ export interface CertificateProduct {
   material?: string;            // MATERIAL (소재 정보, 예: 316/316L, 304)
   remark?: string;               // 비고 (REMARK)
   inspectionCertificate?: CertificateAttachment; // 제품별 Inspection Certi
+  /** 생산요청: 제품별 도면 첨부 */
+  drawingAttachment?: CertificateAttachment;
 }
 
 // 제품명코드 매핑 타입

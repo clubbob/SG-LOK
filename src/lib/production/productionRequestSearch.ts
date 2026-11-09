@@ -1,4 +1,4 @@
-import { ProductionReason, ProductionRequest, ProductionSalesRegion } from '@/types';
+import { ProductionProductGroup, ProductionReason, ProductionRequest, ProductionSalesRegion } from '@/types';
 import {
   expandProductionRequestsToListRows,
   formatProductionReasonLabel,
@@ -12,12 +12,14 @@ export const ADMIN_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER = PRODUCTION_REQUEST_SE
 export const USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER = PRODUCTION_REQUEST_SEARCH_PLACEHOLDER;
 
 export type ProductionRequestPanelFilters = {
+  productGroup: '' | ProductionProductGroup;
   productionReason: '' | ProductionReason;
   salesRegion: '' | ProductionSalesRegion;
   status: '' | string;
 };
 
 export const EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS: ProductionRequestPanelFilters = {
+  productGroup: '',
   productionReason: '',
   salesRegion: '',
   status: '',
@@ -47,6 +49,11 @@ export function productionRequestListRowMatchesPanelFilters(
 
   if (filters.productionReason && listRow.productionReason !== filters.productionReason) {
     return false;
+  }
+
+  if (filters.productGroup) {
+    const lineGroup = listRow.request.products?.[listRow.productIndex]?.productGroup?.trim() || '';
+    if (lineGroup !== filters.productGroup) return false;
   }
 
   if (filters.salesRegion && listRow.salesRegion !== filters.salesRegion) {

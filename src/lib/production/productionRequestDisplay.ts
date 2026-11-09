@@ -205,6 +205,50 @@ export function formatProductionCompletionRoundDisplay(round: ProductionCompleti
   return `${dateStr} (${qtyStr})`;
 }
 
+const COMPLETION_STAGE_SUMMARY_LABELS = ['1차', '2차', '3차', '세정/EP'] as const;
+
+function formatCompletionStageSummaryLabel(stageIndex: number): string {
+  return COMPLETION_STAGE_SUMMARY_LABELS[stageIndex] ?? `${stageIndex + 1}차`;
+}
+
+/** 1~3차·UHP 세정/EP 중 완료일이 가장 늦은 항목 — 앞에 단계 라벨 포함 */
+export function getProductionRequestLatestStageCompletionDisplay(
+  listRow: ProductionRequestListRow
+): string {
+  const stages: ProductionCompletionRound[] = [
+    ...listRow.completionRounds,
+    listRow.cleaningEpCompletion,
+  ];
+
+  let chosen: ProductionCompletionRound | null = null;
+  let chosenTime = -1;
+  let chosenIndex = -1;
+
+  stages.forEach((round, index) => {
+    const hasDate = round.date != null && !Number.isNaN(round.date.getTime());
+    if (!hasDate) return;
+    const time = round.date!.getTime();
+    if (time > chosenTime || (time === chosenTime && index > chosenIndex)) {
+      chosen = round;
+      chosenTime = time;
+      chosenIndex = index;
+    }
+  });
+
+  if (chosen && chosenIndex >= 0) {
+    const body = formatProductionCompletionRoundDisplay(chosen);
+    return body === '-' ? '-' : `${formatCompletionStageSummaryLabel(chosenIndex)} ${body}`;
+  }
+
+  for (let i = stages.length - 1; i >= 0; i--) {
+    const display = formatProductionCompletionRoundDisplay(stages[i]);
+    if (display !== '-') {
+      return `${formatCompletionStageSummaryLabel(i)} ${display}`;
+    }
+  }
+  return '-';
+}
+
 export type ProductionCompletionRoundFormFields = {
   completionRound1Date: string;
   completionRound1Quantity: string;

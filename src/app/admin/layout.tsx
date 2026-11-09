@@ -387,7 +387,11 @@ export default function AdminLayout({
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        setPendingUserCount(snapshot.size);
+        const pending = snapshot.docs.filter((d) => {
+          const data = d.data() as { approved?: boolean; deleted?: boolean };
+          return data.approved === false && data.deleted !== true;
+        }).length;
+        setPendingUserCount(pending);
       },
       (error) => {
         console.error('승인 대기 회원 수 조회 오류:', error);

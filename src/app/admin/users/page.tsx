@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, query, orderBy, getDocs, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -37,6 +37,7 @@ const checkAdminAuth = (): boolean => {
 export default function AdminUsersPage() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
+  const [showDeletedUsers, setShowDeletedUsers] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [error, setError] = useState('');
@@ -104,14 +105,31 @@ export default function AdminUsersPage() {
     };
   }, [router]);
 
+  const visibleUsers = useMemo(
+    () => (showDeletedUsers ? users : users.filter((u) => !u.deleted)),
+    [users, showDeletedUsers]
+  );
+
   // 페이지네이션: 표시할 사용자 목록 계산
   useEffect(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
-    setDisplayedUsers(users.slice(startIndex, endIndex));
-  }, [users, currentPage, itemsPerPage]);
+    setDisplayedUsers(visibleUsers.slice(startIndex, endIndex));
+  }, [visibleUsers, currentPage, itemsPerPage]);
 
-  const totalPages = Math.ceil(users.length / itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(visibleUsers.length / itemsPerPage));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  useEffect(() => {
+    if (!showDeletedUsers && selectedUser?.deleted) {
+      setSelectedUser(null);
+    }
+  }, [showDeletedUsers, selectedUser]);
 
   const loadUsers = async () => {
     try {
@@ -334,9 +352,7 @@ export default function AdminUsersPage() {
             : u
         )
       );
-      setSelectedUser((prev) =>
-        prev ? { ...prev, deleted: true, deletedAt: new Date(), deletedBy: 'admin', updatedAt: new Date() } : prev
-      );
+      setSelectedUser(null);
       setError('');
       setSuccessMessage('회원이 삭제 처리되었습니다. (복구 가능)');
     } catch (err) {
@@ -390,11 +406,25 @@ export default function AdminUsersPage() {
   return (
     <div className="bg-gray-50 min-h-full">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
           <h1 className="text-2xl font-bold text-gray-900">회원 / 권한 관리</h1>
-          <Button variant="outline" size="sm" onClick={loadUsers} disabled={loadingUsers}>
-            새로고침
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700 select-none">
+              <input
+                type="checkbox"
+                checked={showDeletedUsers}
+                onChange={(e) => {
+                  setShowDeletedUsers(e.target.checked);
+                  setCurrentPage(1);
+                }}
+                className="h-4 w-4 shrink-0 rounded border border-gray-300 text-blue-600 accent-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              />
+              삭제된 회원 표시
+            </label>
+            <Button variant="outline" size="sm" onClick={loadUsers} disabled={loadingUsers}>
+              새로고침
+            </Button>
+          </div>
         </div>
 
         {successMessage && (
@@ -422,10 +452,10 @@ export default function AdminUsersPage() {
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
               <div className="p-4 border-b border-gray-200">
-                <h2 className="text-base font-semibold text-gray-900">회원 목록 ({users.length})</h2>
+                <h2 className="text-base font-semibold text-gray-900">회원 목록 ({visibleUsers.length})</h2>
               </div>
               <div className="divide-y divide-gray-200">
-                {users.length === 0 ? (
+                {visibleUsers.length === 0 ? (
                   <div className="p-4 text-center text-gray-500">등록된 회원이 없습니다.</div>
                 ) : (
                   displayedUsers.map((user) => (
@@ -482,7 +512,7 @@ export default function AdminUsersPage() {
                     이전
                   </Button>
                   <span className="text-xs text-gray-600">
-                    {currentPage} / {totalPages} (전체 {users.length}개)
+                    {currentPage} / {totalPages} (전체 {visibleUsers.length}개)
                   </span>
                   <Button
                     variant="outline"

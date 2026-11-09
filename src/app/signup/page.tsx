@@ -209,35 +209,25 @@ export default function SignupPage() {
 
       console.log('Firebase Auth 사용자 생성 완료:', userCredential.user.uid);
 
-      // Firestore에 사용자 정보 저장 (타임아웃 포함)
-      const saveUserData = async () => {
-        try {
-          await setDoc(doc(db, 'users', userCredential.user.uid), {
-            id: userCredential.user.uid,
-            name: formData.name.trim(),
-            email: formData.email.trim(),
-            company: formData.company.trim(),
-            userTypes: [],
-            approved: false,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
-          console.log('Firestore 사용자 정보 저장 완료');
-        } catch (firestoreError) {
-          console.error('Firestore 저장 오류:', firestoreError);
-          console.warn('사용자 정보 저장 중 오류가 발생했지만 계정은 생성되었습니다.');
-        }
-      };
-
-      // Firestore 저장을 백그라운드에서 실행하고 즉시 리다이렉트
-      saveUserData().catch(err => {
-        console.error('Firestore 저장 백그라운드 오류:', err);
-      });
+      // Firestore에 사용자 문서가 반드시 만들어진 뒤 이동 (관리자 목록용)
+      await setDoc(
+        doc(db, 'users', userCredential.user.uid),
+        {
+          id: userCredential.user.uid,
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          company: formData.company.trim(),
+          userTypes: [],
+          approved: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      );
+      console.log('Firestore 사용자 정보 저장 완료');
 
       console.log('회원가입 성공, 리다이렉트 시작');
-      // 로딩 상태 즉시 해제
       setLoading(false);
-      // 즉시 리다이렉트 (window.location 사용하여 확실하게)
       window.location.href = '/signup/success';
     } catch (error) {
       console.error('회원가입 오류:', error);

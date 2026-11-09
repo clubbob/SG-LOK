@@ -2,6 +2,10 @@
 
 import React from 'react';
 import type { ProductionRequestPanelFilters } from '@/lib/production/productionRequestSearch';
+import {
+  PRODUCTION_PRODUCT_GROUP_OPTIONS,
+  formatProductionProductGroupLabel,
+} from '@/lib/products/requestProductLines';
 
 const selectClass =
   'h-10 w-full min-w-0 appearance-none rounded-lg border border-slate-300 bg-white pl-2.5 pr-8 text-sm text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500';
@@ -56,6 +60,7 @@ export function ProductionRequestSearchPanel({
 }) {
   const hasActiveFilters =
     Boolean(searchQuery.trim()) ||
+    Boolean(filters.productGroup) ||
     Boolean(filters.productionReason) ||
     Boolean(filters.salesRegion) ||
     Boolean(filters.status);
@@ -63,6 +68,7 @@ export function ProductionRequestSearchPanel({
   const resetAll = () => {
     onSearchQueryChange('');
     onFiltersChange({
+      productGroup: '',
       productionReason: '',
       salesRegion: '',
       status: '',
@@ -85,6 +91,25 @@ export function ProductionRequestSearchPanel({
             placeholder={placeholder}
             className={searchInputClass}
           />
+        </div>
+
+        <div className={`${cellClass} min-w-[10.5rem]`}>
+          <FilterSelect
+            label="제품군"
+            value={filters.productGroup}
+            onChange={(value) =>
+              onFiltersChange({
+                productGroup: value as ProductionRequestPanelFilters['productGroup'],
+              })
+            }
+          >
+            <option value="">전체</option>
+            {PRODUCTION_PRODUCT_GROUP_OPTIONS.map((group) => (
+              <option key={group} value={group}>
+                {formatProductionProductGroupLabel(group)}
+              </option>
+            ))}
+          </FilterSelect>
         </div>
 
         <div className={`${cellClass} min-w-[9.5rem]`}>

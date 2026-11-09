@@ -286,19 +286,16 @@ export default function LoginPage() {
               error={fieldErrors.password}
             />
           </div>
-          <div className="flex items-center">
+          <label className="relative z-10 flex cursor-pointer items-center gap-2 select-none">
             <input
-              id="remember-email"
               name="remember-email"
               type="checkbox"
               checked={rememberEmail}
               onChange={(e) => setRememberEmail(e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-4 w-4 shrink-0 rounded border border-gray-300 text-blue-600 accent-blue-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
             />
-            <label htmlFor="remember-email" className="ml-2 block text-sm text-gray-900">
-              이메일 저장
-            </label>
-          </div>
+            <span className="text-sm text-gray-900">이메일 저장</span>
+          </label>
           <div>
             <Button
               type="submit"

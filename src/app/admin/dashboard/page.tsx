@@ -97,9 +97,13 @@ export default function AdminPage() {
       (snapshot) => {
         let pendingCount = 0;
         let approvedCount = 0;
-        
+        let activeCount = 0;
+
         snapshot.forEach((doc) => {
           const data = doc.data();
+          const isDeleted = data.deleted === true;
+          if (isDeleted) return;
+          activeCount += 1;
           if (data.approved === false) {
             pendingCount++;
           } else {
@@ -108,7 +112,7 @@ export default function AdminPage() {
         });
 
         setUserStats({
-          total: snapshot.size,
+          total: activeCount,
           pending: pendingCount,
           approved: approvedCount,
         });

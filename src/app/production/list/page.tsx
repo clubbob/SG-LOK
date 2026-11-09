@@ -25,6 +25,13 @@ import {
   type ProductionRequestPanelFilters,
 } from '@/lib/production/productionRequestSearch';
 import { ProductionRequestSearchPanel } from '@/components/production/ProductionRequestSearchPanel';
+import { ProductionRequestListViewTabs } from '@/components/production/ProductionRequestListViewTabs';
+import { ProductionRequestPaginatedList } from '@/components/production/ProductionRequestPaginatedList';
+import {
+  excludeCompletedProductionListRows,
+  sortProductionListRowsForViewTab,
+  type ProductionRequestListViewTab,
+} from '@/lib/production/productionRequestListView';
 import { downloadProductionRequestListPdf } from '@/lib/production/productionRequestListPdf';
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
@@ -65,6 +72,8 @@ function ProductionRequestListPageContent() {
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const skipUrlStatusSyncRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [listViewTab, setListViewTab] = useState<ProductionRequestListViewTab>('by_request');
+  const [hideCompleted, setHideCompleted] = useState(true);
   const [filters, setFilters] = useState<ProductionRequestPanelFilters>(() => ({
     ...EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
     status: normalizeProductionRequestPanelStatusFilter(searchParams.get('status')),
@@ -175,6 +184,13 @@ function ProductionRequestListPageContent() {
     [requests, searchQuery, filters]
   );
 
+  const listRowsForView = useMemo(() => {
+    const base = hideCompleted
+      ? excludeCompletedProductionListRows(filteredListRows)
+      : filteredListRows;
+    return sortProductionListRowsForViewTab(base, listViewTab);
+  }, [filteredListRows, listViewTab, hideCompleted]);
+
   const allListRows = useMemo(() => expandProductionRequestsToListRows(requests), [requests]);
   const progressPdfRows = useMemo(
     () => prepareProductionRequestProgressPdfRows(allListRows),
@@ -255,13 +271,14 @@ function ProductionRequestListPageContent() {
   useEffect(() => {
     const hasFilter =
       Boolean(searchQuery.trim()) ||
+      Boolean(filters.productGroup) ||
       Boolean(filters.productionReason) ||
       Boolean(filters.salesRegion) ||
       Boolean(filters.status);
 
     if (!hasFilter) {
-      if (filteredListRows.length > 0) {
-        const totalPages = Math.ceil(filteredListRows.length / itemsPerPage);
+      if (listRowsForView.length > 0) {
+        const totalPages = Math.ceil(listRowsForView.length / itemsPerPage);
         setCurrentPage(totalPages > 0 ? totalPages : 1);
       } else {
         setCurrentPage(1);
@@ -270,23 +287,27 @@ function ProductionRequestListPageContent() {
     }
 
     setCurrentPage(1);
-  }, [searchQuery, filters, requests, filteredListRows.length, itemsPerPage]);
+  }, [searchQuery, filters, requests, listRowsForView.length, itemsPerPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [listViewTab, hideCompleted]);
 
   // 페이지네이션 (제품 1개 = 1행)
   useEffect(() => {
     const ITEMS_PER_PAGE = 10;
-    if (filteredListRows.length === 0) {
+    if (listRowsForView.length === 0) {
       setDisplayedListRows([]);
       return;
     }
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
     const endIndex = startIndex + ITEMS_PER_PAGE;
-    const sliced = filteredListRows.slice(startIndex, endIndex);
+    const sliced = listRowsForView.slice(startIndex, endIndex);
     const reversed = [...sliced].reverse();
     setDisplayedListRows(reversed);
-  }, [filteredListRows, currentPage]);
+  }, [listRowsForView, currentPage]);
 
-  const totalPages = Math.ceil(filteredListRows.length / itemsPerPage);
+  const totalPages = Math.ceil(listRowsForView.length / itemsPerPage);
 
   // 엑셀(CSV) 다운로드
   const handleExportToExcel = () => {
@@ -429,6 +450,13 @@ function ProductionRequestListPageContent() {
             onFiltersChange={handleFiltersChange}
           />
 
+          <ProductionRequestListViewTabs
+            value={listViewTab}
+            onChange={setListViewTab}
+            hideCompleted={hideCompleted}
+            onHideCompletedChange={setHideCompleted}
+          />
+
           {error && (
             <div className="bg-red-50 border-2 border-red-400 text-red-800 px-6 py-4 rounded-lg shadow-md mb-6">
               <div className="flex items-center gap-3">
@@ -447,19 +475,24 @@ function ProductionRequestListPageContent() {
               </svg>
               <h3 className="text-sm font-normal text-gray-500 mb-2">등록된 생산요청이 없습니다</h3>
             </div>
-          ) : filteredListRows.length === 0 ? (
+          ) : listRowsForView.length === 0 ? (
             <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-              <h3 className="text-sm font-normal text-gray-500 mb-2">선택한 조건에 맞는 생산요청이 없습니다</h3>
-              <p className="text-xs text-gray-400">조건 초기화 후 다시 확인하거나 새로고침해 보세요.</p>
+              <h3 className="text-sm font-normal text-gray-500 mb-2">표시할 생산요청이 없습니다</h3>
+              <p className="text-xs text-gray-400">
+                {hideCompleted && filteredListRows.length > 0
+                  ? '생산완료만 있거나 조건에 맞지 않습니다. 생산완료 제외를 해제하거나 조건을 바꿔 보세요.'
+                  : '조건 초기화 후 다시 확인하거나 새로고침해 보세요.'}
+              </p>
             </div>
           ) : (
             <>
-              <div className="space-y-3">
-                {displayedListRows.map((listRow, idx) => {
-                  const itemsPerPageValue = 10;
-                  const reversedIdx = displayedListRows.length - 1 - idx;
-                  const absoluteIndex = (currentPage - 1) * itemsPerPageValue + reversedIdx;
-                  const rowNumber = absoluteIndex + 1;
+              <ProductionRequestPaginatedList
+                viewTab={listViewTab}
+                displayedListRows={displayedListRows}
+                allRowsForView={listRowsForView}
+                currentPage={currentPage}
+                itemsPerPage={itemsPerPage}
+                renderTableRow={(listRow, rowNumber) => {
                   const showEdit = canUserEditListRow(listRow);
                   return (
                     <ProductionRequestStatusSection
@@ -495,8 +528,8 @@ function ProductionRequestListPageContent() {
                       }
                     />
                   );
-                })}
-              </div>
+                }}
+              />
 
               {/* 페이지네이션 */}
               {totalPages > 1 && (
@@ -504,25 +537,25 @@ function ProductionRequestListPageContent() {
                   <div className="text-sm text-gray-700">
                     {searchQuery ? (
                       <>
-                        검색 결과 <span className="font-medium">{filteredListRows.length}</span>건 중{' '}
+                        검색 결과 <span className="font-medium">{listRowsForView.length}</span>건 중{' '}
                         <span className="font-medium">
                           {(currentPage - 1) * itemsPerPage + 1}
                         </span>
                         -
                         <span className="font-medium">
-                          {Math.min(currentPage * itemsPerPage, filteredListRows.length)}
+                          {Math.min(currentPage * itemsPerPage, listRowsForView.length)}
                         </span>
                         건 표시 (전체 {totalListRowCount}건)
                       </>
                     ) : (
                       <>
-                        전체 <span className="font-medium">{filteredListRows.length}</span>건 중{' '}
+                        전체 <span className="font-medium">{listRowsForView.length}</span>건 중{' '}
                         <span className="font-medium">
                           {(currentPage - 1) * itemsPerPage + 1}
                         </span>
                         -
                         <span className="font-medium">
-                          {Math.min(currentPage * itemsPerPage, filteredListRows.length)}
+                          {Math.min(currentPage * itemsPerPage, listRowsForView.length)}
                         </span>
                         건 표시
                       </>

@@ -6,6 +6,7 @@ import {
   countProductionListRowGroups,
   getProductionListRowGroupKey,
   getProductionListRowGroupLabel,
+  listRowNumberForPageDisplay,
   type ProductionRequestListViewTab,
 } from '@/lib/production/productionRequestListView';
 import {
@@ -75,10 +76,13 @@ export function ProductionRequestPaginatedList({
         </thead>
         <tbody>
           {displayedListRows.map((listRow, idx) => {
-            const itemsPerPageValue = itemsPerPage;
-            const reversedIdx = displayedListRows.length - 1 - idx;
-            const absoluteIndex = (currentPage - 1) * itemsPerPageValue + reversedIdx;
-            const rowNumber = absoluteIndex + 1;
+            const rowNumber = listRowNumberForPageDisplay(
+              idx,
+              currentPage,
+              itemsPerPage,
+              displayedListRows.length,
+              viewTab
+            );
 
             const groupKey =
               viewTab !== 'by_request' ? getProductionListRowGroupKey(listRow, viewTab) : '';

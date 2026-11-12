@@ -36,6 +36,8 @@ import { ProductionMachineSelect } from '@/components/production/ProductionMachi
 import { useProductionMachines } from '@/hooks/useProductionMachines';
 import {
   excludeCompletedProductionListRows,
+  defaultListPageForViewTab,
+  sliceListRowsForPageDisplay,
   sortProductionListRowsForViewTab,
   type ProductionRequestListViewTab,
 } from '@/lib/production/productionRequestListView';
@@ -318,18 +320,18 @@ function AdminProductionPageContent() {
     if (!hasFilter) {
       if (listRowsForView.length > 0) {
         const totalPages = Math.ceil(listRowsForView.length / itemsPerPage);
-        setCurrentPage(totalPages > 0 ? totalPages : 1);
+        setCurrentPage(defaultListPageForViewTab(listViewTab, totalPages));
       }
       return;
     }
 
     setCurrentPage(1);
-  }, [searchQuery, filters, requests, listRowsForView.length, itemsPerPage]);
+  }, [searchQuery, filters, requests, listRowsForView.length, itemsPerPage, listViewTab]);
 
   useEffect(() => {
     if (listRowsForView.length > 0) {
       const totalPages = Math.ceil(listRowsForView.length / itemsPerPage);
-      setCurrentPage(totalPages > 0 ? totalPages : 1);
+      setCurrentPage(defaultListPageForViewTab(listViewTab, totalPages));
     } else {
       setCurrentPage(1);
     }
@@ -342,12 +344,10 @@ function AdminProductionPageContent() {
       setDisplayedListRows([]);
       return;
     }
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    const sliced = listRowsForView.slice(startIndex, endIndex);
-    const reversed = [...sliced].reverse();
-    setDisplayedListRows(reversed);
-  }, [listRowsForView, currentPage]);
+    setDisplayedListRows(
+      sliceListRowsForPageDisplay(listRowsForView, currentPage, ITEMS_PER_PAGE, listViewTab)
+    );
+  }, [listRowsForView, currentPage, listViewTab]);
 
   const totalPages = Math.ceil(listRowsForView.length / itemsPerPage);
   const totalListRowCount = useMemo(

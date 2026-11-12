@@ -30,6 +30,8 @@ import { ProductionRequestListViewTabs } from '@/components/production/Productio
 import { ProductionRequestPaginatedList } from '@/components/production/ProductionRequestPaginatedList';
 import {
   excludeCompletedProductionListRows,
+  defaultListPageForViewTab,
+  sliceListRowsForPageDisplay,
   sortProductionListRowsForViewTab,
   type ProductionRequestListViewTab,
 } from '@/lib/production/productionRequestListView';
@@ -278,7 +280,7 @@ function ProductionRequestListPageContent() {
     if (!hasFilter) {
       if (listRowsForView.length > 0) {
         const totalPages = Math.ceil(listRowsForView.length / itemsPerPage);
-        setCurrentPage(totalPages > 0 ? totalPages : 1);
+        setCurrentPage(defaultListPageForViewTab(listViewTab, totalPages));
       } else {
         setCurrentPage(1);
       }
@@ -286,12 +288,12 @@ function ProductionRequestListPageContent() {
     }
 
     setCurrentPage(1);
-  }, [searchQuery, filters, requests, listRowsForView.length, itemsPerPage]);
+  }, [searchQuery, filters, requests, listRowsForView.length, itemsPerPage, listViewTab]);
 
   useEffect(() => {
     if (listRowsForView.length > 0) {
       const totalPages = Math.ceil(listRowsForView.length / itemsPerPage);
-      setCurrentPage(totalPages > 0 ? totalPages : 1);
+      setCurrentPage(defaultListPageForViewTab(listViewTab, totalPages));
     } else {
       setCurrentPage(1);
     }
@@ -304,12 +306,10 @@ function ProductionRequestListPageContent() {
       setDisplayedListRows([]);
       return;
     }
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    const sliced = listRowsForView.slice(startIndex, endIndex);
-    const reversed = [...sliced].reverse();
-    setDisplayedListRows(reversed);
-  }, [listRowsForView, currentPage]);
+    setDisplayedListRows(
+      sliceListRowsForPageDisplay(listRowsForView, currentPage, ITEMS_PER_PAGE, listViewTab)
+    );
+  }, [listRowsForView, currentPage, listViewTab]);
 
   const totalPages = Math.ceil(listRowsForView.length / itemsPerPage);
 

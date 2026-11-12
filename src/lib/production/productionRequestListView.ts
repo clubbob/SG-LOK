@@ -20,13 +20,25 @@ export const PRODUCTION_REQUEST_LIST_VIEW_TABS: {
 
 const MACHINE_UNASSIGNED_KEY = 'machine:__unassigned__';
 
-/** 그룹·페이지 내 표시: 오래된 → 최신 (테이블 reverse 후 최신이 위) */
+/** 그룹 내 정렬 (오래된 → 최신) — reverse 후 최신이 위 */
 function compareListRowsWithinGroup(a: ProductionRequestListRow, b: ProductionRequestListRow): number {
   const createdA = a.request.createdAt?.getTime?.() ?? 0;
   const createdB = b.request.createdAt?.getTime?.() ?? 0;
   if (createdA !== createdB) return createdA - createdB;
   if (a.request.id !== b.request.id) return a.request.id.localeCompare(b.request.id);
   return a.productIndex - b.productIndex;
+}
+
+/** 제품군·기계별 묶음: 그룹 안에서는 최신이 위 */
+function compareListRowsWithinGroupNewestFirst(
+  a: ProductionRequestListRow,
+  b: ProductionRequestListRow
+): number {
+  return -compareListRowsWithinGroup(a, b);
+}
+
+function usesAscendingGroupDisplayOrder(tab: ProductionRequestListViewTab): boolean {
+  return tab === 'by_machine' || tab === 'by_product_group';
 }
 
 function productGroupSortRank(listRow: ProductionRequestListRow): number {
@@ -92,7 +104,7 @@ export function sortProductionListRowsForViewTab(
         'ko'
       );
       if (labelCmp !== 0) return labelCmp;
-      return compareListRowsWithinGroup(a, b);
+      return compareListRowsWithinGroupNewestFirst(a, b);
     });
     return copy;
   }
@@ -101,9 +113,39 @@ export function sortProductionListRowsForViewTab(
     const keyB = getProductionListRowGroupKey(b, tab);
     const keyCmp = compareMachineGroupKeys(keyA, keyB);
     if (keyCmp !== 0) return keyCmp;
-    return compareListRowsWithinGroup(a, b);
+    return compareListRowsWithinGroupNewestFirst(a, b);
   });
   return copy;
+}
+
+/** 현재 페이지 행 (제품군·기계별: 묶음 오름차순 유지, 생산요청별: reverse로 최신이 위) */
+export function sliceListRowsForPageDisplay(
+  listRows: ProductionRequestListRow[],
+  currentPage: number,
+  itemsPerPage: number,
+  tab: ProductionRequestListViewTab
+): ProductionRequestListRow[] {
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const sliced = listRows.slice(startIndex, startIndex + itemsPerPage);
+  if (usesAscendingGroupDisplayOrder(tab)) return sliced;
+  return [...sliced].reverse();
+}
+
+export function defaultListPageForViewTab(tab: ProductionRequestListViewTab, totalPages: number): number {
+  if (totalPages <= 0) return 1;
+  return usesAscendingGroupDisplayOrder(tab) ? 1 : totalPages;
+}
+
+export function listRowNumberForPageDisplay(
+  idx: number,
+  currentPage: number,
+  itemsPerPage: number,
+  displayedLength: number,
+  tab: ProductionRequestListViewTab
+): number {
+  const base = (currentPage - 1) * itemsPerPage;
+  if (usesAscendingGroupDisplayOrder(tab)) return base + idx + 1;
+  return base + (displayedLength - 1 - idx) + 1;
 }
 
 export function excludeCompletedProductionListRows(

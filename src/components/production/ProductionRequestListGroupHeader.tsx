@@ -30,7 +30,7 @@ export function ProductionRequestListGroupHeader({
     tab === 'by_product_group'
       ? getProductionListRowGroupLabel(listRow, tab)
       : listRow.machineNo?.trim()
-        ? `기계 No. ${listRow.machineNo.trim()}`
+        ? `기계명 ${listRow.machineNo.trim()}`
         : '기계 미배정';
 
   const headerSurfaceClass =

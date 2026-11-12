@@ -10,6 +10,7 @@ import { formatDateShort } from '@/lib/utils';
 import {
   LIST_DETAIL_INNER_COLGROUP,
   listCompletionTdClass,
+  listCompletionThClass,
   listPlanTdClass,
   listProductionIssueTdClass,
   listRegistrationTdClass,
@@ -40,6 +41,7 @@ const REGISTRATION_FIELD_LABEL_NOWRAP = new Set([
   '생산요청수량',
   '완료요청일',
   '비고',
+  '도면',
 ]);
 
 const REGISTRATION_FIELDS_OMIT_IN_LIST = new Set(['제품군', '제품명', '제품코드']);
@@ -50,16 +52,22 @@ function TableHeadingCell({
   className,
   nowrap = true,
   align = 'center',
+  allowShrink = true,
 }: {
   children: React.ReactNode;
   className: string;
   nowrap?: boolean;
   align?: 'center' | 'left';
+  /** false: 완료일(수량) 등 한 줄 표시용 */
+  allowShrink?: boolean;
 }) {
   const titleText = typeof children === 'string' ? children : undefined;
   const alignClass = align === 'left' ? 'text-left' : 'text-center';
   return (
-    <th scope="col" className={`${className} ${alignClass} font-semibold max-w-0`}>
+    <th
+      scope="col"
+      className={`${className} ${alignClass} font-semibold ${allowShrink ? 'max-w-0' : ''}`}
+    >
       <span
         className={`block min-w-0 ${nowrap ? 'truncate whitespace-nowrap' : ''}`}
         title={titleText}
@@ -106,10 +114,11 @@ export function ProductionRequestStatusDetailBlock({
     includeRequestMeta: true,
   }).filter((field) => !REGISTRATION_FIELDS_OMIT_IN_LIST.has(field.label));
 
+  const registrationColumnCount = registrationFields.length;
   const productionHeadings: { label: string; tdClass: string }[] = [
     { label: '생산계획수량', tdClass: listPlanTdClass },
     { label: '완료예정일', tdClass: listPlanTdClass },
-    { label: '기계 No.', tdClass: listPlanTdClass },
+    { label: '기계명', tdClass: listPlanTdClass },
     ...listRow.completionRounds.map((_, index) => ({
       label: `${index + 1}차 완료일 (수량)`,
       tdClass: listCompletionTdClass,
@@ -142,22 +151,34 @@ export function ProductionRequestStatusDetailBlock({
               : '';
 
             if (field.label === '도면') {
+              const links =
+                field.drawingLinks && field.drawingLinks.length > 0
+                  ? field.drawingLinks
+                  : field.href && field.value !== '-'
+                    ? [{ name: field.value, href: field.href }]
+                    : [];
               return (
                 <TableValueCell
                   key={`reg-v-${field.label}`}
                   className={listRegistrationTdClass}
                   align="left"
                 >
-                  {field.href && field.value !== '-' ? (
-                    <a
-                      href={field.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:text-blue-800 text-sm font-medium truncate block max-w-full"
-                      title={field.value}
-                    >
-                      {field.value}
-                    </a>
+                  {links.length > 0 ? (
+                    <ul className="space-y-0.5 text-left">
+                      {links.map((link) => (
+                        <li key={link.href}>
+                          <a
+                            href={link.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium truncate block max-w-full"
+                            title={link.name}
+                          >
+                            {link.name}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
                   ) : (
                     <span className="text-gray-400">-</span>
                   )}
@@ -217,15 +238,30 @@ export function ProductionRequestStatusDetailBlock({
           })}
         </tr>
         <tr aria-label="생산 처리 항목">
-          {productionHeadings.map((col) => (
-            <TableHeadingCell
-              key={`prod-h-${col.label}`}
-              className={listRegistrationThClass}
-              align="center"
-            >
-              {col.label}
-            </TableHeadingCell>
-          ))}
+          {productionHeadings.map((col) => {
+            const isCompletionCol =
+              col.label.includes('완료일') || col.label.includes('세정/EP');
+            return (
+              <TableHeadingCell
+                key={`prod-h-${col.label}`}
+                className={isCompletionCol ? listCompletionThClass : listRegistrationThClass}
+                align="center"
+                allowShrink={!isCompletionCol}
+              >
+                {col.label}
+              </TableHeadingCell>
+            );
+          })}
+          {productionHeadings.length < registrationColumnCount
+            ? Array.from({ length: registrationColumnCount - productionHeadings.length }, (_, i) => (
+                <th
+                  key={`prod-h-pad-${i}`}
+                  scope="col"
+                  className={`${listRegistrationThClass} text-center font-semibold whitespace-nowrap`}
+                  aria-hidden
+                />
+              ))
+            : null}
         </tr>
         <tr aria-label="생산 처리 내용">
           <TableValueCell
@@ -310,6 +346,15 @@ export function ProductionRequestStatusDetailBlock({
               <span className="text-gray-400">-</span>
             )}
           </TableValueCell>
+          {productionHeadings.length < registrationColumnCount
+            ? Array.from({ length: registrationColumnCount - productionHeadings.length }, (_, i) => (
+                <td
+                  key={`prod-v-pad-${i}`}
+                  className={listRegistrationTdClass}
+                  aria-hidden
+                />
+              ))
+            : null}
         </tr>
       </tbody>
     </table>

@@ -6,6 +6,7 @@ import type { RequestProductLine } from '@/lib/products/requestProductLines';
 import { firestoreDateToDate } from '@/lib/production/productionRequestDisplay';
 
 export const PRODUCTION_DRAWING_MAX_BYTES = 15 * 1024 * 1024;
+export const PRODUCTION_DRAWING_MAX_COUNT = 2;
 
 export const PRODUCTION_DRAWING_ACCEPT =
   '.pdf,.png,.jpg,.jpeg,.gif,.webp,.dwg,.dxf,.step,.stp,.igs,.zip,.rar,application/pdf,image/*';
@@ -32,6 +33,38 @@ export function parseDrawingAttachmentFromFirestore(raw: unknown): CertificateAt
   };
 }
 
+/** 제품 · Firestore — 최대 2건 (단일 필드 하위 호환) */
+export function parseProductDrawingAttachments(
+  product: CertificateProduct | undefined
+): CertificateAttachment[] {
+  if (!product) return [];
+  const fromArray = Array.isArray(product.drawingAttachments)
+    ? product.drawingAttachments
+        .map((item) => parseDrawingAttachmentFromFirestore(item))
+        .filter((item): item is CertificateAttachment => Boolean(item))
+    : [];
+  if (fromArray.length > 0) {
+    return fromArray.slice(0, PRODUCTION_DRAWING_MAX_COUNT);
+  }
+  const single = parseDrawingAttachmentFromFirestore(product.drawingAttachment);
+  return single ? [single] : [];
+}
+
+function storagePathKey(path: string | undefined): string {
+  return path?.trim() || '';
+}
+
+export function keptExistingDrawingsOnLine(line: RequestProductLine): CertificateAttachment[] {
+  const removed = new Set((line.removedDrawingStoragePaths ?? []).map(storagePathKey));
+  return (line.existingDrawings ?? []).filter(
+    (att) => !removed.has(storagePathKey(att.storagePath))
+  );
+}
+
+export function drawingCountOnRequestLine(line: RequestProductLine): number {
+  return keptExistingDrawingsOnLine(line).length + (line.pendingDrawingFiles?.length ?? 0);
+}
+
 function sanitizeFileName(name: string): string {
   return name.replace(/[/\\?%*:|"<>]/g, '_').slice(0, 120);
 }
@@ -40,6 +73,7 @@ export async function uploadProductionDrawingFile(
   file: File,
   requestId: string,
   productIndex: number,
+  slotIndex: number,
   uploadedBy: string
 ): Promise<CertificateAttachment> {
   if (file.size > PRODUCTION_DRAWING_MAX_BYTES) {
@@ -48,7 +82,7 @@ export async function uploadProductionDrawingFile(
   const timestamp = Date.now();
   const randomId = Math.random().toString(36).slice(2, 10);
   const safeName = sanitizeFileName(file.name);
-  const storagePath = `productionRequests/${requestId}/drawings/${productIndex}_${timestamp}_${randomId}_${safeName}`;
+  const storagePath = `productionRequests/${requestId}/drawings/${productIndex}_${slotIndex}_${timestamp}_${randomId}_${safeName}`;
   const storageRef = ref(storage, storagePath);
   await uploadBytes(storageRef, file);
   const url = await getDownloadURL(storageRef);
@@ -72,10 +106,68 @@ export async function deleteProductionDrawingStorage(storagePath: string | undef
   }
 }
 
+function applyDrawingsToProduct(
+  product: CertificateProduct,
+  attachments: CertificateAttachment[]
+): CertificateProduct {
+  const list = attachments.slice(0, PRODUCTION_DRAWING_MAX_COUNT);
+  if (list.length === 0) {
+    const { drawingAttachment: _a, drawingAttachments: _b, ...rest } = product;
+    return rest;
+  }
+  return {
+    ...product,
+    drawingAttachments: list,
+    drawingAttachment: list[0],
+  };
+}
+
+/** 등록·수정 저장 시 도면 처리(업로드·유지·삭제) 필요 */
 export function productionLinesHaveDrawingWork(lines: RequestProductLine[]): boolean {
   return lines.some(
-    (line) => Boolean(line.pendingDrawingFile) || Boolean(line.removeDrawing && line.existingDrawing)
+    (line) =>
+      (line.pendingDrawingFiles?.length ?? 0) > 0 ||
+      (line.removedDrawingStoragePaths?.length ?? 0) > 0 ||
+      (line.existingDrawings?.length ?? 0) > 0
   );
+}
+
+/** 폼 줄 ↔ products 배열 — 도면 메타 병합 (업로드 전) */
+export function mergeDrawingFromRequestLines(
+  lines: RequestProductLine[],
+  products: CertificateProduct[]
+): CertificateProduct[] {
+  const count = Math.min(lines.length, products.length);
+  const result = products.map((p) => ({ ...p }));
+
+  for (let i = 0; i < count; i++) {
+    const line = lines[i];
+    const hasPending = (line.pendingDrawingFiles?.length ?? 0) > 0;
+    if (hasPending) continue;
+
+    const kept = keptExistingDrawingsOnLine(line);
+    if (kept.length > 0) {
+      result[i] = applyDrawingsToProduct(result[i], kept);
+      continue;
+    }
+
+    const fromFirestore = parseProductDrawingAttachments(result[i]);
+    if (fromFirestore.length > 0) {
+      result[i] = applyDrawingsToProduct(result[i], fromFirestore);
+    }
+  }
+
+  return result;
+}
+
+export function normalizeCertificateProductsFromFirestore(raw: unknown): CertificateProduct[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw.map((item) => {
+    const p = item as CertificateProduct;
+    const attachments = parseProductDrawingAttachments(p);
+    if (attachments.length === 0) return { ...p };
+    return applyDrawingsToProduct(p, attachments);
+  });
 }
 
 /** 제품 배열에 도면 업로드·삭제 반영 (lines와 products 인덱스 일치) */
@@ -89,27 +181,44 @@ export async function enrichProductsWithDrawingAttachments(
 
   for (let i = 0; i < count; i++) {
     const line = lines[i];
-    if (line.removeDrawing) {
-      await deleteProductionDrawingStorage(line.existingDrawing?.storagePath);
-      const { drawingAttachment: _removed, ...rest } = result[i];
-      result[i] = rest;
-      continue;
+    const kept = keptExistingDrawingsOnLine(line);
+    const pending = line.pendingDrawingFiles ?? [];
+    const removedPaths = line.removedDrawingStoragePaths ?? [];
+
+    for (const path of removedPaths) {
+      await deleteProductionDrawingStorage(path);
     }
-    if (line.pendingDrawingFile) {
-      await deleteProductionDrawingStorage(line.existingDrawing?.storagePath);
-      const att = await uploadProductionDrawingFile(
-        line.pendingDrawingFile,
-        ctx.requestId,
-        i,
-        ctx.uploadedBy
+
+    const uploaded: CertificateAttachment[] = [];
+    for (let slot = 0; slot < pending.length; slot++) {
+      if (kept.length + uploaded.length >= PRODUCTION_DRAWING_MAX_COUNT) break;
+      const file = pending[slot];
+      uploaded.push(
+        await uploadProductionDrawingFile(file, ctx.requestId, i, kept.length + slot, ctx.uploadedBy)
       );
-      result[i] = { ...result[i], drawingAttachment: att };
-    } else if (line.existingDrawing) {
-      result[i] = { ...result[i], drawingAttachment: line.existingDrawing };
     }
+
+    const combined = [...kept, ...uploaded].slice(0, PRODUCTION_DRAWING_MAX_COUNT);
+    result[i] = applyDrawingsToProduct(result[i], combined);
   }
 
   return result;
+}
+
+export function productsWithSerializedDrawings(
+  products: CertificateProduct[]
+): CertificateProduct[] {
+  return products.map((p) => {
+    const list = parseProductDrawingAttachments(p).map((att) => ({
+      ...att,
+      uploadedAt:
+        att.uploadedAt instanceof Date && !Number.isNaN(att.uploadedAt.getTime())
+          ? att.uploadedAt
+          : new Date(),
+    }));
+    if (list.length === 0) return p;
+    return applyDrawingsToProduct(p, list);
+  });
 }
 
 export function drawingAttachmentToFirestoreValue(

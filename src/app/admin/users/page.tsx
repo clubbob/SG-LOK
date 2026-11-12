@@ -2,15 +2,20 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, orderBy, getDocs, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, onSnapshot, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { User } from '@/types';
 import { formatDateTime24, readResponseJsonSafe } from '@/lib/utils';
 import { Button } from '@/components/ui';
 import { MENU_ACCESS_LABELS, type MenuAccessKey, normalizeAllowedMenus, getMenuAccessKeysForUi } from '@/lib/auth/menuAccess';
 import { isBootstrapAdminEmail } from '@/lib/auth/adminBootstrap';
+import {
+  createdAtMillisFromFirestore,
+} from '@/lib/auth/userMembership';
 
 const ADMIN_SESSION_KEY = 'admin_session';
+
+type AdminListedUser = User & { hasFirestoreCreatedAt: boolean };
 
 // 관리자 인증 확인 함수
 const checkAdminAuth = (): boolean => {
@@ -36,7 +41,7 @@ const checkAdminAuth = (): boolean => {
 
 export default function AdminUsersPage() {
   const router = useRouter();
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<AdminListedUser[]>([]);
   const [showDeletedUsers, setShowDeletedUsers] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -58,15 +63,16 @@ export default function AdminUsersPage() {
 
     // 실시간 사용자 목록 구독
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, orderBy('createdAt', 'desc'));
-    
+
     const unsubscribeSnapshot = onSnapshot(
-      q,
+      usersRef,
       (querySnapshot) => {
-        const usersData: User[] = [];
+        const usersData: AdminListedUser[] = [];
+        const docEntries: { user: AdminListedUser; sortMs: number }[] = [];
         querySnapshot.forEach((snapshotDoc) => {
           const data = snapshotDoc.data();
-          usersData.push({
+          const hasFirestoreCreatedAt = data.createdAt != null;
+          const user: AdminListedUser = {
             id: snapshotDoc.id,
             name: data.name || '',
             email: data.email || '',
@@ -87,8 +93,17 @@ export default function AdminUsersPage() {
             deletedBy: data.deletedBy,
             allowedMenus: normalizeAllowedMenus(data.allowedMenus),
             isAdmin: data.isAdmin === true,
+            hasFirestoreCreatedAt,
+          };
+          docEntries.push({
+            user,
+            sortMs: createdAtMillisFromFirestore(data),
           });
         });
+        docEntries.sort((a, b) => b.sortMs - a.sortMs);
+        for (const entry of docEntries) {
+          usersData.push(entry.user);
+        }
         setUsers(usersData);
         setCurrentPage(1);
         setLoadingUsers(false);
@@ -105,10 +120,12 @@ export default function AdminUsersPage() {
     };
   }, [router]);
 
-  const visibleUsers = useMemo(
-    () => (showDeletedUsers ? users : users.filter((u) => !u.deleted)),
-    [users, showDeletedUsers]
-  );
+  const visibleUsers = useMemo(() => {
+    if (showDeletedUsers) {
+      return users;
+    }
+    return users.filter((u) => u.hasFirestoreCreatedAt && !u.deleted);
+  }, [users, showDeletedUsers]);
 
   // 페이지네이션: 표시할 사용자 목록 계산
   useEffect(() => {
@@ -135,13 +152,12 @@ export default function AdminUsersPage() {
     try {
       setLoadingUsers(true);
       const usersRef = collection(db, 'users');
-      const q = query(usersRef, orderBy('createdAt', 'desc'));
-      const querySnapshot = await getDocs(q);
-      
-      const usersData: User[] = [];
+      const querySnapshot = await getDocs(usersRef);
+
+      const docEntries: { user: AdminListedUser; sortMs: number }[] = [];
       querySnapshot.forEach((snapshotDoc) => {
         const data = snapshotDoc.data();
-        usersData.push({
+        const user: AdminListedUser = {
           id: snapshotDoc.id,
           name: data.name || '',
           email: data.email || '',
@@ -162,9 +178,12 @@ export default function AdminUsersPage() {
           deletedBy: data.deletedBy,
           allowedMenus: normalizeAllowedMenus(data.allowedMenus),
           isAdmin: data.isAdmin === true,
-        });
+          hasFirestoreCreatedAt: data.createdAt != null,
+        };
+        docEntries.push({ user, sortMs: createdAtMillisFromFirestore(data) });
       });
-      setUsers(usersData);
+      docEntries.sort((a, b) => b.sortMs - a.sortMs);
+      setUsers(docEntries.map((e) => e.user));
       setCurrentPage(1);
     } catch (error) {
       console.error('사용자 목록 로드 오류:', error);

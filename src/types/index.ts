@@ -85,7 +85,7 @@ export interface ProductionRequest {
   quantity: number; // 수량 (다중 제품 시 합계)
   orderQuantity?: number; // 수주수량 (생산목적이 주문인 경우)
   plannedQuantity?: number; // 승인 시 계획수량
-  /** 승인 시 기계 No. (선택) */
+  /** 승인 시 기계명 (선택) */
   machineNo?: string;
   requestDate: Date; // 생산요청일
   requestedCompletionDate: Date; // 완료요청일
@@ -223,7 +223,7 @@ export interface CertificateProduct {
   lineStatus?: ProductionRequestStatus; // 생산요청: 제품별 승인·진행 상태 (다중 제품)
   plannedQuantity?: number; // 생산요청: 제품별 계획수량 (승인 시)
   plannedCompletionDate?: Date; // 생산요청: 제품별 완료예정일 (승인 시)
-  /** 생산요청: 승인 시 기계 No. (선택) */
+  /** 생산요청: 승인 시 기계명 (선택) */
   machineNo?: string;
   /** 생산요청: 차수별 부분 완료 (날짜·수량) */
   completionRound1Date?: Date;
@@ -245,8 +245,10 @@ export interface CertificateProduct {
   material?: string;            // MATERIAL (소재 정보, 예: 316/316L, 304)
   remark?: string;               // 비고 (REMARK)
   inspectionCertificate?: CertificateAttachment; // 제품별 Inspection Certi
-  /** 생산요청: 제품별 도면 첨부 */
+  /** 생산요청: 제품별 도면 (1건 — 하위 호환) */
   drawingAttachment?: CertificateAttachment;
+  /** 생산요청: 제품별 도면 (최대 2) */
+  drawingAttachments?: CertificateAttachment[];
 }
 
 // 제품명코드 매핑 타입

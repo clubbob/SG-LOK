@@ -20,10 +20,11 @@ export const PRODUCTION_REQUEST_LIST_VIEW_TABS: {
 
 const MACHINE_UNASSIGNED_KEY = 'machine:__unassigned__';
 
+/** 그룹·페이지 내 표시: 오래된 → 최신 (테이블 reverse 후 최신이 위) */
 function compareListRowsWithinGroup(a: ProductionRequestListRow, b: ProductionRequestListRow): number {
   const createdA = a.request.createdAt?.getTime?.() ?? 0;
   const createdB = b.request.createdAt?.getTime?.() ?? 0;
-  if (createdA !== createdB) return createdB - createdA;
+  if (createdA !== createdB) return createdA - createdB;
   if (a.request.id !== b.request.id) return a.request.id.localeCompare(b.request.id);
   return a.productIndex - b.productIndex;
 }

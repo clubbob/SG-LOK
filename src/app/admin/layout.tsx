@@ -105,6 +105,7 @@ const adminMenuItems: MenuItem[] = [
     subItems: [
       { id: 'production-request', label: '생산요청 등록', path: '/admin/production/request' },
       { id: 'production-list', label: '생산요청 현황', path: '/admin/production' },
+      { id: 'production-machines', label: '기계 관리', path: '/admin/production/machines' },
     ],
   },
   {

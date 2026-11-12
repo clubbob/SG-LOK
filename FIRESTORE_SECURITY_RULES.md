@@ -3,9 +3,23 @@
 ## 문제
 "Missing or insufficient permissions" 오류가 발생하는 경우, Firestore 보안 규칙이 설정되지 않았거나 잘못 설정된 것입니다.
 
-**자주 빠지는 컬렉션**: 규칙을 컬렉션별로만 열어두면, `match`가 없는 경로는 전부 거부됩니다. 이 프로젝트에서는 특히 **`inventory`**(문서 `microWeldProducts` 등)·**`notices`**가 없으면 대시보드·재고현황·공지 페이지에서 동일 오류가 납니다. 아래 **(참고) 기존(컬렉션별) 권장 규칙** 블록에 두 컬렉션이 포함되어 있는지 확인하세요.
+**자주 빠지는 컬렉션**: 규칙을 컬렉션별로만 열어두면, `match`가 없는 경로는 전부 거부됩니다. 이 프로젝트에서는 특히 **`inventory`**(문서 `microWeldProducts` 등)·**`notices`**·**`productionMachines`**(기계 관리)가 없으면 대시보드·재고현황·공지·기계 관리·생산요청 기계 선택에서 동일 오류가 납니다. 아래 **(참고) 기존(컬렉션별) 권장 규칙** 블록에 포함되어 있는지 확인하세요.
 
 **대체품(mappings 등)**: 읽기/쓰기에 `request.auth != null`이 필요합니다. 일반 회원은 이메일 로그인, 관리자 화면은 **익명 로그인**을 쓰는 경우 Firebase Console에서 **Authentication → 익명** 사용이 켜져 있어야 합니다.
+
+## 기계 관리 (`productionMachines`) 권한 오류 — 빠른 수정
+
+기계 관리·생산요청 기계 선택에서 `Missing or insufficient permissions`가 나면, Console 규칙에 아래 `match` 블록이 **없는 것**입니다. `productionRequests` 규칙 **위쪽** 등 `match /databases/{database}/documents` 안에 추가한 뒤 **게시**하세요.
+
+```javascript
+    match /productionMachines/{machineId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
+    }
+```
+
+- **읽기**: 로그인한 사용자(일반 회원·관리자) — 생산요청 기계 선택용
+- **쓰기**: 로그인 사용자 — 관리자 기계 등록·수정·삭제 (관리자 화면은 Firebase Auth 로그인 필수)
 
 ## 해결 방법
 
@@ -70,6 +84,12 @@ service cloud.firestore {
       // 모든 사용자가 문의를 업데이트할 수 있음 (관리자 답변을 위해)
       // 프로덕션에서는 관리자 권한 체크 추가 권장
       allow update: if true;
+    }
+    
+    // productionMachines: 생산 기계 마스터 (기계 관리·생산요청 기계명 선택)
+    match /productionMachines/{machineId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null;
     }
     
     // productionRequests 컬렉션: 생산요청 관리

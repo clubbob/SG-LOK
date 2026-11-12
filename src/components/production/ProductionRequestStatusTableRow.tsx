@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import {
+  formatProductionListCustomerNameDisplay,
   getProductionRequestLatestStageCompletionDisplay,
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
@@ -30,7 +31,6 @@ export function ProductionRequestStatusTableRow({
 }) {
   const request = listRow.request;
   const lineRequestedDate = listRow.requestedCompletionDate ?? request.requestedCompletionDate;
-  const isOrder = listRow.productionReason === 'order';
   const productCodeDisplay =
     listRow.productCode?.trim() && listRow.productCode !== '-'
       ? listRow.productCode.trim()
@@ -51,7 +51,10 @@ export function ProductionRequestStatusTableRow({
           {rowNumber}
         </td>
         {cell(request.requestDate ? formatDateShort(request.requestDate) : '-')}
-        {cell(isOrder ? listRow.customerName?.trim() || '-' : '-', 'max-w-[6.5rem] truncate')}
+        {cell(
+          formatProductionListCustomerNameDisplay(listRow.productionReason, listRow.customerName),
+          'max-w-[6.5rem] truncate'
+        )}
         {cell(productCodeDisplay, 'max-w-[9rem] font-medium')}
         {cell(
           listRow.requestQuantity != null ? listRow.requestQuantity.toLocaleString('ko-KR') : '-'

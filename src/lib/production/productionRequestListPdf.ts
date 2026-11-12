@@ -76,7 +76,7 @@ const PDF_HEADER_DISPLAY_LABELS: Record<string, string> = {
   완료요청일: '완료요청',
   생산계획수량: '계획수량',
   완료예정일: '완료예정',
-  '기계 No.': '기계No',
+  '기계명': '기계명',
   '1차 완료일 (수량)': '1차 완료',
   '2차 완료일 (수량)': '2차 완료',
   '3차 완료일 (수량)': '3차 완료',
@@ -90,7 +90,7 @@ function pdfTableCellBackground(columnLabel: string | undefined, header: boolean
   if (PDF_ATTACH_SECTION_COLUMN_LABELS.has(columnLabel)) {
     return header ? PDF_TABLE_HEADER_BG_ATTACH : PDF_TABLE_DATA_BG_ATTACH;
   }
-  if (columnLabel === '생산계획수량' || columnLabel === '완료예정일' || columnLabel === '기계 No.') {
+  if (columnLabel === '생산계획수량' || columnLabel === '완료예정일' || columnLabel === '기계명') {
     return header ? PDF_TABLE_HEADER_BG_PLAN : PDF_TABLE_DATA_BG_PLAN;
   }
   return header ? PDF_TABLE_HEADER_BG_MAIN : PDF_TABLE_DATA_BG_MAIN;
@@ -109,7 +109,7 @@ const PDF_COLUMN_WIDTH_WEIGHT: Record<string, number> = {
   완료요청일: 1,
   생산계획수량: 1,
   완료예정일: 1,
-  '기계 No.': 0.85,
+  '기계명': 0.85,
   '1차 완료일 (수량)': 1,
   '2차 완료일 (수량)': 1,
   '3차 완료일 (수량)': 1,
@@ -130,7 +130,7 @@ const PDF_MIN_COLUMN_WIDTH_MM: Record<string, number> = {
   완료요청일: 11,
   생산계획수량: 13,
   완료예정일: 11,
-  '기계 No.': 11,
+  '기계명': 11,
   '1차 완료일 (수량)': PDF_ATTACH_EQUAL_MIN_WIDTH_MM,
   '2차 완료일 (수량)': PDF_ATTACH_EQUAL_MIN_WIDTH_MM,
   '3차 완료일 (수량)': PDF_ATTACH_EQUAL_MIN_WIDTH_MM,

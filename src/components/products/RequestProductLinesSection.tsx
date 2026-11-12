@@ -20,9 +20,12 @@ import {
   productCodeHasWhitespace,
 } from '@/lib/products/requestProductLines';
 import {
+  drawingCountOnRequestLine,
   formatProductionDrawingFileSize,
+  keptExistingDrawingsOnLine,
   PRODUCTION_DRAWING_ACCEPT,
   PRODUCTION_DRAWING_MAX_BYTES,
+  PRODUCTION_DRAWING_MAX_COUNT,
 } from '@/lib/production/productionDrawingAttachment';
 
 const productLineSelectClass =
@@ -198,53 +201,77 @@ export function RequestProductLinesSection({
     onProductsChange(newProducts.length > 0 ? newProducts : [createEmptyRequestProductLine()]);
   };
 
-  const handleDrawingFileChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleDrawingFilesChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files ? Array.from(e.target.files) : [];
     e.target.value = '';
-    if (!file) return;
-    if (file.size > PRODUCTION_DRAWING_MAX_BYTES) {
+    if (picked.length === 0) return;
+
+    const line = products[index];
+    const canAdd =
+      PRODUCTION_DRAWING_MAX_COUNT - drawingCountOnRequestLine(line);
+    if (canAdd <= 0) {
       onSetFieldError(
         `drawing-${index}`,
-        `파일 크기는 ${formatProductionDrawingFileSize(PRODUCTION_DRAWING_MAX_BYTES)} 이하여야 합니다.`
+        `도면은 제품당 최대 ${PRODUCTION_DRAWING_MAX_COUNT}개까지 등록할 수 있습니다.`
       );
       return;
     }
+
+    const toAdd: File[] = [];
+    for (const file of picked) {
+      if (toAdd.length >= canAdd) break;
+      if (file.size > PRODUCTION_DRAWING_MAX_BYTES) {
+        onSetFieldError(
+          `drawing-${index}`,
+          `파일 크기는 ${formatProductionDrawingFileSize(PRODUCTION_DRAWING_MAX_BYTES)} 이하여야 합니다.`
+        );
+        return;
+      }
+      toAdd.push(file);
+    }
+
     onClearFieldError(`drawing-${index}`);
     const newProducts = [...products];
+    const prevPending = line.pendingDrawingFiles ?? [];
     newProducts[index] = {
-      ...newProducts[index],
-      pendingDrawingFile: file,
-      removeDrawing: false,
+      ...line,
+      pendingDrawingFiles: [...prevPending, ...toAdd],
     };
     onProductsChange(newProducts);
   };
 
-  const handleClearPendingDrawing = (index: number) => {
+  const handleClearPendingDrawing = (lineIndex: number, fileIndex: number) => {
     const newProducts = [...products];
-    newProducts[index] = {
-      ...newProducts[index],
-      pendingDrawingFile: null,
-    };
+    const line = newProducts[lineIndex];
+    const nextPending = (line.pendingDrawingFiles ?? []).filter((_, i) => i !== fileIndex);
+    newProducts[lineIndex] = { ...line, pendingDrawingFiles: nextPending };
     onProductsChange(newProducts);
-    onClearFieldError(`drawing-${index}`);
+    onClearFieldError(`drawing-${lineIndex}`);
   };
 
-  const handleRemoveExistingDrawing = (index: number) => {
+  const handleRemoveExistingDrawing = (lineIndex: number, storagePath: string | undefined) => {
+    const key = storagePath?.trim();
+    if (!key) return;
     const newProducts = [...products];
-    newProducts[index] = {
-      ...newProducts[index],
-      removeDrawing: true,
-      pendingDrawingFile: null,
+    const line = newProducts[lineIndex];
+    const removed = new Set(line.removedDrawingStoragePaths ?? []);
+    removed.add(key);
+    newProducts[lineIndex] = {
+      ...line,
+      removedDrawingStoragePaths: Array.from(removed),
     };
     onProductsChange(newProducts);
-    onClearFieldError(`drawing-${index}`);
+    onClearFieldError(`drawing-${lineIndex}`);
   };
 
-  const handleUndoRemoveDrawing = (index: number) => {
+  const handleUndoRemoveExistingDrawing = (lineIndex: number, storagePath: string | undefined) => {
+    const key = storagePath?.trim();
+    if (!key) return;
     const newProducts = [...products];
-    newProducts[index] = {
-      ...newProducts[index],
-      removeDrawing: false,
+    const line = newProducts[lineIndex];
+    newProducts[lineIndex] = {
+      ...line,
+      removedDrawingStoragePaths: (line.removedDrawingStoragePaths ?? []).filter((p) => p !== key),
     };
     onProductsChange(newProducts);
   };
@@ -643,75 +670,84 @@ export function RequestProductLinesSection({
               <div className="border-t border-gray-100 pt-3">
                 <label className="block text-sm font-medium text-gray-700 mb-1">도면 첨부 (선택)</label>
                 <p className="text-xs text-gray-500 mb-2">
-                  PDF·이미지·CAD 등, 제품당 1개 · 최대{' '}
+                  PDF·이미지·CAD 등, 제품당 최대 {PRODUCTION_DRAWING_MAX_COUNT}개 · 파일당{' '}
                   {formatProductionDrawingFileSize(PRODUCTION_DRAWING_MAX_BYTES)}
                 </p>
 
-                {product.existingDrawing && !product.removeDrawing && !product.pendingDrawingFile && (
-                  <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                {keptExistingDrawingsOnLine(product).map((att) => (
+                  <div
+                    key={att.storagePath ?? att.url}
+                    className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+                  >
                     <a
-                      href={product.existingDrawing.url}
+                      href={att.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-medium text-blue-600 hover:underline truncate max-w-full"
                     >
-                      {product.existingDrawing.name}
+                      {att.name}
                     </a>
                     <span className="text-gray-500 text-xs">
-                      ({formatProductionDrawingFileSize(product.existingDrawing.size)})
+                      ({formatProductionDrawingFileSize(att.size)})
                     </span>
                     {!disabled && (
                       <button
                         type="button"
-                        onClick={() => handleRemoveExistingDrawing(index)}
+                        onClick={() => handleRemoveExistingDrawing(index, att.storagePath)}
                         className="text-xs text-red-600 hover:underline"
                       >
                         제거
                       </button>
                     )}
                   </div>
-                )}
+                ))}
 
-                {product.removeDrawing && product.existingDrawing && (
-                  <p className="mb-2 text-xs text-amber-700">
-                    저장 시 기존 도면이 삭제됩니다.{' '}
-                    {!disabled && (
-                      <button
-                        type="button"
-                        onClick={() => handleUndoRemoveDrawing(index)}
-                        className="text-blue-600 hover:underline"
-                      >
-                        취소
-                      </button>
-                    )}
-                  </p>
-                )}
+                {(product.existingDrawings ?? [])
+                  .filter((att) =>
+                    (product.removedDrawingStoragePaths ?? []).includes(att.storagePath ?? '')
+                  )
+                  .map((att) => (
+                    <p key={att.storagePath ?? att.url} className="mb-2 text-xs text-amber-700">
+                      저장 시 「{att.name}」 도면이 삭제됩니다.{' '}
+                      {!disabled && (
+                        <button
+                          type="button"
+                          onClick={() => handleUndoRemoveExistingDrawing(index, att.storagePath)}
+                          className="text-blue-600 hover:underline"
+                        >
+                          취소
+                        </button>
+                      )}
+                    </p>
+                  ))}
 
-                {product.pendingDrawingFile && (
-                  <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm">
-                    <span className="font-medium text-gray-900 truncate max-w-full">
-                      {product.pendingDrawingFile.name}
-                    </span>
+                {(product.pendingDrawingFiles ?? []).map((file, fileIndex) => (
+                  <div
+                    key={`${file.name}-${fileIndex}`}
+                    className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm"
+                  >
+                    <span className="font-medium text-gray-900 truncate max-w-full">{file.name}</span>
                     <span className="text-gray-600 text-xs">
-                      ({formatProductionDrawingFileSize(product.pendingDrawingFile.size)})
+                      ({formatProductionDrawingFileSize(file.size)})
                     </span>
                     {!disabled && (
                       <button
                         type="button"
-                        onClick={() => handleClearPendingDrawing(index)}
+                        onClick={() => handleClearPendingDrawing(index, fileIndex)}
                         className="text-xs text-red-600 hover:underline"
                       >
                         선택 취소
                       </button>
                     )}
                   </div>
-                )}
+                ))}
 
-                {!disabled && (
+                {!disabled && drawingCountOnRequestLine(product) < PRODUCTION_DRAWING_MAX_COUNT && (
                   <input
                     type="file"
+                    multiple
                     accept={PRODUCTION_DRAWING_ACCEPT}
-                    onChange={(e) => handleDrawingFileChange(index, e)}
+                    onChange={(e) => handleDrawingFilesChange(index, e)}
                     className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
                   />
                 )}

@@ -7,7 +7,10 @@ import {
   ProductionRequest,
   ProductionSalesRegion,
 } from '@/types';
-import { parseDrawingAttachmentFromFirestore } from '@/lib/production/productionDrawingAttachment';
+import {
+  keptExistingDrawingsOnLine,
+  parseProductDrawingAttachments,
+} from '@/lib/production/productionDrawingAttachment';
 import { firestoreDateToDate } from '@/lib/production/productionRequestDisplay';
 import { normalizeCustomerNameInput } from '@/lib/utils';
 
@@ -39,12 +42,12 @@ export type RequestProductLine = {
   requestedCompletionDate: string;
   remark: string;
   productNameCode?: string;
-  /** 기존 도면 (수정 시) */
-  existingDrawing?: CertificateAttachment;
+  /** 기존 도면 (수정 시, 최대 2) */
+  existingDrawings?: CertificateAttachment[];
   /** 새로 선택한 도면 파일 */
-  pendingDrawingFile?: File | null;
-  /** true: 저장 시 기존 도면 제거 */
-  removeDrawing?: boolean;
+  pendingDrawingFiles?: File[];
+  /** 저장 시 삭제할 기존 도면 storagePath */
+  removedDrawingStoragePaths?: string[];
 };
 
 export type ValidateRequestProductLinesOptions = {
@@ -133,7 +136,9 @@ export function linesFromFirestoreProducts(
         (index === 0 ? rootCompletionDate : ''),
       remark: p.remark?.trim() || (index === 0 ? data.memo?.trim() || '' : ''),
       productNameCode: p.productNameCode || '',
-      existingDrawing: parseDrawingAttachmentFromFirestore(p.drawingAttachment),
+      existingDrawings: parseProductDrawingAttachments(p),
+      pendingDrawingFiles: [],
+      removedDrawingStoragePaths: [],
     }));
   }
   if (data.productName || data.productCode || data.quantity) {
@@ -288,8 +293,10 @@ export function buildCertificateProductsFromLines(products: RequestProductLine[]
     if (product.productionReason === 'order' && product.customerName?.trim()) {
       productData.customerName = normalizeCustomerNameInput(product.customerName.trim());
     }
-    if (product.existingDrawing && !product.removeDrawing && !product.pendingDrawingFile) {
-      productData.drawingAttachment = product.existingDrawing;
+    const kept = keptExistingDrawingsOnLine(product);
+    if (kept.length > 0 && !(product.pendingDrawingFiles?.length ?? 0)) {
+      productData.drawingAttachments = kept;
+      productData.drawingAttachment = kept[0];
     }
     productsData.push(productData);
   }

@@ -42,8 +42,12 @@ import {
 } from '@/lib/products/requestProductLines';
 import {
   enrichProductsWithDrawingAttachments,
+  mergeDrawingFromRequestLines,
   productionLinesHaveDrawingWork,
+  productsWithSerializedDrawings,
 } from '@/lib/production/productionDrawingAttachment';
+import { ProductionMachineSelect } from '@/components/production/ProductionMachineSelect';
+import { useProductionMachines } from '@/hooks/useProductionMachines';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -100,6 +104,7 @@ function AdminProductionRequestContent() {
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [customerNameSuggestions, setCustomerNameSuggestions] = useState<string[]>([]);
+  const { machines: productionMachines, loading: loadingProductionMachines } = useProductionMachines(true);
 
   const clearFieldError = (key: string) => {
     setFieldErrors((prev) => {
@@ -395,6 +400,7 @@ function AdminProductionRequestContent() {
           firestoreProductsRef.current,
           productsData
         );
+        finalProducts = mergeDrawingFromRequestLines(linesForSave, finalProducts);
 
         if (isPostReviewStatus) {
           const plannedQty = formData.plannedQuantity.trim()
@@ -510,7 +516,7 @@ function AdminProductionRequestContent() {
             return;
           }
         }
-        productionRequestData.products = finalProducts;
+        productionRequestData.products = productsWithSerializedDrawings(finalProducts);
 
         await updateDoc(
           doc(db, 'productionRequests', requestId),
@@ -526,11 +532,12 @@ function AdminProductionRequestContent() {
       } else {
         // 등록 모드 - 관리자는 모든 사용자 대신 등록 가능하지만, 실제 사용자 정보는 필요
         // 여기서는 관리자 정보를 사용하거나, 기본값 사용
+        let createProducts = mergeDrawingFromRequestLines(linesForSave, productsData);
         const productionRequestData: Record<string, unknown> = {
           userId: 'admin', // 관리자 ID
           userName: '관리자',
           userEmail: 'admin@sglok.com',
-          products: productsData,
+          products: createProducts,
           productName: legacy.productName,
           productCode: legacy.productCode,
           quantity: legacy.quantity,
@@ -563,13 +570,13 @@ function AdminProductionRequestContent() {
           try {
             const withDrawings = await enrichProductsWithDrawingAttachments(
               linesForSave,
-              productsData,
+              createProducts,
               { requestId: createdRef.id, uploadedBy: 'admin' }
             );
             await updateDoc(
               doc(db, 'productionRequests', createdRef.id),
               sanitizeForFirestore({
-                products: withDrawings,
+                products: productsWithSerializedDrawings(withDrawings),
                 updatedAt: Timestamp.now(),
               })
             );
@@ -690,15 +697,17 @@ function AdminProductionRequestContent() {
               </div>
 
               <div>
-                <Input
+                <ProductionMachineSelect
                   id="machineNo"
-                  name="machineNo"
-                  type="text"
-                  label="기계 No."
+                  label="기계명"
                   value={formData.machineNo}
-                  onChange={handleChange}
-                  placeholder="선택 입력"
+                  machines={productionMachines}
+                  loading={loadingProductionMachines}
                   disabled={submitting}
+                  onChange={(machineName) => {
+                    setFormData((prev) => ({ ...prev, machineNo: machineName }));
+                    clearFieldError('machineNo');
+                  }}
                 />
               </div>
           </div>

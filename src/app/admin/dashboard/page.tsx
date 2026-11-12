@@ -10,6 +10,7 @@ import {
   summarizeProductionRequestStats,
 } from '@/lib/production/productionRequestDisplay';
 import { SHOW_DEALER_MENU } from '@/lib/featureFlags';
+import { computeRegisteredUserStats } from '@/lib/auth/userMembership';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -95,27 +96,7 @@ export default function AdminPage() {
     const unsubscribeUsers = onSnapshot(
       usersRef,
       (snapshot) => {
-        let pendingCount = 0;
-        let approvedCount = 0;
-        let activeCount = 0;
-
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          const isDeleted = data.deleted === true;
-          if (isDeleted) return;
-          activeCount += 1;
-          if (data.approved === false) {
-            pendingCount++;
-          } else {
-            approvedCount++;
-          }
-        });
-
-        setUserStats({
-          total: activeCount,
-          pending: pendingCount,
-          approved: approvedCount,
-        });
+        setUserStats(computeRegisteredUserStats(snapshot.docs));
       },
       (error) => {
         console.error('회원 통계 조회 오류:', error);

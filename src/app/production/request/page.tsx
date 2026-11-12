@@ -42,8 +42,13 @@ import {
 } from '@/lib/products/requestProductLines';
 import {
   enrichProductsWithDrawingAttachments,
+  mergeDrawingFromRequestLines,
   productionLinesHaveDrawingWork,
+  productsWithSerializedDrawings,
 } from '@/lib/production/productionDrawingAttachment';
+import type { CertificateProduct } from '@/types';
+import { ProductionMachineSelect } from '@/components/production/ProductionMachineSelect';
+import { useProductionMachines } from '@/hooks/useProductionMachines';
 
 function ProductionRequestPageFrame({
   children,
@@ -91,6 +96,10 @@ function ProductionRequestContent() {
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [customerNameSuggestions, setCustomerNameSuggestions] = useState<string[]>([]);
+  const [machineNo, setMachineNo] = useState('');
+  const { machines: productionMachines, loading: loadingProductionMachines } = useProductionMachines(
+    isAuthenticated
+  );
 
   const clearFieldError = (key: string) => {
     setFieldErrors((prev) => {
@@ -156,8 +165,9 @@ function ProductionRequestContent() {
             ? parsedIndex
             : null;
 
+        const multiProduct = allLines.length > 1;
         const lineIdx = singleLineIndex ?? 0;
-        const lineDoc = rawProducts[lineIdx] as { lineStatus?: string } | undefined;
+        const lineDoc = rawProducts[lineIdx] as { lineStatus?: string; machineNo?: string } | undefined;
         const lineStatus = normalizeProductionRequestStatus(lineDoc?.lineStatus ?? docStatus);
         const editableStatus = singleLineIndex != null ? lineStatus : docStatus;
         if (!isProductionRequestContentEditable(editableStatus)) {
@@ -172,6 +182,10 @@ function ProductionRequestContent() {
         setIsEditMode(true);
         setEditProductIndex(singleLineIndex);
         setProducts(singleLineIndex != null ? [allLines[singleLineIndex]] : allLines);
+        setMachineNo(
+          (typeof lineDoc?.machineNo === 'string' ? lineDoc.machineNo : '') ||
+            (!multiProduct && typeof data.machineNo === 'string' ? data.machineNo : '')
+        );
       } catch (err) {
         console.error('생산요청 로드 오류:', err);
         if (!cancelled) {
@@ -239,6 +253,16 @@ function ProductionRequestContent() {
     return null;
   }
 
+  const applyMachineNoToProducts = (items: CertificateProduct[]): CertificateProduct[] => {
+    const trimmed = machineNo.trim();
+    const patch = (p: CertificateProduct): CertificateProduct =>
+      trimmed ? { ...p, machineNo: trimmed } : { ...p, machineNo: '' };
+    if (editProductIndex != null) {
+      return items.map((p, i) => (i === editProductIndex ? patch(p) : p));
+    }
+    return items.map(patch);
+  };
+
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
@@ -282,6 +306,8 @@ function ProductionRequestContent() {
         setSubmitting(false);
         return;
       }
+      productsData = applyMachineNoToProducts(productsData);
+      const machineNoTrimmed = machineNo.trim();
       const legacy = summarizeProductionLegacyFromProducts(productsData);
       const rootMeta = summarizeProductionRequestRootFromProducts(productsData);
       const hasOrderLine = productsData.some((p) => p.productionReason === 'order');
@@ -290,9 +316,10 @@ function ProductionRequestContent() {
       const { productionReason, salesRegion, customerName: rootCustomerName } = rootMeta;
 
       if (isEditMode && requestId) {
+        let saveProducts = mergeDrawingFromRequestLines(linesForSave, productsData);
         if (productionLinesHaveDrawingWork(linesForSave)) {
           try {
-            productsData = await enrichProductsWithDrawingAttachments(linesForSave, productsData, {
+            saveProducts = await enrichProductsWithDrawingAttachments(linesForSave, saveProducts, {
               requestId,
               uploadedBy: userProfile.id,
             });
@@ -306,7 +333,7 @@ function ProductionRequestContent() {
         }
 
         const productionRequestData: Record<string, unknown> = {
-          products: productsData,
+          products: productsWithSerializedDrawings(saveProducts),
           productName: legacy.productName,
           productCode: legacy.productCode,
           quantity: legacy.quantity,
@@ -323,6 +350,9 @@ function ProductionRequestContent() {
           productionRequestData.customerName = rootCustomerName;
         }
         productionRequestData.memo = summarizeMemoFromProducts(productsData) || null;
+        if (saveProducts.length === 1) {
+          productionRequestData.machineNo = machineNoTrimmed || null;
+        }
 
         await updateDoc(
           doc(db, 'productionRequests', requestId),
@@ -336,12 +366,13 @@ function ProductionRequestContent() {
         return;
       }
 
+      const createProducts = mergeDrawingFromRequestLines(linesForSave, productsData);
       const productionRequestData: Record<string, unknown> = {
         userId: userProfile.id,
         userName: userProfile.name,
         userEmail: userProfile.email,
         userCompany: userProfile.company,
-        products: productsData,
+        products: createProducts,
         productName: legacy.productName,
         productCode: legacy.productCode,
         quantity: legacy.quantity,
@@ -362,6 +393,9 @@ function ProductionRequestContent() {
         productionRequestData.customerName = rootCustomerName;
       }
       productionRequestData.memo = summarizeMemoFromProducts(productsData) || null;
+      if (createProducts.length === 1 && machineNoTrimmed) {
+        productionRequestData.machineNo = machineNoTrimmed;
+      }
 
       const createdRef = await addDoc(
         collection(db, 'productionRequests'),
@@ -372,13 +406,13 @@ function ProductionRequestContent() {
         try {
           const withDrawings = await enrichProductsWithDrawingAttachments(
             linesForSave,
-            productsData,
+            createProducts,
             { requestId: createdRef.id, uploadedBy: userProfile.id }
           );
           await updateDoc(
             doc(db, 'productionRequests', createdRef.id),
             sanitizeForFirestore({
-              products: withDrawings,
+              products: productsWithSerializedDrawings(withDrawings),
               updatedAt: Timestamp.now(),
             })
           );
@@ -451,6 +485,26 @@ function ProductionRequestContent() {
               productLineDisplayStart={editProductIndex != null ? editProductIndex + 1 : 1}
               showDrawingAttachment
             />
+
+            <div className="max-w-md border-t border-gray-200 pt-6">
+              <ProductionMachineSelect
+                id="machineNo"
+                label="기계명"
+                value={machineNo}
+                machines={productionMachines}
+                loading={loadingProductionMachines}
+                disabled={submitting}
+                onChange={(value) => {
+                  setMachineNo(value);
+                  clearFieldError('machineNo');
+                }}
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                {editProductIndex != null
+                  ? '선택한 제품 줄에 반영됩니다. 미선택 시 비워 둡니다.'
+                  : '요청에 포함된 모든 제품에 동일하게 반영됩니다. 미선택 시 비워 둡니다.'}
+              </p>
+            </div>
 
             <div className="flex justify-end gap-3 pt-4">
               <Button

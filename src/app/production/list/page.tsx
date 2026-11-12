@@ -17,6 +17,7 @@ import {
   buildProductionRequestListRowCsvValues,
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
+import { normalizeCertificateProductsFromFirestore } from '@/lib/production/productionDrawingAttachment';
 import {
   EMPTY_PRODUCTION_REQUEST_PANEL_FILTERS,
   USER_PRODUCTION_REQUEST_SEARCH_PLACEHOLDER,
@@ -143,9 +144,7 @@ function ProductionRequestListPageContent() {
             data.salesRegion === 'overseas' || data.salesRegion === 'domestic'
               ? (data.salesRegion as ProductionSalesRegion)
               : undefined,
-          products: Array.isArray(data.products)
-            ? (data.products as CertificateProduct[])
-            : undefined,
+          products: normalizeCertificateProductsFromFirestore(data.products),
           customerName: data.customerName as string | undefined,
           status: ((data.status as ProductionRequestStatus) || 'pending_review') as ProductionRequestStatus,
           itemCode: data.itemCode as string | undefined,
@@ -290,8 +289,13 @@ function ProductionRequestListPageContent() {
   }, [searchQuery, filters, requests, listRowsForView.length, itemsPerPage]);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [listViewTab, hideCompleted]);
+    if (listRowsForView.length > 0) {
+      const totalPages = Math.ceil(listRowsForView.length / itemsPerPage);
+      setCurrentPage(totalPages > 0 ? totalPages : 1);
+    } else {
+      setCurrentPage(1);
+    }
+  }, [listViewTab, hideCompleted, listRowsForView.length, itemsPerPage]);
 
   // 페이지네이션 (제품 1개 = 1행)
   useEffect(() => {

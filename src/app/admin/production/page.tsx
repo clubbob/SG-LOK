@@ -16,6 +16,7 @@ import {
   type ProductionRequestListRow,
 } from '@/lib/production/productionRequestDisplay';
 import { sanitizeForFirestore } from '@/lib/firestoreSanitize';
+import { normalizeCertificateProductsFromFirestore } from '@/lib/production/productionDrawingAttachment';
 import { downloadProductionRequestListPdf } from '@/lib/production/productionRequestListPdf';
 import { removeProductionRequestProductLine } from '@/lib/production/removeProductionRequestProductLine';
 import {
@@ -31,6 +32,8 @@ import { ProductionRequestRegistrationTable } from '@/components/production/Prod
 import { ProductionRequestStatusSection } from '@/components/production/ProductionRequestStatusSection';
 import { ProductionRequestListViewTabs } from '@/components/production/ProductionRequestListViewTabs';
 import { ProductionRequestPaginatedList } from '@/components/production/ProductionRequestPaginatedList';
+import { ProductionMachineSelect } from '@/components/production/ProductionMachineSelect';
+import { useProductionMachines } from '@/hooks/useProductionMachines';
 import {
   excludeCompletedProductionListRows,
   sortProductionListRowsForViewTab,
@@ -125,6 +128,7 @@ function AdminProductionPageContent() {
     machineNo: '',
   });
   const [approving, setApproving] = useState(false);
+  const { machines: productionMachines, loading: loadingProductionMachines } = useProductionMachines(true);
   const [refreshing, setRefreshing] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const skipUrlStatusSyncRef = useRef(false);
@@ -218,9 +222,7 @@ function AdminProductionPageContent() {
             data.salesRegion === 'overseas' || data.salesRegion === 'domestic'
               ? (data.salesRegion as ProductionSalesRegion)
               : undefined,
-          products: Array.isArray(data.products)
-            ? (data.products as CertificateProduct[])
-            : undefined,
+          products: normalizeCertificateProductsFromFirestore(data.products),
           customerName: data.customerName as string | undefined,
           status: currentStatus,
           itemCode: data.itemCode as string | undefined,
@@ -325,8 +327,13 @@ function AdminProductionPageContent() {
   }, [searchQuery, filters, requests, listRowsForView.length, itemsPerPage]);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [listViewTab, hideCompleted]);
+    if (listRowsForView.length > 0) {
+      const totalPages = Math.ceil(listRowsForView.length / itemsPerPage);
+      setCurrentPage(totalPages > 0 ? totalPages : 1);
+    } else {
+      setCurrentPage(1);
+    }
+  }, [listViewTab, hideCompleted, listRowsForView.length, itemsPerPage]);
 
   // 페이지네이션 (제품 1개 = 1행)
   useEffect(() => {
@@ -851,25 +858,19 @@ function AdminProductionPageContent() {
                       required
                     />
                   </div>
-                  <div>
-                    <label htmlFor="machineNo" className="block text-sm font-medium text-gray-700 mb-2">
-                      기계 No.
-                    </label>
-                    <input
-                      type="text"
+                  <div onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+                    <ProductionMachineSelect
                       id="machineNo"
                       value={approvalForm.machineNo}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        setApprovalForm({ ...approvalForm, machineNo: e.target.value });
+                      machines={productionMachines}
+                      loading={loadingProductionMachines}
+                      disabled={approving}
+                      onChange={(machineName) => {
+                        setApprovalForm({ ...approvalForm, machineNo: machineName });
                         if (error) setError('');
                       }}
                       onMouseDown={(e) => e.stopPropagation()}
                       onClick={(e) => e.stopPropagation()}
-                      placeholder="선택 입력"
-                      className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                      disabled={approving}
-                      autoComplete="off"
                     />
                   </div>
                 </div>

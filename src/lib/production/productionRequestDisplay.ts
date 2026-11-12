@@ -7,14 +7,17 @@ import {
   ProductionSalesRegion,
 } from '@/types';
 import { formatDateShort, normalizeCustomerNameInput } from '@/lib/utils';
+import { parseProductDrawingAttachments } from '@/lib/production/productionDrawingAttachment';
 
 /** 생산요청 등록 폼(RequestProductLinesSection)과 동일한 항목·순서 */
 export type ProductionRequestRegistrationField = {
   label: string;
   value: string;
   multiline?: boolean;
-  /** 도면 등 다운로드 링크 */
+  /** 도면 등 다운로드 링크 (단일) */
   href?: string;
+  /** 도면 여러 건 */
+  drawingLinks?: { name: string; href: string }[];
 };
 
 export type ProductionRequestListRow = {
@@ -204,7 +207,7 @@ export function formatProductionCompletionRoundDisplay(round: ProductionCompleti
   if (!hasDate && !hasQty) return '-';
   const dateStr = hasDate ? formatDateShort(round.date!) : '-';
   const qtyStr = hasQty ? round.quantity!.toLocaleString('ko-KR') : '-';
-  return `${dateStr} (${qtyStr})`;
+  return `${dateStr}\u00a0(${qtyStr})`;
 }
 
 const COMPLETION_STAGE_SUMMARY_LABELS = ['1차', '2차', '3차', '세정/EP'] as const;
@@ -399,6 +402,21 @@ export function formatProductionSalesRegionLabel(region?: ProductionSalesRegion 
   return '-';
 }
 
+/** 목록·상세 고객사명: 주문=고객사, 재고=(재고) */
+export function formatProductionListCustomerNameDisplay(
+  productionReason: ProductionReason | undefined,
+  customerName?: string
+): string {
+  if (productionReason === 'order') {
+    const trimmed = customerName?.trim();
+    return trimmed || '-';
+  }
+  if (productionReason === 'inventory') {
+    return '(재고)';
+  }
+  return '-';
+}
+
 function lineProductGroup(product: CertificateProduct | undefined): string {
   const raw = product?.productGroup?.trim() || '';
   return raw ? raw.toUpperCase() : '';
@@ -470,7 +488,7 @@ export function buildProductionRequestRegistrationFields(
   });
   fields.push({
     label: '고객사명',
-    value: isOrder ? listRow.customerName?.trim() || '-' : '',
+    value: formatProductionListCustomerNameDisplay(listRow.productionReason, listRow.customerName),
   });
   fields.push({
     label: '제품군',
@@ -499,11 +517,15 @@ export function buildProductionRequestRegistrationFields(
     value: remark || '-',
     multiline: remark.includes('\n'),
   });
-  const drawing = product?.drawingAttachment;
+  const drawings = parseProductDrawingAttachments(product);
   fields.push({
     label: '도면',
-    value: drawing?.name?.trim() || '-',
-    href: drawing?.url,
+    value:
+      drawings.length > 0
+        ? drawings.map((d) => d.name.trim()).join(', ')
+        : '-',
+    drawingLinks: drawings.map((d) => ({ name: d.name, href: d.url })),
+    href: drawings[0]?.url,
   });
 
   return fields;
@@ -526,7 +548,7 @@ export const PRODUCTION_REQUEST_CSV_HEADERS: string[] = [
   '비고',
   '생산계획수량',
   '완료예정일',
-  '기계 No.',
+  '기계명',
   '1차 완료일 (수량)',
   '2차 완료일 (수량)',
   '3차 완료일 (수량)',
@@ -562,7 +584,10 @@ export function buildProductionRequestListRowCsvValues(
     request.requestDate ? formatDateShort(request.requestDate) : '',
     formatProductionReasonLabel(listRow.productionReason),
     formatProductionSalesRegionLabel(listRow.salesRegion),
-    isOrder ? lineCustomerName(product, request) || '' : '',
+    formatProductionListCustomerNameDisplay(
+      listRow.productionReason,
+      lineCustomerName(product, request)
+    ),
     lineProductGroup(product) || '',
     listRow.productName,
     listRow.productCode,
@@ -628,6 +653,19 @@ export function mergeProductionProductsPreservingLineMeta(
     if (old.actualCompletionQuantity != null) merged.actualCompletionQuantity = old.actualCompletionQuantity;
     if (old.productionIssue != null && old.productionIssue !== '') {
       merged.productionIssue = old.productionIssue;
+    }
+    if (row.drawingAttachments != null && row.drawingAttachments.length > 0) {
+      merged.drawingAttachments = row.drawingAttachments;
+      merged.drawingAttachment = row.drawingAttachments[0];
+    } else if (old.drawingAttachments != null && old.drawingAttachments.length > 0) {
+      merged.drawingAttachments = old.drawingAttachments;
+      merged.drawingAttachment = old.drawingAttachment ?? old.drawingAttachments[0];
+    } else if (row.drawingAttachment != null) {
+      merged.drawingAttachment = row.drawingAttachment;
+      merged.drawingAttachments = [row.drawingAttachment];
+    } else if (old.drawingAttachment != null) {
+      merged.drawingAttachment = old.drawingAttachment;
+      merged.drawingAttachments = [old.drawingAttachment];
     }
     return merged;
   });

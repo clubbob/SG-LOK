@@ -532,7 +532,7 @@ function AdminProductionRequestContent() {
       } else {
         // 등록 모드 - 관리자는 모든 사용자 대신 등록 가능하지만, 실제 사용자 정보는 필요
         // 여기서는 관리자 정보를 사용하거나, 기본값 사용
-        let createProducts = mergeDrawingFromRequestLines(linesForSave, productsData);
+        const createProducts = mergeDrawingFromRequestLines(linesForSave, productsData);
         const productionRequestData: Record<string, unknown> = {
           userId: 'admin', // 관리자 ID
           userName: '관리자',

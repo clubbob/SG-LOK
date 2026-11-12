@@ -139,7 +139,7 @@ export default function AdminProductionMachinesPage() {
       });
       const data = await readResponseJsonSafe<{ message?: string }>(res);
       if (!res.ok) {
-        setError(data.message || (editingId ? '수정에 실패했습니다.' : '등록에 실패했습니다.'));
+        setError(data?.message || (editingId ? '수정에 실패했습니다.' : '등록에 실패했습니다.'));
         return;
       }
       setSuccess(editingId ? '기계 정보를 수정했습니다.' : '기계를 등록했습니다.');
@@ -165,7 +165,7 @@ export default function AdminProductionMachinesPage() {
       );
       const data = await readResponseJsonSafe<{ message?: string }>(res);
       if (!res.ok) {
-        setError(data.message || '삭제에 실패했습니다.');
+        setError(data?.message || '삭제에 실패했습니다.');
         return;
       }
       if (editingId === machine.id) resetForm();

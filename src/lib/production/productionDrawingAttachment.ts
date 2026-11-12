@@ -112,8 +112,10 @@ function applyDrawingsToProduct(
 ): CertificateProduct {
   const list = attachments.slice(0, PRODUCTION_DRAWING_MAX_COUNT);
   if (list.length === 0) {
-    const { drawingAttachment: _a, drawingAttachments: _b, ...rest } = product;
-    return rest;
+    const next = { ...product };
+    delete next.drawingAttachment;
+    delete next.drawingAttachments;
+    return next;
   }
   return {
     ...product,

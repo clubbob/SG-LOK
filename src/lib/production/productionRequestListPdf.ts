@@ -27,15 +27,6 @@ const PDF_EXCLUDED_CSV_COLUMN_LABELS = new Set([
   '상태',
 ]);
 
-/** PDF — 수주·요청·계획 열 (헤더 배경만 동일 그룹, 너비는 개별 최소값) */
-const PDF_QUANTITY_PLAN_COLUMN_LABELS = new Set([
-  '수주수량',
-  '생산요청수량',
-  '완료요청일',
-  '생산계획수량',
-  '완료예정일',
-]);
-
 /** PDF 표 오른쪽 — 1·2·3차 · UHP 세정/EP (동일 민트 배경) */
 const PDF_ATTACH_SECTION_COLUMN_LABELS = new Set([
   '1차 완료일 (수량)',

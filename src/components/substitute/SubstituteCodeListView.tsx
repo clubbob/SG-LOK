@@ -237,6 +237,7 @@ export function SubstituteCodeListView({ embedded = false }: { embedded?: boolea
     // 검색어만 바뀔 때 검색 결과의 마지막(최근) 페이지로 (저장으로 rows 길이만 바뀌는 경우는 제외)
     const tp = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
     setPage(tp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- query 변경 시에만 페이지 점프
   }, [query]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));

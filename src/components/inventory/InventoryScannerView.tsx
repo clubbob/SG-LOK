@@ -23,14 +23,6 @@ type InventoryProduct = {
   searchText: string;
 };
 
-type PendingAction = {
-  at: number;
-  mode: ScannerMode;
-  quantity: number;
-  note: string;
-  product: InventoryProduct;
-};
-
 const ERP_INVENTORY_MASTER_DOC = "erpInventoryProducts";
 
 const LIST_CAP_WITH_QUERY = 120;

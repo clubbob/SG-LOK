@@ -226,7 +226,6 @@ export default function ErpInventoryStatusView({ isLimitedView = false }: ErpInv
   const selectedCurrentStock = getRowValue(selectedRow, ["현재고", "재고", "currentStock", "stockQty"]);
   const selectedInbound = getRowValue(selectedRow, ["입고수량", "입고", "inboundQty", "inQty"]);
   const selectedOutbound = getRowValue(selectedRow, ["출고수량", "출고", "outboundQty", "outQty"]);
-  const selectedLocation = getRowValue(selectedRow, ["창고", "보관위치", "location", "warehouse"]);
 
   const normalizedStock = Number(selectedCurrentStock.replace(/,/g, ""));
   const stockStatusLabel =

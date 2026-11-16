@@ -8,6 +8,7 @@ import {
 } from '@/lib/production/productionRequestDisplay';
 import { formatDateShort } from '@/lib/utils';
 import { ProductionRequestStatusDetailBlock } from '@/components/production/ProductionRequestStatusDetailBlock';
+import { ProductionRequestPriorityStars } from '@/components/production/ProductionRequestPriorityStars';
 import {
   LIST_SUMMARY_COLUMN_COUNT,
   listSummaryActionsTdClass,
@@ -48,7 +49,10 @@ export function ProductionRequestStatusTableRow({
     <>
       <tr className="bg-white">
         <td className={`${listSummaryTdClass} w-12 text-center tabular-nums`}>
-          {rowNumber}
+          <div className="flex flex-col items-center gap-0.5">
+            <span>{rowNumber}</span>
+            <ProductionRequestPriorityStars value={listRow.priority} />
+          </div>
         </td>
         {cell(request.requestDate ? formatDateShort(request.requestDate) : '-')}
         {cell(

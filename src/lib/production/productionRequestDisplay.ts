@@ -45,6 +45,8 @@ export type ProductionRequestListRow = {
   cleaningEpCompletion: ProductionCompletionRound;
   /** 관리자 입력 생산 이슈 (제품 줄별) */
   productionIssue?: string;
+  /** 중요도 1~3 (별표 표시) */
+  priority?: number;
 };
 
 export type ProductionCompletionRound = {
@@ -654,6 +656,9 @@ export function mergeProductionProductsPreservingLineMeta(
     if (old.productionIssue != null && old.productionIssue !== '') {
       merged.productionIssue = old.productionIssue;
     }
+    if (old.priority != null && old.priority > 0) {
+      merged.priority = old.priority;
+    }
     if (row.drawingAttachments != null && row.drawingAttachments.length > 0) {
       merged.drawingAttachments = row.drawingAttachments;
       merged.drawingAttachment = row.drawingAttachments[0];
@@ -867,6 +872,16 @@ function lineProductionIssue(
   return undefined;
 }
 
+function linePriority(
+  product: CertificateProduct | undefined,
+  request: ProductionRequest,
+  multiProduct: boolean
+): number | undefined {
+  if (product?.priority != null && product.priority > 0) return product.priority;
+  if (!multiProduct && request.priority != null && request.priority > 0) return request.priority;
+  return undefined;
+}
+
 /** 관리자 승인: 선택한 목록 줄(제품)만 반영 */
 export function buildProductionRequestLineApprovalPatch(
   listRow: ProductionRequestListRow,
@@ -965,6 +980,7 @@ export function expandProductionRequestsToListRows(
           cleaningEpCompletion: lineCleaningEpCompletion(product, request, multiProduct),
           remark: product.remark?.trim() || (productIndex === 0 ? request.memo : undefined),
           productionIssue: lineProductionIssue(product, request, multiProduct),
+          priority: linePriority(product, request, multiProduct),
         });
       });
     } else {
@@ -992,6 +1008,7 @@ export function expandProductionRequestsToListRows(
         cleaningEpCompletion: lineCleaningEpCompletion(undefined, request, false),
         remark: request.memo,
         productionIssue: lineProductionIssue(undefined, request, false),
+        priority: linePriority(undefined, request, false),
       });
     }
   }

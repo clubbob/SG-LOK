@@ -47,7 +47,9 @@ import {
   productsWithSerializedDrawings,
 } from '@/lib/production/productionDrawingAttachment';
 import { ProductionMachineSelect } from '@/components/production/ProductionMachineSelect';
+import { ProductionRequestPrioritySelect } from '@/components/production/ProductionRequestPrioritySelect';
 import { useProductionMachines } from '@/hooks/useProductionMachines';
+import { clampProductionRequestPriority } from '@/lib/production/productionRequestPriority';
 
 const ADMIN_SESSION_KEY = 'admin_session';
 
@@ -58,6 +60,7 @@ const INITIAL_FORM_DATA = {
   actualCompletionDate: '',
   actualCompletionQuantity: '',
   productionIssue: '',
+  priority: 0,
   ...EMPTY_COMPLETION_ROUND_FORM,
   ...EMPTY_CLEANING_EP_FORM,
 };
@@ -216,6 +219,9 @@ function AdminProductionRequestContent() {
             productionIssue:
               (typeof lineDoc?.productionIssue === 'string' ? lineDoc.productionIssue : '') ||
               (!multiProduct && typeof data.productionIssue === 'string' ? data.productionIssue : ''),
+            priority: clampProductionRequestPriority(
+              lineDoc?.priority ?? (!multiProduct ? data.priority : undefined)
+            ),
           });
         } else {
           setError('생산요청을 찾을 수 없습니다.');
@@ -414,6 +420,7 @@ function AdminProductionRequestContent() {
           const actualQtyStr = formData.actualCompletionQuantity.trim();
           const productionIssueText = formData.productionIssue.trim();
           const machineNoTrimmed = formData.machineNo.trim();
+          const priorityLevel = clampProductionRequestPriority(formData.priority);
           finalProducts = finalProducts.map((p, i) => {
             if (i !== targetIndex) return p;
             let updated: CertificateProduct = {
@@ -426,6 +433,10 @@ function AdminProductionRequestContent() {
                 : {}),
               ...(machineNoTrimmed ? { machineNo: machineNoTrimmed } : { machineNo: '' }),
               productionIssue: (productionIssueText || null) as unknown as string | undefined,
+              priority:
+                priorityLevel > 0
+                  ? priorityLevel
+                  : (null as unknown as CertificateProduct['priority']),
             };
             updated = applyCompletionRoundFormToProduct(updated, formData);
             updated = applyCleaningEpFormToProduct(updated, formData);
@@ -481,6 +492,8 @@ function AdminProductionRequestContent() {
           Object.assign(productionRequestData, completionRoundRootPatchFromProduct(only));
           Object.assign(productionRequestData, cleaningEpRootPatchFromProduct(only));
           productionRequestData.productionIssue = only.productionIssue?.trim() || null;
+          productionRequestData.priority =
+            only.priority != null && only.priority > 0 ? only.priority : null;
         }
 
         productionRequestData.status = deriveProductionRequestStatusFromProducts(finalProducts);
@@ -659,7 +672,7 @@ function AdminProductionRequestContent() {
           />
 
           {showAdminPostReviewFields && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <div>
                 <Input
                   id="plannedQuantity"
@@ -708,6 +721,16 @@ function AdminProductionRequestContent() {
                     setFormData((prev) => ({ ...prev, machineNo: machineName }));
                     clearFieldError('machineNo');
                   }}
+                />
+              </div>
+
+              <div>
+                <ProductionRequestPrioritySelect
+                  value={formData.priority}
+                  disabled={submitting}
+                  onChange={(level) =>
+                    setFormData((prev) => ({ ...prev, priority: level }))
+                  }
                 />
               </div>
           </div>

@@ -118,8 +118,8 @@ export interface ProductionRequest {
   completionRound3Date?: Date;
   completionRound3Quantity?: number;
   
-  // 우선순위 및 메모
-  priority?: number; // 우선순위
+  // 중요도 및 메모
+  priority?: number; // 중요도 (1~3, 목록 별표)
   memo?: string; // 메모
   adminMemo?: string; // 관리자 비고
   /** 관리자: 생산 이슈 (단일 제품·레거시 요약) */
@@ -240,6 +240,8 @@ export interface CertificateProduct {
   actualCompletionQuantity?: number;
   /** 생산요청: 관리자 생산 이슈 (제품별) */
   productionIssue?: string;
+  /** 생산요청: 중요도 (1~3, 목록 별표) */
+  priority?: number;
   lotNumber?: string;           // 로트번호
   heatNo?: string;              // HEAT NO.
   material?: string;            // MATERIAL (소재 정보, 예: 316/316L, 304)

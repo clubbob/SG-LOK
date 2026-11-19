@@ -122,7 +122,7 @@ function AdminProductionPageContent() {
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [error, setError] = useState('');
   const [displayedListRows, setDisplayedListRows] = useState<ProductionRequestListRow[]>([]);
-  const itemsPerPage = 10; // 명시적으로 10개로 설정
+  const itemsPerPage = 20;
   const [currentPage, setCurrentPage] = useState(1);
   const [deletingRowKey, setDeletingRowKey] = useState<string | null>(null);
   const [selectedMemo, setSelectedMemo] = useState<{ id: string; memo: string } | null>(null);
@@ -344,7 +344,7 @@ function AdminProductionPageContent() {
 
   // 페이지네이션 (제품 1개 = 1행)
   useEffect(() => {
-    const ITEMS_PER_PAGE = 10;
+    const ITEMS_PER_PAGE = itemsPerPage;
     if (listRowsForView.length === 0) {
       setDisplayedListRows([]);
       return;
@@ -352,7 +352,7 @@ function AdminProductionPageContent() {
     setDisplayedListRows(
       sliceListRowsForPageDisplay(listRowsForView, currentPage, ITEMS_PER_PAGE, listViewTab)
     );
-  }, [listRowsForView, currentPage, listViewTab]);
+  }, [listRowsForView, currentPage, listViewTab, itemsPerPage]);
 
   const totalPages = Math.ceil(listRowsForView.length / itemsPerPage);
   const totalListRowCount = useMemo(

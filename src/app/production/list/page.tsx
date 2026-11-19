@@ -35,7 +35,11 @@ import {
   sortProductionListRowsForViewTab,
   type ProductionRequestListViewTab,
 } from '@/lib/production/productionRequestListView';
-import { downloadProductionRequestListPdf } from '@/lib/production/productionRequestListPdf';
+import {
+  downloadProductionRequestListPdf,
+  downloadProductionRequestSummaryPdf,
+  type ProductionRequestSummaryPdfGroup,
+} from '@/lib/production/productionRequestListPdf';
 
 const STATUS_LABELS: Record<ProductionRequestStatus, string> = {
   pending_review: '승인 대기중',
@@ -73,6 +77,7 @@ function ProductionRequestListPageContent() {
   const [selectedProductionIssue, setSelectedProductionIssue] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [summaryPdfKind, setSummaryPdfKind] = useState<ProductionRequestSummaryPdfGroup | null>(null);
   const skipUrlStatusSyncRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [listViewTab, setListViewTab] = useState<ProductionRequestListViewTab>('by_request');
@@ -369,6 +374,21 @@ function ProductionRequestListPageContent() {
     }
   };
 
+  const handleExportSummaryPdf = async (groupBy: ProductionRequestSummaryPdfGroup) => {
+    if (listRowsForView.length === 0 || generatingPdf || summaryPdfKind) return;
+    setSummaryPdfKind(groupBy);
+    setError('');
+    try {
+      await downloadProductionRequestSummaryPdf(listRowsForView, groupBy, 'production_summary');
+    } catch (err) {
+      console.error('생산요청 요약 PDF 생성 오류:', err);
+      const message = err instanceof Error ? err.message : '알 수 없는 오류';
+      setError(`PDF 파일 생성에 실패했습니다: ${message}`);
+    } finally {
+      setSummaryPdfKind(null);
+    }
+  };
+
   if (loading || (loadingRequests && requests.length === 0)) {
     return (
       <div className="min-h-screen flex flex-col">
@@ -419,7 +439,7 @@ function ProductionRequestListPageContent() {
                 size="sm"
                 className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap"
                 onClick={() => void handleExportToPdf()}
-                disabled={refreshing || loadingRequests || generatingPdf || progressPdfRows.length === 0}
+                disabled={refreshing || loadingRequests || generatingPdf || summaryPdfKind != null || progressPdfRows.length === 0}
               >
                 <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -436,7 +456,7 @@ function ProductionRequestListPageContent() {
                 size="sm"
                 className="w-full sm:w-auto justify-center gap-2 whitespace-nowrap"
                 onClick={handleExportToExcel}
-                disabled={refreshing || loadingRequests || generatingPdf || filteredListRows.length === 0}
+                disabled={refreshing || loadingRequests || generatingPdf || summaryPdfKind != null || filteredListRows.length === 0}
               >
                 <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h16v4H4m4 4h8m-8 4h5m-1 4l-3-3h6l-3 3z" />
@@ -459,6 +479,42 @@ function ProductionRequestListPageContent() {
             onChange={setListViewTab}
             hideCompleted={hideCompleted}
             onHideCompletedChange={setHideCompleted}
+            actions={
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="whitespace-nowrap"
+                  onClick={() => void handleExportSummaryPdf('by_product_group')}
+                  disabled={
+                    refreshing ||
+                    loadingRequests ||
+                    generatingPdf ||
+                    summaryPdfKind != null ||
+                    listRowsForView.length === 0
+                  }
+                >
+                  {summaryPdfKind === 'by_product_group' ? 'PDF 생성 중…' : '제품군별 PDF 생성'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="whitespace-nowrap"
+                  onClick={() => void handleExportSummaryPdf('by_machine')}
+                  disabled={
+                    refreshing ||
+                    loadingRequests ||
+                    generatingPdf ||
+                    summaryPdfKind != null ||
+                    listRowsForView.length === 0
+                  }
+                >
+                  {summaryPdfKind === 'by_machine' ? 'PDF 생성 중…' : '기계별 PDF 생성'}
+                </Button>
+              </>
+            }
           />
 
           {error && (

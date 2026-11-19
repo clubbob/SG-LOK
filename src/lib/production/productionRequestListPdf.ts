@@ -990,7 +990,8 @@ function drawSummaryPdfProductGroupColumns(
  */
 export async function downloadProductionRequestSummaryPdf(
   listRows: ProductionRequestListRow[],
-  groupBy: ProductionRequestSummaryPdfGroup
+  groupBy: ProductionRequestSummaryPdfGroup,
+  fileNamePrefix = 'admin_production_summary'
 ): Promise<void> {
   if (typeof document === 'undefined') {
     throw new Error('PDF는 브라우저에서만 생성할 수 있습니다.');
@@ -1023,5 +1024,5 @@ export async function downloadProductionRequestSummaryPdf(
   drawSummaryPdfProductGroupColumns(doc, pageHeight, y, left, right);
 
   const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-  openPdfBlob(doc.output('blob'), `admin_production_summary_${fileToken}_${timestamp}.pdf`);
+  openPdfBlob(doc.output('blob'), `${fileNamePrefix}_${fileToken}_${timestamp}.pdf`);
 }
